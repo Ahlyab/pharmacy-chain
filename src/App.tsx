@@ -8,23 +8,28 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 function AppRoutes() {
   const { user } = useAuth();
 
+  if (!user) {
+    return (
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="*" element={<Navigate to="/login" />} />
+      </Routes>
+    );
+  }
+
   return (
     <Routes>
       <Route 
-        path="/login" 
-        element={!user ? <Login /> : <Navigate to={user.role === 'admin' ? '/admin' : '/manager'} />} 
-      />
-      <Route 
         path="/admin/*" 
-        element={user?.role === 'admin' ? <AdminDashboard /> : <Navigate to="/login" />} 
+        element={user.role === 'admin' ? <AdminDashboard /> : <Navigate to="/login" />} 
       />
       <Route 
         path="/manager/*" 
-        element={user?.role === 'manager' ? <ManagerDashboard /> : <Navigate to="/login" />} 
+        element={user.role === 'manager' ? <ManagerDashboard /> : <Navigate to="/login" />} 
       />
       <Route 
-        path="/" 
-        element={<Navigate to="/login" />} 
+        path="*" 
+        element={<Navigate to={user.role === 'admin' ? '/admin' : '/manager'} />} 
       />
     </Routes>
   );

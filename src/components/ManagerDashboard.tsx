@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import InventoryManagement from './manager/InventoryManagement';
@@ -10,6 +10,7 @@ import Dashboard from './manager/Dashboard';
 
 const ManagerDashboard: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const navigate = useNavigate();
 
   const menuItems = [
     { name: 'Dashboard', path: '/manager', icon: 'BarChart3' },
@@ -18,6 +19,8 @@ const ManagerDashboard: React.FC = () => {
     { name: 'Billing', path: '/manager/billing', icon: 'FileText' },
     { name: 'Transactions', path: '/manager/transactions', icon: 'Receipt' },
   ];
+
+
 
   return (
     <div className="flex h-screen bg-gray-50">

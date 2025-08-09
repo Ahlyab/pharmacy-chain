@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Swal from 'sweetalert2';
 import { Plus, Edit, Trash2, Search, Package, AlertTriangle } from 'lucide-react';
 
 interface Product {
@@ -14,41 +15,30 @@ interface Product {
 }
 
 const InventoryManagement: React.FC = () => {
-  const [products, setProducts] = useState<Product[]>([
-    {
-      id: '1',
-      name: 'Paracetamol 500mg',
-      category: 'Pain Relief',
-      stock: 150,
-      minStock: 50,
-      price: 5.99,
-      supplier: 'PharmaCorp',
-      expiryDate: '2025-12-31',
-      status: 'In Stock'
-    },
-    {
-      id: '2',
-      name: 'Amoxicillin 250mg',
-      category: 'Antibiotics',
-      stock: 8,
-      minStock: 20,
-      price: 12.50,
-      supplier: 'MediSupply',
-      expiryDate: '2025-06-15',
-      status: 'Low Stock'
-    },
-    {
-      id: '3',
-      name: 'Vitamin D3',
-      category: 'Vitamins',
-      stock: 0,
-      minStock: 30,
-      price: 15.99,
-      supplier: 'HealthPlus',
-      expiryDate: '2026-03-20',
-      status: 'Out of Stock'
-    }
-  ]);
+  const [products, setProducts] = useState<Product[]>([]);
+
+  React.useEffect(() => {
+    const BASE_URL = 'http://localhost:5000/api';
+    const fetchProducts = async () => {
+      try {
+        const response = await fetch(`${BASE_URL}/inventory`);
+        if (!response.ok) throw new Error('Failed to fetch products');
+        const data = await response.json();
+        // Add status property to each product
+        const productsWithStatus = data.map((product: any) => {
+          let status: 'In Stock' | 'Low Stock' | 'Out of Stock';
+          if (product.stock === 0) status = 'Out of Stock';
+          else if (product.stock <= product.minStock) status = 'Low Stock';
+          else status = 'In Stock';
+          return { ...product, status, id: product._id };
+        });
+        setProducts(productsWithStatus);
+      } catch (err) {
+        alert('Error fetching products: ' + (err as Error).message);
+      }
+    };
+    fetchProducts();
+  }, []);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -72,34 +62,52 @@ const InventoryManagement: React.FC = () => {
     return matchesSearch && matchesCategory;
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     const status = formData.stock === 0 ? 'Out of Stock' : 
                   formData.stock <= formData.minStock ? 'Low Stock' : 'In Stock';
-    
-    if (editingProduct) {
-      setProducts(products.map(product => 
-        product.id === editingProduct.id 
-          ? { ...product, ...formData, status }
-          : product
-      ));
-    } else {
-      const newProduct: Product = {
-        id: Date.now().toString(),
-        ...formData,
-        status
-      };
-      setProducts([...products, newProduct]);
+    try {
+      const BASE_URL = 'http://localhost:5000/api';
+      if (editingProduct) {
+        // Update product in backend
+        const response = await fetch(`${BASE_URL}/inventory/${editingProduct.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...formData, status })
+        });
+        if (!response.ok) throw new Error('Failed to update product');
+        const updated = await response.json();
+        setProducts(products.map(product => 
+          product.id === editingProduct.id 
+            ? { ...updated, id: editingProduct.id } // keep id for local state
+            : product
+        ));
+      } else {
+        // Add product to backend
+        const response = await fetch(`${BASE_URL}/inventory`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...formData, status })
+        });
+        if (!response.ok) throw new Error('Failed to add product');
+        const newProduct = await response.json();
+        setProducts([...products, { ...newProduct, id: newProduct._id || Date.now().toString() }]);
+      }
+      setShowModal(false);
+      setEditingProduct(null);
+      setFormData({ name: '', category: '', stock: 0, minStock: 0, price: 0, supplier: '', expiryDate: '' });
+    } catch (err) {
+      alert('Error: ' + (err as Error).message);
     }
-    
-    setShowModal(false);
-    setEditingProduct(null);
-    setFormData({ name: '', category: '', stock: 0, minStock: 0, price: 0, supplier: '', expiryDate: '' });
   };
 
   const handleEdit = (product: Product) => {
     setEditingProduct(product);
+    // Format expiryDate to yyyy-MM-dd for input type="date"
+    let expiryDate = product.expiryDate;
+    if (expiryDate && expiryDate.length > 10) {
+      expiryDate = new Date(expiryDate).toISOString().slice(0, 10);
+    }
     setFormData({
       name: product.name,
       category: product.category,
@@ -107,14 +115,31 @@ const InventoryManagement: React.FC = () => {
       minStock: product.minStock,
       price: product.price,
       supplier: product.supplier,
-      expiryDate: product.expiryDate
+      expiryDate: expiryDate
     });
     setShowModal(true);
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this product?')) {
-      setProducts(products.filter(product => product.id !== id));
+  const handleDelete = async (id: string) => {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: 'You won\'t be able to revert this!',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Yes, delete it!'
+    });
+    if (result.isConfirmed) {
+      const BASE_URL = 'http://localhost:5000/api';
+      try {
+        const response = await fetch(`${BASE_URL}/inventory/${id}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Failed to delete product');
+        setProducts(products.filter(product => product.id !== id));
+        Swal.fire('Deleted!', 'Product has been deleted.', 'success');
+      } catch (err) {
+        Swal.fire('Error', 'Error deleting product: ' + (err as Error).message, 'error');
+      }
     }
   };
 
