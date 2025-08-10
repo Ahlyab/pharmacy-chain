@@ -7,6 +7,7 @@ const UserSchema = new mongoose.Schema({
   password: { type: String, required: true },
   role: { type: String, enum: ['Admin', 'Manager'], required: true },
   branchId: { type: String }, // Optional, for manager users
+  
 });
 
 // Hash password before saving

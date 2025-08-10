@@ -1,5 +1,3 @@
-
-
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import Billing from '../models/Billing.js';
@@ -204,8 +202,23 @@ router.post('/transaction', async (req, res) => {
 
 router.get('/transaction', async (req, res) => {
     try {
-        const transactions = await Transaction.find();
-        res.status(200).json(transactions);
+        // Populate productId to get product name if needed
+        const transactions = await Transaction.find().populate('items.productId');
+        // Map backend fields to frontend expected fields
+        const mapped = transactions.map(t => ({
+            id: t.transactionId,
+            date: t.date,
+            customer: t.customerName || '',
+            items: t.items.map(item => ({
+                name: item.productId?.name || '',
+                quantity: item.quantity,
+                price: item.price
+            })),
+            total: t.totalAmount,
+            paymentMethod: t.paymentMethod || 'N/A',
+            status: t.status || 'Completed'
+        }));
+        res.status(200).json(mapped);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
