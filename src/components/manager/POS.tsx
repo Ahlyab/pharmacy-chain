@@ -133,6 +133,7 @@ const POS: React.FC = () => {
       totalAmount: getTotalAmount(),
       customerName: customerName.trim() ? customerName : undefined,
       cashierName: cashierName.trim() ? cashierName : undefined,
+      paymentMethod: paymentMethod,
       date: new Date(),
     };
 

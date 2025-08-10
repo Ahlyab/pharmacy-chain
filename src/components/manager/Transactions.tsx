@@ -22,8 +22,6 @@ const Transactions: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [hiddenIds, setHiddenIds] = useState<string[]>([]);
-  const [billToPrint, setBillToPrint] = useState<Transaction | null>(null);
 
   useEffect(() => {
     const fetchTransactions = async () => {
@@ -48,21 +46,21 @@ const Transactions: React.FC = () => {
 
   // Filter by search, status, and date range
   const now = new Date();
-  const filteredTransactions = transactions.filter(transaction => {
-    // Defensive: skip if transaction or required fields are missing
-    if (!transaction || !transaction.id || !transaction.customer) return false;
-    if (hiddenIds.includes(transaction.id)) return false;
-    const matchesSearch = transaction.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transaction.customer.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = selectedStatus === 'All' || transaction.status === selectedStatus;
-    // Date filter
-    const txnDate = new Date(transaction.date);
-    const days = parseInt(dateRange, 10);
-    const dateLimit = new Date(now);
-    dateLimit.setDate(now.getDate() - days);
-    const matchesDate = txnDate >= dateLimit;
-    return matchesSearch && matchesStatus && matchesDate;
-  });
+  const filteredTransactions = transactions
+    .filter(transaction => {
+      if (!transaction || !transaction.id || !transaction.customer) return false;
+      const matchesSearch = transaction.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        transaction.customer.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesStatus = selectedStatus === 'All' || transaction.status === selectedStatus;
+      // Date filter
+      const txnDate = new Date(transaction.date);
+      const days = parseInt(dateRange, 10);
+      const dateLimit = new Date(now);
+      dateLimit.setDate(now.getDate() - days);
+      const matchesDate = txnDate >= dateLimit;
+      return matchesSearch && matchesStatus && matchesDate;
+    })
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -72,6 +70,23 @@ const Transactions: React.FC = () => {
         return 'bg-yellow-100 text-yellow-800';
       case 'Refunded':
         return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Payment method badge color
+  const getPaymentColor = (method: string) => {
+    switch (method.toLowerCase()) {
+      case 'cash':
+        return 'bg-blue-100 text-blue-800';
+      case 'card':
+      case 'credit card':
+        return 'bg-purple-100 text-purple-800';
+      case 'upi':
+        return 'bg-green-100 text-green-800';
+      case 'wallet':
+        return 'bg-yellow-100 text-yellow-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -235,82 +250,18 @@ const Transactions: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       ${transaction.total.toFixed(2)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {transaction.paymentMethod}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${getPaymentColor(transaction.paymentMethod)}`}>
+                        {transaction.paymentMethod}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(transaction.status)}`}>
                         {transaction.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap flex gap-2">
-                      <button
-                        className="bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600"
-                        onClick={() => setBillToPrint(transaction)}
-                      >
-                        Download Bill
-                      </button>
-                      <button
-                        className="bg-gray-300 text-gray-700 px-2 py-1 rounded text-xs hover:bg-gray-400"
-                        onClick={() => setHiddenIds(ids => [...ids, transaction.id])}
-                      >
-                        Hide
-                      </button>
-                    </td>
                   </tr>
                 ))}
-      {/* Bill Print Modal */}
-      {billToPrint && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
-          <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md relative print:w-full print:max-w-full">
-            <button
-              className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"
-              onClick={() => setBillToPrint(null)}
-            >
-              &times;
-            </button>
-            <h2 className="text-xl font-bold mb-2 text-center">{billToPrint.customer}</h2>
-            <div className="text-center text-xs text-gray-500 mb-2">Transaction ID: {billToPrint.id}</div>
-            <div className="mb-2 text-xs text-gray-500">Date: {billToPrint.date}</div>
-            <table className="w-full text-xs mb-4">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-1">Product</th>
-                  <th className="text-right py-1">Price</th>
-                  <th className="text-right py-1">Qty</th>
-                  <th className="text-right py-1">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {billToPrint.items.map((item, idx) => (
-                  <tr key={idx}>
-                    <td>{item.name}</td>
-                    <td className="text-right">${item.price.toFixed(2)}</td>
-                    <td className="text-right">{item.quantity}</td>
-                    <td className="text-right">${(item.price * item.quantity).toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="flex justify-between font-bold text-base mb-2">
-              <span>Total:</span>
-              <span>${billToPrint.total.toFixed(2)}</span>
-            </div>
-            <div className="mb-2 text-xs">Payment Method: <span className="font-semibold">{billToPrint.paymentMethod}</span></div>
-            <div className="text-center mt-4">
-              <button
-                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 print:hidden"
-                onClick={() => {
-                  window.print();
-                  setBillToPrint(null);
-                }}
-              >
-                Print / Save as PDF
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
               </tbody>
             </table>
           </div>

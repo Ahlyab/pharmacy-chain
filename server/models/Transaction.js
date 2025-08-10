@@ -12,6 +12,7 @@ const TransactionSchema = new mongoose.Schema({
   totalAmount: { type: Number, required: true },
   customerName: { type: String },
   cashierName: { type: String },
+  paymentMethod: { type: String },
   date: { type: Date, default: Date.now },
 });
 
