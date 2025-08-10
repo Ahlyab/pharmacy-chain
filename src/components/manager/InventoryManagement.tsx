@@ -16,6 +16,14 @@ interface Product {
 
 const InventoryManagement: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
+  // Helper to add status to a product
+  const addStatus = (product: any) => {
+    let status: 'In Stock' | 'Low Stock' | 'Out of Stock';
+    if (product.stock === 0) status = 'Out of Stock';
+    else if (product.stock <= product.minStock) status = 'Low Stock';
+    else status = 'In Stock';
+    return { ...product, status, id: product._id || product.id };
+  };
 
   React.useEffect(() => {
     const BASE_URL = 'http://localhost:5000/api';
@@ -24,14 +32,7 @@ const InventoryManagement: React.FC = () => {
         const response = await fetch(`${BASE_URL}/inventory`);
         if (!response.ok) throw new Error('Failed to fetch products');
         const data = await response.json();
-        // Add status property to each product
-        const productsWithStatus = data.map((product: any) => {
-          let status: 'In Stock' | 'Low Stock' | 'Out of Stock';
-          if (product.stock === 0) status = 'Out of Stock';
-          else if (product.stock <= product.minStock) status = 'Low Stock';
-          else status = 'In Stock';
-          return { ...product, status, id: product._id };
-        });
+        const productsWithStatus = data.map(addStatus);
         setProducts(productsWithStatus);
       } catch (err) {
         alert('Error fetching products: ' + (err as Error).message);
@@ -64,8 +65,6 @@ const InventoryManagement: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const status = formData.stock === 0 ? 'Out of Stock' : 
-                  formData.stock <= formData.minStock ? 'Low Stock' : 'In Stock';
     try {
       const BASE_URL = 'http://localhost:5000/api';
       if (editingProduct) {
@@ -73,25 +72,25 @@ const InventoryManagement: React.FC = () => {
         const response = await fetch(`${BASE_URL}/inventory/${editingProduct.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...formData, status })
+          body: JSON.stringify(formData)
         });
         if (!response.ok) throw new Error('Failed to update product');
         const updated = await response.json();
-        setProducts(products.map(product => 
+        setProducts(prev => prev.map(product => 
           product.id === editingProduct.id 
-            ? { ...updated, id: editingProduct.id } // keep id for local state
-            : product
+            ? addStatus({ ...updated, id: editingProduct.id })
+            : addStatus(product)
         ));
       } else {
         // Add product to backend
         const response = await fetch(`${BASE_URL}/inventory`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...formData, status })
+          body: JSON.stringify(formData)
         });
         if (!response.ok) throw new Error('Failed to add product');
         const newProduct = await response.json();
-        setProducts([...products, { ...newProduct, id: newProduct._id || Date.now().toString() }]);
+        setProducts(prev => [...prev.map(addStatus), addStatus(newProduct)]);
       }
       setShowModal(false);
       setEditingProduct(null);
@@ -135,7 +134,7 @@ const InventoryManagement: React.FC = () => {
       try {
         const response = await fetch(`${BASE_URL}/inventory/${id}`, { method: 'DELETE' });
         if (!response.ok) throw new Error('Failed to delete product');
-        setProducts(products.filter(product => product.id !== id));
+        setProducts(prev => prev.filter(product => product.id !== id).map(addStatus));
         Swal.fire('Deleted!', 'Product has been deleted.', 'success');
       } catch (err) {
         Swal.fire('Error', 'Error deleting product: ' + (err as Error).message, 'error');
@@ -288,7 +287,7 @@ const InventoryManagement: React.FC = () => {
                     {product.supplier}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {product.expiryDate}
+                    {product.expiryDate ? product.expiryDate.slice(0, 10) : ''}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(product.status)}`}>

@@ -66,6 +66,25 @@ const authenticate = (req, res, next) => {
     }
 };
 
+// Get current user info from token
+router.get('/me', authenticate, async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        res.status(200).json({
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            branchId: user.branchId || null,
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Billing Routes
 router.post('/billing', async (req, res) => {
     try {

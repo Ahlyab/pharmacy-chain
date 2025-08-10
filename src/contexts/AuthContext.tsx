@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 interface User {
   id: string;
@@ -30,6 +30,42 @@ interface AuthProviderProps {
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Restore user from token on mount
+  useEffect(() => {
+    const restoreUser = async () => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        try {
+          const response = await fetch('http://localhost:5000/api/me', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          });
+          if (response.ok) {
+            const data = await response.json();
+            setUser({
+              id: data.id,
+              name: data.name,
+              email: data.email,
+              role: data.role,
+              branchId: data.branchId,
+            });
+          } else {
+            setUser(null);
+            localStorage.removeItem('token');
+          }
+        } catch (err) {
+          setUser(null);
+          localStorage.removeItem('token');
+        }
+      }
+      setLoading(false);
+    };
+    restoreUser();
+  }, []);
 
   const login = async (email: string, password: string, navigate: (path: string) => void): Promise<boolean> => {
     try {
@@ -77,6 +113,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     localStorage.removeItem('token'); // Clear token on logout
   };
 
+  if (loading) {
+    return <div>Loading...</div>;
+  }
   return (
     <AuthContext.Provider value={{ user, login, logout }}>
       {children}

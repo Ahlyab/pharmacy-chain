@@ -1,24 +1,58 @@
 import React from 'react';
+import { useState, useEffect } from 'react';
 import { Package, ShoppingCart, DollarSign, TrendingUp, AlertTriangle } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/inventory');
+        if (!response.ok) throw new Error('Failed to fetch inventory');
+        const data = await response.json();
+        setProducts(data);
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProducts();
+  }, []);
+
+  // Calculate stats
+  const totalInStock = products.reduce((sum, p) => sum + (p.stock || 0), 0);
+  const lowStockItems = products.filter(p => p.stock <= p.minStock);
+  const lowStockCount = lowStockItems.length;
+
+  if (loading) {
+    return <div className="p-8 text-center text-gray-500">Loading dashboard...</div>;
+  }
+  if (error) {
+    return <div className="p-8 text-center text-red-500">{error}</div>;
+  }
+
+  // Dynamic stats for products in stock and low stock
   const stats = [
     {
       name: 'Products in Stock',
-      value: '847',
+      value: totalInStock,
       icon: Package,
       color: 'bg-blue-500',
-      change: '+23 this week'
+      change: `+${products.length} products` // You can customize this
     },
     {
-      name: 'Today\'s Sales',
+      name: "Today's Sales",
       value: '42',
       icon: ShoppingCart,
       color: 'bg-green-500',
       change: '+8 from yesterday'
     },
     {
-      name: 'Today\'s Revenue',
+      name: "Today's Revenue",
       value: '$1,247',
       icon: DollarSign,
       color: 'bg-purple-500',
@@ -26,10 +60,10 @@ const Dashboard: React.FC = () => {
     },
     {
       name: 'Low Stock Items',
-      value: '12',
+      value: lowStockCount,
       icon: AlertTriangle,
       color: 'bg-orange-500',
-      change: '3 critical'
+      change: `${lowStockItems.filter(i => i.stock === 0).length} critical`
     }
   ];
 
@@ -71,6 +105,7 @@ const Dashboard: React.FC = () => {
           </div>
           <div className="p-6">
             <div className="space-y-4">
+              {/* ...existing code... */}
               {[
                 { customer: 'John Smith', items: '3 items', amount: '$45.97', time: '2 min ago' },
                 { customer: 'Sarah Johnson', items: '2 items', amount: '$28.50', time: '15 min ago' },
@@ -94,25 +129,21 @@ const Dashboard: React.FC = () => {
           </div>
           <div className="p-6">
             <div className="space-y-4">
-              {[
-                { product: 'Paracetamol 500mg', stock: '5 units', status: 'Critical' },
-                { product: 'Vitamin D3', stock: '8 units', status: 'Low' },
-                { product: 'Cough Syrup', stock: '12 units', status: 'Low' }
-              ].map((item, index) => (
-                <div key={index} className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{item.product}</p>
-                    <p className="text-sm text-gray-500">{item.stock} remaining</p>
+              {lowStockItems.length === 0 ? (
+                <div className="text-gray-500">No low stock items.</div>
+              ) : (
+                lowStockItems.map((item, index) => (
+                  <div key={item._id || item.id || index} className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{item.name}</p>
+                      <p className="text-sm text-gray-500">{item.stock} remaining</p>
+                    </div>
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${item.stock === 0 ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                      {item.stock === 0 ? 'Critical' : 'Low'}
+                    </span>
                   </div>
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                    item.status === 'Critical' 
-                      ? 'bg-red-100 text-red-800' 
-                      : 'bg-yellow-100 text-yellow-800'
-                  }`}>
-                    {item.status}
-                  </span>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
