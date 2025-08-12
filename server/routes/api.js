@@ -244,4 +244,257 @@ router.get('/pos', async (req, res) => {
     }
 });
 
+
+// get recent sales
+/**
+ * [
+    {
+        "_id": "689b95a9c6b9ec713585dac4",
+        "transactionId": "TXN1755026857866",
+        "items": [
+            {
+                "productId": "68986203d34b42afbb8a99e6",
+                "quantity": 1,
+                "price": 2,
+                "_id": "689b95a9c6b9ec713585dac5"
+            },
+            {
+                "productId": "6898622ad34b42afbb8a99e8",
+                "quantity": 1,
+                "price": 8,
+                "_id": "689b95a9c6b9ec713585dac6"
+            },
+            {
+                "productId": "689862bbd34b42afbb8a99ec",
+                "quantity": 1,
+                "price": 1,
+                "_id": "689b95a9c6b9ec713585dac7"
+            }
+        ],
+        "totalAmount": 11,
+        "customerName": "Usman",
+        "cashierName": "Arslan",
+        "paymentMethod": "cash",
+        "date": "2025-08-12T19:27:37.866Z",
+        "__v": 0
+    },
+    {
+        "_id": "689b1177f951fd5b2ca23017",
+        "transactionId": "TXN1754993015445",
+        "items": [
+            {
+                "productId": "68986203d34b42afbb8a99e6",
+                "quantity": 1,
+                "price": 2,
+                "_id": "689b1177f951fd5b2ca23018"
+            }
+        ],
+        "totalAmount": 2,
+        "customerName": "Ahlyab Asad",
+        "cashierName": "Arslan",
+        "paymentMethod": "cash",
+        "date": "2025-08-12T10:03:35.445Z",
+        "__v": 0
+    },
+    {
+        "_id": "6899f131831b144770d4a83f",
+        "transactionId": "TXN1754919217590",
+        "items": [
+            {
+                "productId": "6898622ad34b42afbb8a99e8",
+                "quantity": 2,
+                "price": 8,
+                "_id": "6899f131831b144770d4a840"
+            },
+            {
+                "productId": "6898627bd34b42afbb8a99ea",
+                "quantity": 1,
+                "price": 4,
+                "_id": "6899f131831b144770d4a841"
+            },
+            {
+                "productId": "689862bbd34b42afbb8a99ec",
+                "quantity": 1,
+                "price": 1,
+                "_id": "6899f131831b144770d4a842"
+            },
+            {
+                "productId": "68986203d34b42afbb8a99e6",
+                "quantity": 1,
+                "price": 2,
+                "_id": "6899f131831b144770d4a843"
+            }
+        ],
+        "totalAmount": 23,
+        "paymentMethod": "cash",
+        "date": "2025-08-11T13:33:37.591Z",
+        "__v": 0
+    },
+    {
+        "_id": "6899094757e3a1a7453c20e7",
+        "transactionId": "TXN1754859847597",
+        "items": [
+            {
+                "productId": "68986203d34b42afbb8a99e6",
+                "quantity": 1,
+                "price": 2,
+                "_id": "6899094757e3a1a7453c20e8"
+            },
+            {
+                "productId": "689862bbd34b42afbb8a99ec",
+                "quantity": 1,
+                "price": 1,
+                "_id": "6899094757e3a1a7453c20e9"
+            }
+        ],
+        "totalAmount": 3,
+        "paymentMethod": "cash",
+        "date": "2025-08-10T21:04:07.597Z",
+        "__v": 0
+    },
+    {
+        "_id": "689906a557e3a1a7453c20dc",
+        "transactionId": "TXN1754859173190",
+        "items": [
+            {
+                "productId": "6898622ad34b42afbb8a99e8",
+                "quantity": 4,
+                "price": 8,
+                "_id": "689906a557e3a1a7453c20dd"
+            },
+            {
+                "productId": "689862bbd34b42afbb8a99ec",
+                "quantity": 1,
+                "price": 1,
+                "_id": "689906a557e3a1a7453c20de"
+            },
+            {
+                "productId": "6898627bd34b42afbb8a99ea",
+                "quantity": 1,
+                "price": 4,
+                "_id": "689906a557e3a1a7453c20df"
+            }
+        ],
+        "totalAmount": 37,
+        "customerName": "customer tester",
+        "paymentMethod": "cash",
+        "date": "2025-08-10T20:52:53.190Z",
+        "__v": 0
+    },
+    {
+        "_id": "6898f635f1b3b772952c9632",
+        "transactionId": "TXN1754854965836",
+        "items": [
+            {
+                "productId": "689864c0fd782f5852a48fef",
+                "quantity": 1,
+                "price": 6,
+                "_id": "6898f635f1b3b772952c9633"
+            }
+        ],
+        "totalAmount": 6,
+        "customerName": "Fahad",
+        "cashierName": "Arslan",
+        "paymentMethod": "card",
+        "date": "2025-08-10T19:42:45.836Z",
+        "__v": 0
+    },
+    {
+        "_id": "6898f60cf1b3b772952c95d2",
+        "transactionId": "TXN1754854924775",
+        "items": [
+            {
+                "productId": "68986203d34b42afbb8a99e6",
+                "quantity": 1,
+                "price": 2,
+                "_id": "6898f60cf1b3b772952c95d3"
+            }
+        ],
+        "totalAmount": 2,
+        "customerName": "Sulayman",
+        "cashierName": "Arslan",
+        "paymentMethod": "cash",
+        "date": "2025-08-10T19:42:04.775Z",
+        "__v": 0
+    },
+    {
+        "_id": "6898f5b9ad5bd578eae15e36",
+        "transactionId": "TXN1754854841777",
+        "items": [
+            {
+                "productId": "6898627bd34b42afbb8a99ea",
+                "quantity": 1,
+                "price": 4,
+                "_id": "6898f5b9ad5bd578eae15e37"
+            }
+        ],
+        "totalAmount": 4,
+        "customerName": "Ghulam Mustfa",
+        "cashierName": "Arslan",
+        "date": "2025-08-10T19:40:41.777Z",
+        "__v": 0
+    },
+    {
+        "_id": "6898f55bad5bd578eae15ddf",
+        "transactionId": "TXN1754854747175",
+        "items": [
+            {
+                "productId": "689862bbd34b42afbb8a99ec",
+                "quantity": 1,
+                "price": 1,
+                "_id": "6898f55bad5bd578eae15de0"
+            },
+            {
+                "productId": "6898622ad34b42afbb8a99e8",
+                "quantity": 1,
+                "price": 8,
+                "_id": "6898f55bad5bd578eae15de1"
+            }
+        ],
+        "totalAmount": 9,
+        "customerName": "Fazeel Ahmad",
+        "cashierName": "Arslan",
+        "date": "2025-08-10T19:39:07.176Z",
+        "__v": 0
+    },
+    {
+        "_id": "6898eaca7bec02d1b3fc58c1",
+        "transactionId": "TXN1754852041985",
+        "items": [
+            {
+                "productId": "689862bbd34b42afbb8a99ec",
+                "quantity": 1,
+                "price": 1,
+                "_id": "6898eaca7bec02d1b3fc58c2"
+            },
+            {
+                "productId": "689864c0fd782f5852a48fef",
+                "quantity": 1,
+                "price": 6,
+                "_id": "6898eaca7bec02d1b3fc58c3"
+            }
+        ],
+        "totalAmount": 7,
+        "customerName": "ppppp",
+        "cashierName": "Arslan",
+        "date": "2025-08-10T18:54:01.985Z",
+        "__v": 0
+    }
+]
+ */
+router.get('/sales/recent', async (req, res) => {
+    try {
+        // populate productId to get product name
+        const recentSales = await Transaction.find().sort({ date: -1 }).limit(10).populate('items.productId');
+        // map backend fields to frontend expected fields
+        const mapped = recentSales.map(s => ({
+            id: s.transactionId,
+            date: s.date,
+            customer: s.customerName || '',
+        }));
+        res.status(200).json(recentSales);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 export default router;

@@ -1,3 +1,4 @@
+import GreenProgressBar from '../GreenProgressBar';
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Plus, Minus, ShoppingCart, Trash2, CreditCard, DollarSign } from 'lucide-react';
 
@@ -209,59 +210,59 @@ const POS: React.FC = () => {
               </div>
             </div>
 
-            {loading ? (
-              <div className="text-center text-gray-500 py-8">Loading products...</div>
-            ) : error ? (
-              <div className="text-center text-red-500 py-8">{error}</div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
-                {filteredProducts.map((product) => {
-                  // Expiry and stock logic
-                  let isExpired = false;
-                  let expiryDisplay = null;
-                  if (product.expiryDate) {
-                    const today = new Date();
-                    today.setHours(0,0,0,0);
-                    const expiry = new Date(product.expiryDate);
-                    expiry.setHours(0,0,0,0);
-                    isExpired = expiry.getTime() < today.getTime();
-                    expiryDisplay = (
-                      <span className={
-                        'text-xs font-semibold ' + (isExpired ? 'text-red-600' : 'text-gray-500')
-                      }>
-                        Expiry: {expiry.toLocaleDateString()}
-                      </span>
-                    );
-                  }
-                  const isOutOfStock = product.stock === 0;
-                  return (
-                    <div
-                      key={product._id}
-                      className={
-                        'border border-gray-200 rounded-lg p-4 transition-shadow ' +
-                        (isExpired ? 'bg-red-100 ' : '') +
-                        (!isOutOfStock && !isExpired ? 'hover:shadow-md cursor-pointer' : 'opacity-60 cursor-not-allowed')
-                      }
-                      onClick={() => {
-                        if (!isOutOfStock && !isExpired) addToCart(product);
-                      }}
-                    >
-                      <h3 className="font-medium text-gray-900 text-sm mb-1">{product.name}</h3>
-                      <p className="text-xs text-gray-500 mb-2">{product.category}</p>
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-lg font-bold text-blue-600">${product.price}</span>
+            <GreenProgressBar loading={loading}>
+              {error ? (
+                <div className="text-center text-red-500 py-8">{error}</div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
+                  {filteredProducts.map((product) => {
+                    // Expiry and stock logic
+                    let isExpired = false;
+                    let expiryDisplay = null;
+                    if (product.expiryDate) {
+                      const today = new Date();
+                      today.setHours(0,0,0,0);
+                      const expiry = new Date(product.expiryDate);
+                      expiry.setHours(0,0,0,0);
+                      isExpired = expiry.getTime() < today.getTime();
+                      expiryDisplay = (
                         <span className={
-                          'text-xs ' + (isOutOfStock ? 'text-red-600 font-semibold' : 'text-gray-500')
+                          'text-xs font-semibold ' + (isExpired ? 'text-red-600' : 'text-gray-500')
                         }>
-                          {product.stock} in stock
+                          Expiry: {expiry.toLocaleDateString()}
                         </span>
+                      );
+                    }
+                    const isOutOfStock = product.stock === 0;
+                    return (
+                      <div
+                        key={product._id}
+                        className={
+                          'border border-gray-200 rounded-lg p-4 transition-shadow ' +
+                          (isExpired ? 'bg-red-100 ' : '') +
+                          (!isOutOfStock && !isExpired ? 'hover:shadow-md cursor-pointer' : 'opacity-60 cursor-not-allowed')
+                        }
+                        onClick={() => {
+                          if (!isOutOfStock && !isExpired) addToCart(product);
+                        }}
+                      >
+                        <h3 className="font-medium text-gray-900 text-sm mb-1">{product.name}</h3>
+                        <p className="text-xs text-gray-500 mb-2">{product.category}</p>
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-lg font-bold text-blue-600">${product.price}</span>
+                          <span className={
+                            'text-xs ' + (isOutOfStock ? 'text-red-600 font-semibold' : 'text-gray-500')
+                          }>
+                            {product.stock} in stock
+                          </span>
+                        </div>
+                        {expiryDisplay}
                       </div>
-                      {expiryDisplay}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    );
+                  })}
+                </div>
+              )}
+            </GreenProgressBar>
           </div>
         </div>
 

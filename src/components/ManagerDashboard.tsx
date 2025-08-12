@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import GreenProgressBar from './GreenProgressBar';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import InventoryManagement from './manager/InventoryManagement';
@@ -10,7 +11,6 @@ import Dashboard from './manager/Dashboard';
 
 const ManagerDashboard: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const navigate = useNavigate();
 
   const menuItems = [
     { name: 'Dashboard', path: '/manager', icon: 'BarChart3' },
@@ -22,6 +22,13 @@ const ManagerDashboard: React.FC = () => {
 
 
 
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    setLoading(true);
+    const timer = setTimeout(() => setLoading(false), 1000);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <div className="flex h-screen bg-gray-50">
       <Sidebar 
@@ -29,19 +36,19 @@ const ManagerDashboard: React.FC = () => {
         isOpen={sidebarOpen} 
         onClose={() => setSidebarOpen(false)} 
       />
-      
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header onMenuClick={() => setSidebarOpen(true)} />
-        
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50 p-4">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/inventory" element={<InventoryManagement />} />
-            <Route path="/pos" element={<POS />} />
-            <Route path="/billing" element={<Billing />} />
-            <Route path="/transactions" element={<Transactions />} />
-            <Route path="*" element={<Navigate to="/manager" />} />
-          </Routes>
+          <GreenProgressBar loading={loading}>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/inventory" element={<InventoryManagement />} />
+              <Route path="/pos" element={<POS />} />
+              <Route path="/billing" element={<Billing />} />
+              <Route path="/transactions" element={<Transactions />} />
+              <Route path="*" element={<Navigate to="/manager" />} />
+            </Routes>
+          </GreenProgressBar>
         </main>
       </div>
     </div>

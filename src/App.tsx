@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
+import Spinner from './components/Spinner';
+import './components/Spinner.css';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './components/Login';
 import AdminDashboard from './components/AdminDashboard';
@@ -35,11 +37,21 @@ function AppRoutes() {
   );
 }
 
+
 function App() {
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    const timer = setTimeout(() => setLoading(false), 1000);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <AuthProvider>
       <Router>
         <div className="min-h-screen bg-gray-50">
+          {loading && <Spinner />}
           <AppRoutes />
         </div>
       </Router>
