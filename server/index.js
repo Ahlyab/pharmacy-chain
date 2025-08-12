@@ -2,6 +2,8 @@ import express from 'express';
 import mongoose from 'mongoose';
 import apiRoutes from './routes/api.js';
 import cors from 'cors';
+import dotenv from 'dotenv';
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -14,7 +16,7 @@ app.use(express.json());
 app.use('/api', apiRoutes);
 
 // MongoDB Connection
-mongoose.connect('mongodb://localhost:27017/pharmacy-chain')
+mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/pharmacy-chain')
   .then(() => console.log('MongoDB connected'))
   .catch((err) => console.error('MongoDB connection error:', err));
 
