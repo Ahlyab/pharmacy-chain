@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { VITE_BASE_URL, VITE_BASE_URL_VERCEL, VITE_IS_VERCEL } from './src/data';
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -9,11 +10,12 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/inventory': 'http://localhost:3000',
-      '/billing': 'http://localhost:3000',
-      '/transaction': 'http://localhost:3000',
-      '/pos': 'http://localhost:3000',
-      '/api': 'http://localhost:3000',
+      // update it according to the backend port
+      '/inventory': VITE_IS_VERCEL ? VITE_BASE_URL_VERCEL : VITE_BASE_URL,
+      '/billing': VITE_IS_VERCEL ? VITE_BASE_URL_VERCEL : VITE_BASE_URL,
+      '/transaction': VITE_IS_VERCEL ? VITE_BASE_URL_VERCEL : VITE_BASE_URL,
+      '/pos': VITE_IS_VERCEL ? VITE_BASE_URL_VERCEL : VITE_BASE_URL,
+      '/api': VITE_IS_VERCEL ? VITE_BASE_URL_VERCEL : VITE_BASE_URL,
     },
   },
 });
