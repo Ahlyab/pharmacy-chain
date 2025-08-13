@@ -1,21 +1,23 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
-import { VITE_BASE_URL, VITE_BASE_URL_VERCEL, VITE_IS_VERCEL } from './src/data';
 
-// https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [react()],
-  optimizeDeps: {
-    exclude: ['lucide-react'],
-  },
-  server: {
-    proxy: {
-      // update it according to the backend port
-      '/inventory': VITE_IS_VERCEL ? VITE_BASE_URL_VERCEL : VITE_BASE_URL,
-      '/billing': VITE_IS_VERCEL ? VITE_BASE_URL_VERCEL : VITE_BASE_URL,
-      '/transaction': VITE_IS_VERCEL ? VITE_BASE_URL_VERCEL : VITE_BASE_URL,
-      '/pos': VITE_IS_VERCEL ? VITE_BASE_URL_VERCEL : VITE_BASE_URL,
-      '/api': VITE_IS_VERCEL ? VITE_BASE_URL_VERCEL : VITE_BASE_URL,
+export default defineConfig(({ command, mode }) => {
+  // Load env file based on `mode` in the current working directory.
+  // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
+  const env = loadEnv(mode, process.cwd(), '');
+  
+  return {
+    plugins: [react()],
+    define: {
+      __APP_ENV__: JSON.stringify(env.VITE_REACT_APP_ENV || 'dev'),
     },
-  },
+    server: {
+      port: 3000,
+      host: true,
+    },
+    build: {
+      outDir: 'dist',
+      sourcemap: mode === 'development',
+    },
+  };
 });
