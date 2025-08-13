@@ -13,6 +13,9 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
+app.get("/", (req, res) => {
+  res.send("API is working");
+});
 app.use("/api", apiRoutes);
 
 // Global error handler middleware
@@ -53,7 +56,7 @@ const connectDB = async () => {
     const mongoURI =
       process.env.MONGO_URI || "mongodb://localhost:27017/pharmacy-chain";
 
-    // Production-ready connection options
+    // Production-ready connection options (only supported options)
     const options = {
       serverSelectionTimeoutMS: 30000, // 30 seconds
       socketTimeoutMS: 45000, // 45 seconds
@@ -64,7 +67,6 @@ const connectDB = async () => {
       retryWrites: true,
       w: "majority",
       bufferCommands: false, // Disable mongoose buffering
-      bufferMaxEntries: 0, // Disable mongoose buffering
     };
 
     await mongoose.connect(mongoURI, options);

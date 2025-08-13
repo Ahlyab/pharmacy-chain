@@ -12,7 +12,9 @@ The server has been updated with production-ready MongoDB connection handling to
    - `socketTimeoutMS: 45000` - 45 second socket timeout
    - `connectTimeoutMS: 30000` - 30 second connection timeout
    - `bufferCommands: false` - Disabled mongoose buffering (prevents timeout errors)
-   - `bufferMaxEntries: 0` - Disabled mongoose buffering
+   - `maxPoolSize: 10` - Maximum connections in pool
+   - `minPoolSize: 2` - Minimum connections in pool
+   - `maxIdleTimeMS: 30000` - Close idle connections after 30 seconds
 
 2. **Connection Event Listeners:**
 
