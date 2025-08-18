@@ -43,6 +43,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const BASE_URL = VITE_IS_VERCEL ? VITE_BASE_URL_VERCEL : VITE_BASE_URL;
+
   // Restore user from token on mount
   useEffect(() => {
     const restoreUser = async () => {

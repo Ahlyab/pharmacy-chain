@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { VITE_BASE_URL, VITE_BASE_URL_VERCEL, VITE_IS_VERCEL } from '../../data';
 import { Package, AlertTriangle, TrendingUp, Search } from 'lucide-react';
 
 interface InventoryItem {
@@ -17,60 +18,41 @@ const InventoryOverview: React.FC = () => {
   const [selectedBranch, setSelectedBranch] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
 
-  const inventory: InventoryItem[] = [
-    {
-      id: '1',
-      name: 'Paracetamol 500mg',
-      category: 'Pain Relief',
-      branch: 'Downtown Branch',
-      stock: 150,
-      minStock: 50,
-      price: 5.99,
-      status: 'In Stock'
-    },
-    {
-      id: '2',
-      name: 'Amoxicillin 250mg',
-      category: 'Antibiotics',
-      branch: 'Mall Branch',
-      stock: 8,
-      minStock: 20,
-      price: 12.50,
-      status: 'Low Stock'
-    },
-    {
-      id: '3',
-      name: 'Vitamin D3',
-      category: 'Vitamins',
-      branch: 'Airport Branch',
-      stock: 0,
-      minStock: 30,
-      price: 15.99,
-      status: 'Out of Stock'
-    },
-    {
-      id: '4',
-      name: 'Ibuprofen 400mg',
-      category: 'Pain Relief',
-      branch: 'Downtown Branch',
-      stock: 75,
-      minStock: 25,
-      price: 8.99,
-      status: 'In Stock'
-    },
-    {
-      id: '5',
-      name: 'Cough Syrup',
-      category: 'Cold & Flu',
-      branch: 'Mall Branch',
-      stock: 12,
-      minStock: 15,
-      price: 9.99,
-      status: 'Low Stock'
-    }
-  ];
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const branches = ['All', 'Downtown Branch', 'Mall Branch', 'Airport Branch'];
+  useEffect(() => {
+    const fetchInventory = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const BASE_URL = VITE_IS_VERCEL ? VITE_BASE_URL_VERCEL : VITE_BASE_URL;
+        const response = await fetch(`${BASE_URL}/inventory`);
+        if (!response.ok) throw new Error('Failed to fetch inventory');
+        const data = await response.json();
+        // Ensure each item has a status property
+        const inventoryWithStatus = (data.inventory || data).map((item: any) => ({
+          ...item,
+          status:
+            item.stock === 0
+              ? 'Out of Stock'
+              : item.stock <= item.minStock
+              ? 'Low Stock'
+              : 'In Stock',
+        }));
+        setInventory(inventoryWithStatus);
+      } catch (err: any) {
+        setError(err.message || 'Error fetching inventory');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchInventory();
+  }, []);
+
+  // Dynamically get branches from inventory
+  const branches = ['All', ...Array.from(new Set(inventory.map(item => item.branch)))];
   const statuses = ['All', 'In Stock', 'Low Stock', 'Out of Stock'];
 
   const filteredInventory = inventory.filter(item => {
@@ -182,54 +164,60 @@ const InventoryOverview: React.FC = () => {
       {/* Inventory Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Product
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Branch
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Stock
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Price
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredInventory.map((item) => (
-                <tr key={item.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{item.name}</div>
-                      <div className="text-sm text-gray-500">{item.category}</div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {item.branch}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{item.stock} units</div>
-                    <div className="text-sm text-gray-500">Min: {item.minStock}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${item.price}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(item.status)}`}>
-                      {item.status}
-                    </span>
-                  </td>
+          {loading ? (
+            <div className="p-6 text-center text-gray-500">Loading inventory...</div>
+          ) : error ? (
+            <div className="p-6 text-center text-red-500">{error}</div>
+          ) : (
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Product
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Branch
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Stock
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Price
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredInventory.map((item) => (
+                  <tr key={item.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">{item.name}</div>
+                        <div className="text-sm text-gray-500">{item.category}</div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {item.branch}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{item.stock} units</div>
+                      <div className="text-sm text-gray-500">Min: {item.minStock}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      ${item.price}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(item.status)}`}>
+                        {item.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>

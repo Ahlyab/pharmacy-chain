@@ -54,6 +54,8 @@ const POS: React.FC = () => {
     return { ...product, status, id: product._id || product.id };
   };
 
+  const BASE_URL = VITE_IS_VERCEL ? VITE_BASE_URL_VERCEL : VITE_BASE_URL;
+
   // Fetch products from API (same as InventoryManagement)
   const fetchProducts = useCallback(async () => {
     setLoading(true);

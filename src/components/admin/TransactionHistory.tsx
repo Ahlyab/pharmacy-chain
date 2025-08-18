@@ -1,87 +1,147 @@
-import React, { useState } from 'react';
-import { Calendar, DollarSign, Receipt, Search, Filter } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Calendar, DollarSign, Receipt, Search } from 'lucide-react';
+import { VITE_BASE_URL, VITE_BASE_URL_VERCEL, VITE_IS_VERCEL } from '../../data';
+import GreenProgressBar from '../GreenProgressBar';
 
 interface Transaction {
   id: string;
   date: string;
   branch: string;
   customer: string;
-  items: number;
+  items: Array<{
+    name: string;
+    quantity: number;
+    price: number;
+  }>
   total: number;
   paymentMethod: string;
   status: 'Completed' | 'Pending' | 'Refunded';
 }
 
 const TransactionHistory: React.FC = () => {
+  // Format date to 'YYYY-MM-DD h:mmAM/PM'
+  const formatDateTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    let hours = date.getHours();
+    const minutes = date.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const minutesStr = minutes < 10 ? '0' + minutes : minutes;
+    return `${year}-${month}-${day} ${hours}:${minutesStr}${ampm}`;
+  };
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBranch, setSelectedBranch] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [dateRange, setDateRange] = useState('7');
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [sortColumn, setSortColumn] = useState<string>('date');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
-  const transactions: Transaction[] = [
-    {
-      id: 'TXN001',
-      date: '2024-01-15 14:30',
-      branch: 'Downtown Branch',
-      customer: 'John Doe',
-      items: 3,
-      total: 45.97,
-      paymentMethod: 'Credit Card',
-      status: 'Completed'
-    },
-    {
-      id: 'TXN002',
-      date: '2024-01-15 13:15',
-      branch: 'Mall Branch',
-      customer: 'Jane Smith',
-      items: 2,
-      total: 28.50,
-      paymentMethod: 'Cash',
-      status: 'Completed'
-    },
-    {
-      id: 'TXN003',
-      date: '2024-01-15 12:45',
-      branch: 'Airport Branch',
-      customer: 'Mike Johnson',
-      items: 1,
-      total: 15.99,
-      paymentMethod: 'Debit Card',
-      status: 'Pending'
-    },
-    {
-      id: 'TXN004',
-      date: '2024-01-14 16:20',
-      branch: 'Downtown Branch',
-      customer: 'Sarah Wilson',
-      items: 4,
-      total: 67.80,
-      paymentMethod: 'Credit Card',
-      status: 'Completed'
-    },
-    {
-      id: 'TXN005',
-      date: '2024-01-14 11:30',
-      branch: 'Mall Branch',
-      customer: 'Robert Brown',
-      items: 2,
-      total: 32.40,
-      paymentMethod: 'Cash',
-      status: 'Refunded'
+  // Sorting handler
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
     }
-  ];
+  };
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const BASE_URL = VITE_IS_VERCEL ? VITE_BASE_URL_VERCEL : VITE_BASE_URL;
+        const res = await fetch(`${BASE_URL}/transaction`);
+        if (!res.ok) throw new Error('Failed to fetch transactions');
+        const data = await res.json();
+        setTransactions(data.transactions || data);
+      } catch (err: any) {
+        setError(err.message || 'Error fetching transactions');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTransactions();
+  }, []);
 
-  const branches = ['All', 'Downtown Branch', 'Mall Branch', 'Airport Branch'];
+  // Branches from transactions
+  const branches = ['All', ...Array.from(new Set(transactions.map(t => t.branch).filter(Boolean)))];
   const statuses = ['All', 'Completed', 'Pending', 'Refunded'];
 
-  const filteredTransactions = transactions.filter(transaction => {
-    const matchesSearch = transaction.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         transaction.customer.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesBranch = selectedBranch === 'All' || transaction.branch === selectedBranch;
-    const matchesStatus = selectedStatus === 'All' || transaction.status === selectedStatus;
-    
-    return matchesSearch && matchesBranch && matchesStatus;
-  });
+  // Filter by search, branch, status, and date range
+  const now = new Date();
+  const filteredTransactions = transactions
+    .filter(transaction => {
+      if (!transaction || !transaction.id || !transaction.customer) return false;
+      const matchesSearch = transaction.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        transaction.customer.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesBranch = selectedBranch === 'All' || transaction.branch === selectedBranch;
+      const matchesStatus = selectedStatus === 'All' || transaction.status === selectedStatus;
+      // Date filter
+      const txnDate = new Date(transaction.date);
+      let matchesDate = true;
+      if (dateRange === 'today') {
+        const txnDateStr = txnDate.toISOString().slice(0, 10);
+        const todayStr = now.toISOString().slice(0, 10);
+        matchesDate = txnDateStr === todayStr;
+      } else {
+        const days = parseInt(dateRange, 10);
+        const dateLimit = new Date(now);
+        dateLimit.setDate(now.getDate() - days);
+        matchesDate = txnDate >= dateLimit;
+      }
+      return matchesSearch && matchesBranch && matchesStatus && matchesDate;
+    })
+    .sort((a, b) => {
+      let valA, valB;
+      switch (sortColumn) {
+        case 'id':
+          valA = a.id;
+          valB = b.id;
+          break;
+        case 'date':
+          valA = new Date(a.date).getTime();
+          valB = new Date(b.date).getTime();
+          break;
+        case 'branch':
+          valA = a.branch;
+          valB = b.branch;
+          break;
+        case 'customer':
+          valA = a.customer;
+          valB = b.customer;
+          break;
+        case 'items':
+          valA = a.items?.length || 0;
+          valB = b.items?.length || 0;
+          break;
+        case 'total':
+          valA = a.total;
+          valB = b.total;
+          break;
+        case 'paymentMethod':
+          valA = a.paymentMethod;
+          valB = b.paymentMethod;
+          break;
+        case 'status':
+          valA = a.status;
+          valB = b.status;
+          break;
+        default:
+          valA = a.date;
+          valB = b.date;
+      }
+      if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+      if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -96,9 +156,30 @@ const TransactionHistory: React.FC = () => {
     }
   };
 
+  // Payment method badge color
+  const getPaymentColor = (method: string) => {
+    switch (method.toLowerCase()) {
+      case 'cash':
+        return 'bg-blue-100 text-blue-800';
+      case 'card':
+      case 'credit card':
+        return 'bg-purple-100 text-purple-800';
+      case 'upi':
+        return 'bg-green-100 text-green-800';
+      case 'wallet':
+        return 'bg-yellow-100 text-yellow-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
   const totalRevenue = filteredTransactions
     .filter(t => t.status === 'Completed')
     .reduce((sum, t) => sum + t.total, 0);
+  const completedCount = filteredTransactions.filter(t => t.status === 'Completed').length;
+  const avgTransaction = totalRevenue / Math.max(completedCount, 1);
+  const todayStr = now.toISOString().slice(0, 10);
+  const completedToday = filteredTransactions.filter(t => t.status === 'Completed' && t.date.slice(0, 10) === todayStr).length;
 
   const stats = [
     {
@@ -115,9 +196,15 @@ const TransactionHistory: React.FC = () => {
     },
     {
       name: 'Avg Transaction',
-      value: `$${(totalRevenue / Math.max(filteredTransactions.filter(t => t.status === 'Completed').length, 1)).toFixed(2)}`,
+      value: `$${avgTransaction.toFixed(2)}`,
       icon: Calendar,
       color: 'bg-purple-500'
+    },
+    {
+      name: 'Completed Today',
+      value: completedToday.toString(),
+      icon: Calendar,
+      color: 'bg-orange-500'
     }
   ];
 
@@ -129,7 +216,7 @@ const TransactionHistory: React.FC = () => {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         {stats.map((stat) => {
           const Icon = stat.icon;
           return (
@@ -161,7 +248,6 @@ const TransactionHistory: React.FC = () => {
               className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          
           <select
             value={selectedBranch}
             onChange={(e) => setSelectedBranch(e.target.value)}
@@ -171,7 +257,6 @@ const TransactionHistory: React.FC = () => {
               <option key={branch} value={branch}>{branch}</option>
             ))}
           </select>
-          
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
@@ -181,12 +266,12 @@ const TransactionHistory: React.FC = () => {
               <option key={status} value={status}>{status}</option>
             ))}
           </select>
-          
           <select
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
+            <option value="today">Today</option>
             <option value="7">Last 7 days</option>
             <option value="30">Last 30 days</option>
             <option value="90">Last 3 months</option>
@@ -195,73 +280,87 @@ const TransactionHistory: React.FC = () => {
         </div>
       </div>
 
-      {/* Transactions Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Transaction ID
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Date & Time
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Branch
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Customer
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Items
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Total
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Payment
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredTransactions.map((transaction) => (
-                <tr key={transaction.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {transaction.id}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {transaction.date}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {transaction.branch}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {transaction.customer}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {transaction.items}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    ${transaction.total.toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {transaction.paymentMethod}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(transaction.status)}`}>
-                      {transaction.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* Transactions Table with loading/error */}
+      <GreenProgressBar loading={loading}>
+        {error ? (
+          <div className="text-center py-10 text-red-500">{error}</div>
+        ) : (
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none" onClick={() => handleSort('id')}>
+                      Transaction ID {sortColumn === 'id' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none" onClick={() => handleSort('date')}>
+                      Date & Time {sortColumn === 'date' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none" onClick={() => handleSort('branch')}>
+                      Branch {sortColumn === 'branch' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none" onClick={() => handleSort('customer')}>
+                      Customer {sortColumn === 'customer' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none" onClick={() => handleSort('items')}>
+                      Items {sortColumn === 'items' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none" onClick={() => handleSort('total')}>
+                      Total {sortColumn === 'total' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none" onClick={() => handleSort('paymentMethod')}>
+                      Payment {sortColumn === 'paymentMethod' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none" onClick={() => handleSort('status')}>
+                      Status {sortColumn === 'status' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredTransactions.map((transaction) => (
+                    <tr key={transaction.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {transaction.id}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {formatDateTime(transaction.date)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {transaction.branch}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {transaction.customer}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {transaction.items?.length || 0} items
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {transaction.items?.map(item => item.name).join(', ').substring(0, 50)}
+                          {transaction.items?.map(item => item.name).join(', ').length > 50 && '...'}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        ${transaction.total.toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getPaymentColor(transaction.paymentMethod)}`}>
+                          {transaction.paymentMethod}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(transaction.status)}`}>
+                          {transaction.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </GreenProgressBar>
     </div>
   );
 };

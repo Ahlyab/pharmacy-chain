@@ -27,6 +27,7 @@ const Billing: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [billToView, setBillToView] = useState<Bill | null>(null); // for view/print
   const [billToDownload, setBillToDownload] = useState<Bill | null>(null); // for download
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
   useEffect(() => {
     const fetchBills = async () => {
@@ -69,13 +70,44 @@ const Billing: React.FC = () => {
       const matchesStatus = selectedStatus === 'All' || bill.status === selectedStatus;
       // Date filter
       const txnDate = new Date(bill.date);
-      const days = parseInt(dateRange, 10);
-      const dateLimit = new Date(now);
-      dateLimit.setDate(now.getDate() - days);
-      const matchesDate = txnDate >= dateLimit;
+      let matchesDate = true;
+      if (dateRange === 'today') {
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        matchesDate = txnDate >= today && txnDate < new Date(today.getTime() + 24 * 60 * 60 * 1000);
+      } else {
+        const days = parseInt(dateRange, 10);
+        const dateLimit = new Date(now);
+        dateLimit.setDate(now.getDate() - days);
+        matchesDate = txnDate >= dateLimit;
+      }
       return matchesSearch && matchesStatus && matchesDate;
-    })
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    });
+
+  // Sorting
+  const sortedBills = React.useMemo(() => {
+    if (!sortConfig) return filteredBills.slice().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const sorted = [...filteredBills];
+    sorted.sort((a, b) => {
+      let aValue: any = a[sortConfig.key as keyof Bill];
+      let bValue: any = b[sortConfig.key as keyof Bill];
+      if (sortConfig.key === 'items') {
+        aValue = a.items.length;
+        bValue = b.items.length;
+      }
+      if (sortConfig.key === 'date') {
+        aValue = new Date(a.date).getTime();
+        bValue = new Date(b.date).getTime();
+      }
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
+      }
+      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [filteredBills, sortConfig]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -168,7 +200,7 @@ const Billing: React.FC = () => {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Total Bills</p>
-              <p className="text-2xl font-bold text-gray-900">{filteredBills.length}</p>
+              <p className="text-2xl font-bold text-gray-900">{sortedBills.length}</p>
             </div>
           </div>
         </div>
@@ -181,7 +213,7 @@ const Billing: React.FC = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Paid Bills</p>
               <p className="text-2xl font-bold text-gray-900">
-                {filteredBills.filter(b => b.status === 'Paid').length}
+                {sortedBills.filter(b => b.status === 'Paid').length}
               </p>
             </div>
           </div>
@@ -195,7 +227,7 @@ const Billing: React.FC = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Pending Bills</p>
               <p className="text-2xl font-bold text-gray-900">
-                {filteredBills.filter(b => b.status === 'Pending').length}
+                {sortedBills.filter(b => b.status === 'Pending').length}
               </p>
             </div>
           </div>
@@ -243,6 +275,7 @@ const Billing: React.FC = () => {
             onChange={(e) => setDateRange(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
+            <option value="today">Today</option>
             <option value="7">Last 7 days</option>
             <option value="30">Last 30 days</option>
             <option value="90">Last 3 months</option>
@@ -261,20 +294,35 @@ const Billing: React.FC = () => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Bill ID
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none"
+                      onClick={() => setSortConfig(sortConfig?.key === 'id' ? { key: 'id', direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' } : { key: 'id', direction: 'asc' })}
+                    >
+                      Bill ID {sortConfig?.key === 'id' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Date & Time
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none"
+                      onClick={() => setSortConfig(sortConfig?.key === 'date' ? { key: 'date', direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' } : { key: 'date', direction: 'asc' })}
+                    >
+                      Date & Time {sortConfig?.key === 'date' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Customer
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none"
+                      onClick={() => setSortConfig(sortConfig?.key === 'customer' ? { key: 'customer', direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' } : { key: 'customer', direction: 'asc' })}
+                    >
+                      Customer {sortConfig?.key === 'customer' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Items
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none"
+                      onClick={() => setSortConfig(sortConfig?.key === 'items' ? { key: 'items', direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' } : { key: 'items', direction: 'asc' })}
+                    >
+                      Items {sortConfig?.key === 'items' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Total
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none"
+                      onClick={() => setSortConfig(sortConfig?.key === 'total' ? { key: 'total', direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' } : { key: 'total', direction: 'asc' })}
+                    >
+                      Total {sortConfig?.key === 'total' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Payment
@@ -288,7 +336,7 @@ const Billing: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredBills.map((bill) => (
+                  {sortedBills.map((bill) => (
                     <tr key={bill.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         {bill.id}

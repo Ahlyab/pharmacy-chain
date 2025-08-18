@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { VITE_BASE_URL } from '../../data';
 import { Plus, Edit, Trash2, Mail, Phone, Building2 } from 'lucide-react';
 
 interface Manager {
@@ -11,32 +12,41 @@ interface Manager {
 }
 
 const ManagerManagement: React.FC = () => {
-  const [managers, setManagers] = useState<Manager[]>([
-    {
-      id: '1',
-      name: 'John Smith',
-      email: 'john.smith@drugwell.com',
-      phone: '+1 234-567-8901',
-      branch: 'Downtown Branch',
-      status: 'Active'
-    },
-    {
-      id: '2',
-      name: 'Sarah Johnson',
-      email: 'sarah.johnson@drugwell.com',
-      phone: '+1 234-567-8902',
-      branch: 'Mall Branch',
-      status: 'Active'
-    },
-    {
-      id: '3',
-      name: 'Mike Wilson',
-      email: 'mike.wilson@drugwell.com',
-      phone: '+1 234-567-8903',
-      branch: 'Airport Branch',
-      status: 'Inactive'
-    }
-  ]);
+  const [managers, setManagers] = useState<Manager[]>([]);
+  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
+
+  // Fetch managers and branches from backend on mount
+  useEffect(() => {
+    const fetchManagers = async () => {
+      try {
+        const response = await fetch(`${VITE_BASE_URL}/manager`);
+        if (!response.ok) throw new Error('Failed to fetch managers');
+        const data = await response.json();
+        setManagers(data.map((m: any) => ({
+          id: m._id,
+          name: m.name,
+          email: m.email,
+          phone: m.phone,
+          branch: m.branch,
+          status: m.status
+        })));
+      } catch (err) {
+        // Optionally show error
+      }
+    };
+    const fetchBranches = async () => {
+      try {
+        const response = await fetch(`${VITE_BASE_URL}/branch`);
+        if (!response.ok) throw new Error('Failed to fetch branches');
+        const data = await response.json();
+        setBranches(data.map((b: any) => ({ id: b._id, name: b.name })));
+      } catch (err) {
+        // Optionally show error
+      }
+    };
+    fetchManagers();
+    fetchBranches();
+  }, []);
 
   const [showModal, setShowModal] = useState(false);
   const [editingManager, setEditingManager] = useState<Manager | null>(null);
@@ -45,31 +55,65 @@ const ManagerManagement: React.FC = () => {
     email: '',
     phone: '',
     branch: '',
-    status: 'Active' as 'Active' | 'Inactive'
+    status: 'Active' as 'Active' | 'Inactive',
+    password: ''
   });
+  const [managerSearch, setManagerSearch] = useState('');
 
-  const branches = ['Downtown Branch', 'Mall Branch', 'Airport Branch', 'Westside Branch'];
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (editingManager) {
-      setManagers(managers.map(manager => 
-        manager.id === editingManager.id 
-          ? { ...manager, ...formData }
-          : manager
-      ));
-    } else {
-      const newManager: Manager = {
-        id: Date.now().toString(),
-        ...formData
-      };
-      setManagers([...managers, newManager]);
+    try {
+      if (editingManager) {
+        // Update manager in backend (do not send password if empty)
+        const updateData = { ...formData };
+        if (!updateData.password) delete updateData.password;
+        const response = await fetch(`${VITE_BASE_URL}/manager/${editingManager.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updateData)
+        });
+        if (!response.ok) throw new Error('Failed to update manager');
+        const updatedManager = await response.json();
+        setManagers(managers.map(manager => 
+          manager.id === editingManager.id 
+            ? {
+                id: updatedManager._id,
+                name: updatedManager.name,
+                email: updatedManager.email,
+                phone: updatedManager.phone,
+                branch: updatedManager.branch,
+                status: updatedManager.status
+              }
+            : manager
+        ));
+      } else {
+        // Add manager to backend (password required)
+        if (!formData.password || formData.password.length < 8) {
+          alert('Password is required and must be at least 8 characters.');
+          return;
+        }
+        const response = await fetch(`${VITE_BASE_URL}/manager`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData)
+        });
+        if (!response.ok) throw new Error('Failed to add manager');
+        const newManager = await response.json();
+        setManagers([...managers, {
+          id: newManager._id,
+          name: newManager.name,
+          email: newManager.email,
+          phone: newManager.phone,
+          branch: newManager.branch,
+          status: newManager.status
+        }]);
+      }
+      setShowModal(false);
+      setEditingManager(null);
+      setFormData({ name: '', email: '', phone: '', branch: '', status: 'Active', password: '' });
+    } catch (err) {
+      alert('Error adding/updating manager: ' + (err as Error).message);
     }
-    
-    setShowModal(false);
-    setEditingManager(null);
-    setFormData({ name: '', email: '', phone: '', branch: '', status: 'Active' });
   };
 
   const handleEdit = (manager: Manager) => {
@@ -79,14 +123,34 @@ const ManagerManagement: React.FC = () => {
       email: manager.email,
       phone: manager.phone,
       branch: manager.branch,
-      status: manager.status
+      status: manager.status,
+      password: ''
     });
     setShowModal(true);
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this manager?')) {
-      setManagers(managers.filter(manager => manager.id !== id));
+  const handleDelete = async (id: string) => {
+    const Swal = (await import('sweetalert2')).default;
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: 'Do you want to delete this manager?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Yes, delete it!'
+    });
+    if (result.isConfirmed) {
+      try {
+        const response = await fetch(`${VITE_BASE_URL}/manager/${id}`, {
+          method: 'DELETE'
+        });
+        if (!response.ok) throw new Error('Failed to delete manager');
+        setManagers(managers.filter(manager => manager.id !== id));
+        Swal.fire('Deleted!', 'Manager has been deleted.', 'success');
+      } catch (err) {
+        Swal.fire('Error', 'Could not delete manager.', 'error');
+      }
     }
   };
 
@@ -104,6 +168,17 @@ const ManagerManagement: React.FC = () => {
           <Plus className="h-4 w-4 mr-2" />
           Add Manager
         </button>
+      </div>
+
+      {/* Manager Search Filter */}
+      <div className="mb-4">
+        <input
+          type="text"
+          placeholder="Search manager by name, email, branch..."
+          value={managerSearch}
+          onChange={e => setManagerSearch(e.target.value)}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
       </div>
 
       {/* Managers Table */}
@@ -130,54 +205,63 @@ const ManagerManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {managers.map((manager) => (
-                <tr key={manager.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{manager.name}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900 flex items-center">
-                      <Mail className="h-4 w-4 mr-1" />
-                      {manager.email}
-                    </div>
-                    <div className="text-sm text-gray-500 flex items-center">
-                      <Phone className="h-4 w-4 mr-1" />
-                      {manager.phone}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900 flex items-center">
-                      <Building2 className="h-4 w-4 mr-1" />
-                      {manager.branch}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                      manager.status === 'Active' 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {manager.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => handleEdit(manager)}
-                        className="text-blue-600 hover:text-blue-900"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(manager.id)}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {managers
+                .filter(manager => {
+                  const q = managerSearch.toLowerCase();
+                  return (
+                    manager.name.toLowerCase().includes(q) ||
+                    manager.email.toLowerCase().includes(q) ||
+                    manager.branch.toLowerCase().includes(q)
+                  );
+                })
+                .map((manager) => (
+                  <tr key={manager.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{manager.name}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900 flex items-center">
+                        <Mail className="h-4 w-4 mr-1" />
+                        {manager.email}
+                      </div>
+                      <div className="text-sm text-gray-500 flex items-center">
+                        <Phone className="h-4 w-4 mr-1" />
+                        {manager.phone}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900 flex items-center">
+                        <Building2 className="h-4 w-4 mr-1" />
+                        {manager.branch}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        manager.status === 'Active' 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {manager.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => handleEdit(manager)}
+                          className="text-blue-600 hover:text-blue-900"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(manager.id)}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
             </tbody>
           </table>
         </div>
@@ -190,7 +274,9 @@ const ManagerManagement: React.FC = () => {
             <h3 className="text-lg font-medium text-gray-900 mb-4">
               {editingManager ? 'Edit Manager' : 'Add New Manager'}
             </h3>
-            
+            <div className="mb-2 text-xs text-gray-500">
+              <strong>Password must be at least 8 characters and include letters, numbers, and symbols.</strong>
+            </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -204,7 +290,6 @@ const ManagerManagement: React.FC = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Email
@@ -217,7 +302,6 @@ const ManagerManagement: React.FC = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Phone
@@ -230,7 +314,6 @@ const ManagerManagement: React.FC = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Branch
@@ -243,11 +326,10 @@ const ManagerManagement: React.FC = () => {
                 >
                   <option value="">Select Branch</option>
                   {branches.map((branch) => (
-                    <option key={branch} value={branch}>{branch}</option>
+                    <option key={branch.id} value={branch.name}>{branch.name}</option>
                   ))}
                 </select>
               </div>
-              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Status
@@ -261,14 +343,27 @@ const ManagerManagement: React.FC = () => {
                   <option value="Inactive">Inactive</option>
                 </select>
               </div>
-              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Password {editingManager ? <span className="text-xs text-gray-400">(leave blank to keep unchanged)</span> : null}
+                </label>
+                <input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required={!editingManager}
+                  minLength={8}
+                  autoComplete="new-password"
+                />
+              </div>
               <div className="flex space-x-3 pt-4">
                 <button
                   type="button"
                   onClick={() => {
                     setShowModal(false);
                     setEditingManager(null);
-                    setFormData({ name: '', email: '', phone: '', branch: '', status: 'Active' });
+                    setFormData({ name: '', email: '', phone: '', branch: '', status: 'Active', password: '' });
                   }}
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
                 >

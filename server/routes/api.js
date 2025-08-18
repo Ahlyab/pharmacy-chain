@@ -1,4 +1,5 @@
 import express from "express";
+const router = express.Router();
 import jwt from "jsonwebtoken";
 import Billing from "../models/Billing.js";
 import Inventory from "../models/Inventory.js";
@@ -6,8 +7,44 @@ import Transaction from "../models/Transaction.js";
 import POS from "../models/POS.js";
 import User from "../models/User.js";
 import mongoose from "mongoose"; // Added for health check
+import Manager from '../models/Manager.js';
+import { createBranch, getBranches, updateBranch, deleteBranch, updateManager, deleteManager } from '../controllers/branchController.js';
+// Branch Routes
+router.post('/branch', createBranch);
+router.get('/branch', getBranches);
+router.patch('/branch/:id', updateBranch);
+router.delete('/branch/:id', deleteBranch);
+// Manager Routes
+router.post('/manager', async (req, res) => {
+    try {
+        const { name, email, phone, branch, status } = req.body;
+        if (!name || !email || !phone || !branch) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+        const existing = await Manager.findOne({ email });
+        if (existing) {
+            return res.status(400).json({ error: 'Manager with this email already exists' });
+        }
+        const manager = new Manager({ name, email, phone, branch, status });
+        await manager.save();
+        res.status(201).json(manager);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 
-const router = express.Router();
+router.get('/manager', async (req, res) => {
+    try {
+        const managers = await Manager.find();
+        res.status(200).json(managers);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.patch('/manager/:id', updateManager);
+router.delete('/manager/:id', deleteManager);
+
 
 // Health check endpoint
 router.get("/health", async (req, res) => {
