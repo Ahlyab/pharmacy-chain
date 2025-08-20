@@ -1,5 +1,6 @@
 import GreenProgressBar from "../GreenProgressBar";
 import React, { useState, useEffect, useCallback } from "react";
+import { VITE_BASE_URL } from '../../data';
 import {
   Search,
   Plus,
@@ -9,7 +10,6 @@ import {
   CreditCard,
   DollarSign,
 } from "lucide-react";
-import { config } from "../../config/env";
 
 interface Product {
   _id: string;
@@ -54,14 +54,13 @@ const POS: React.FC = () => {
     return { ...product, status, id: product._id || product.id };
   };
 
-  const BASE_URL = VITE_IS_VERCEL ? VITE_BASE_URL_VERCEL : VITE_BASE_URL;
+  const BASE_URL = VITE_BASE_URL;
 
   // Fetch products from API (same as InventoryManagement)
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const BASE_URL = `${config.apiUrl}/api`;
       const res = await fetch(`${BASE_URL}/inventory`);
       if (!res.ok) throw new Error("Failed to fetch products");
       const data = await res.json();
@@ -159,7 +158,6 @@ const POS: React.FC = () => {
 
     try {
       // Send transaction to backend
-      const BASE_URL = `${config.apiUrl}/api`;
       const response = await fetch(`${BASE_URL}/transaction`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

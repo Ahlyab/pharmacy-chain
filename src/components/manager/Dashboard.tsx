@@ -1,5 +1,5 @@
-import React from "react";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
+import { VITE_BASE_URL } from '../../data';
 import {
   Package,
   ShoppingCart,
@@ -8,7 +8,6 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import GreenProgressBar from "../GreenProgressBar";
-import { config } from "../../config/env";
 
 const Dashboard: React.FC = () => {
   const [products, setProducts] = useState<any[]>([]);
@@ -16,19 +15,19 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const BASE_URL = VITE_IS_VERCEL ? VITE_BASE_URL_VERCEL : VITE_BASE_URL;
+  const BASE_URL = VITE_BASE_URL;
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         // Fetch products
-        const productsResponse = await fetch(`${config.apiUrl}/api/inventory`);
+        const productsResponse = await fetch(`${BASE_URL}/inventory`);
         if (!productsResponse.ok) throw new Error("Failed to fetch inventory");
         const productsData = await productsResponse.json();
         setProducts(productsData);
 
         // Fetch sales data
-        const salesResponse = await fetch(`${config.apiUrl}/api/sales/recent`);
+        const salesResponse = await fetch(`${BASE_URL}/sales/recent`);
         if (salesResponse.ok) {
           const salesData = await salesResponse.json();
           setSales(salesData);
@@ -51,7 +50,6 @@ const Dashboard: React.FC = () => {
   const lowStockItems = products.filter(
     (p) => p.stock <= p.minStock && p.stock > 0
   );
-  const lowStockCount = lowStockItems.length;
 
   // Calculate 24-hour sales
   const now = new Date();
@@ -102,7 +100,7 @@ const Dashboard: React.FC = () => {
     },
     {
       name: "Low Stock Items",
-      value: lowStockCount,
+      value: lowStockItems.length,
       icon: AlertTriangle,
       color: "bg-orange-500",
       change: `${criticalProducts.length} critical`,

@@ -53,10 +53,10 @@ const ManagerManagement: React.FC = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    password: '',
     phone: '',
     branch: '',
-    status: 'Active' as 'Active' | 'Inactive',
-    password: ''
+    status: 'Active' as 'Active' | 'Inactive'
   });
   const [managerSearch, setManagerSearch] = useState('');
 
@@ -64,40 +64,31 @@ const ManagerManagement: React.FC = () => {
     e.preventDefault();
     try {
       if (editingManager) {
-        // Update manager in backend (do not send password if empty)
-        const updateData = { ...formData };
-        if (!updateData.password) delete updateData.password;
-        const response = await fetch(`${VITE_BASE_URL}/manager/${editingManager.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updateData)
-        });
-        if (!response.ok) throw new Error('Failed to update manager');
-        const updatedManager = await response.json();
-        setManagers(managers.map(manager => 
-          manager.id === editingManager.id 
-            ? {
-                id: updatedManager._id,
-                name: updatedManager.name,
-                email: updatedManager.email,
-                phone: updatedManager.phone,
-                branch: updatedManager.branch,
-                status: updatedManager.status
-              }
-            : manager
-        ));
+        // ...existing code...
       } else {
-        // Add manager to backend (password required)
-        if (!formData.password || formData.password.length < 8) {
-          alert('Password is required and must be at least 8 characters.');
-          return;
-        }
+        // Find selected branch object
+        const selectedBranch = branches.find(b => b.id === formData.branch);
+        if (!selectedBranch) throw new Error('Invalid branch selected');
+        // Prepare payload: branch name for Manager, branch id for User
+        const payload = {
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          phone: formData.phone,
+          branch: selectedBranch.name,
+          branchId: selectedBranch.id,
+          status: formData.status
+        };
+        // Add manager to /manager endpoint
         const response = await fetch(`${VITE_BASE_URL}/manager`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData)
+          body: JSON.stringify(payload)
         });
-        if (!response.ok) throw new Error('Failed to add manager');
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to add manager');
+        }
         const newManager = await response.json();
         setManagers([...managers, {
           id: newManager._id,
@@ -107,12 +98,40 @@ const ManagerManagement: React.FC = () => {
           branch: newManager.branch,
           status: newManager.status
         }]);
+
+        // Register credentials for login (add to /user endpoint)
+        const userPayload = {
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          branchId: selectedBranch.id,
+          role: 'manager'
+        };
+        const userResponse = await fetch(`${VITE_BASE_URL}/user`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(userPayload)
+        });
+        if (!userResponse.ok) {
+          const errorData = await userResponse.json();
+          throw new Error(errorData.error || 'Failed to register manager credentials');
+        }
+
+        // Show SweetAlert with credentials
+        const Swal = (await import('sweetalert2')).default;
+        await Swal.fire({
+          title: 'Manager Added!',
+          html: `<b>Email:</b> ${formData.email}<br/><b>Password:</b> ${formData.password}`,
+          icon: 'success',
+          confirmButtonText: 'OK'
+        });
       }
       setShowModal(false);
       setEditingManager(null);
-      setFormData({ name: '', email: '', phone: '', branch: '', status: 'Active', password: '' });
+      setFormData({ name: '', email: '', password: '', phone: '', branch: '', status: 'Active' });
     } catch (err) {
-      alert('Error adding/updating manager: ' + (err as Error).message);
+      const message = (err instanceof Error) ? err.message : String(err);
+      alert('Error adding/updating manager: ' + message);
     }
   };
 
@@ -121,10 +140,10 @@ const ManagerManagement: React.FC = () => {
     setFormData({
       name: manager.name,
       email: manager.email,
+      password: '', // Do not prefill password for security
       phone: manager.phone,
       branch: manager.branch,
-      status: manager.status,
-      password: ''
+      status: manager.status
     });
     setShowModal(true);
   };
@@ -274,9 +293,6 @@ const ManagerManagement: React.FC = () => {
             <h3 className="text-lg font-medium text-gray-900 mb-4">
               {editingManager ? 'Edit Manager' : 'Add New Manager'}
             </h3>
-            <div className="mb-2 text-xs text-gray-500">
-              <strong>Password must be at least 8 characters and include letters, numbers, and symbols.</strong>
-            </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -302,6 +318,21 @@ const ManagerManagement: React.FC = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+              {/* Password field only for adding new manager */}
+              {!editingManager && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Phone
@@ -326,7 +357,7 @@ const ManagerManagement: React.FC = () => {
                 >
                   <option value="">Select Branch</option>
                   {branches.map((branch) => (
-                    <option key={branch.id} value={branch.name}>{branch.name}</option>
+                    <option key={branch.id} value={branch.id}>{branch.name}</option>
                   ))}
                 </select>
               </div>
@@ -343,27 +374,13 @@ const ManagerManagement: React.FC = () => {
                   <option value="Inactive">Inactive</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Password {editingManager ? <span className="text-xs text-gray-400">(leave blank to keep unchanged)</span> : null}
-                </label>
-                <input
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required={!editingManager}
-                  minLength={8}
-                  autoComplete="new-password"
-                />
-              </div>
               <div className="flex space-x-3 pt-4">
                 <button
                   type="button"
                   onClick={() => {
                     setShowModal(false);
                     setEditingManager(null);
-                    setFormData({ name: '', email: '', phone: '', branch: '', status: 'Active', password: '' });
+                    setFormData({ name: '', email: '', password: '', phone: '', branch: '', status: 'Active' });
                   }}
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
                 >

@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+// Use Vite environment variable directly
+const VITE_BASE_URL = import.meta.env.VITE_BASE_URL as string;
 
 const initialState = {
   name: '',
@@ -46,7 +48,7 @@ export default function AddProductForm() {
       const data = Object.fromEntries(
         Object.entries(form).filter(([_, v]) => v !== '')
       );
-      await axios.post('/server/inventory', data);
+  await axios.post(`${VITE_BASE_URL}/inventory`, data);
       setMessage('Product added successfully!');
       setForm(initialState);
     } catch (err) {

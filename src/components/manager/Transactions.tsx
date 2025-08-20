@@ -1,7 +1,8 @@
 import GreenProgressBar from '../GreenProgressBar';
 import React, { useState, useEffect } from 'react';
+import { VITE_BASE_URL } from '../../data';
 import { Search, Calendar, DollarSign, Receipt, TrendingUp } from 'lucide-react';
-import { VITE_BASE_URL, VITE_BASE_URL_VERCEL, VITE_IS_VERCEL } from '../../data';
+// ...existing code...
 
 interface Transaction {
   id: string;
@@ -30,8 +31,7 @@ const Transactions: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const BASE_URL = VITE_IS_VERCEL ? VITE_BASE_URL_VERCEL : VITE_BASE_URL;
-  const res = await fetch(`${BASE_URL}/transaction`);
+        const res = await fetch(`${VITE_BASE_URL}/transaction`);
         if (!res.ok) throw new Error('Failed to fetch transactions');
         const data = await res.json();
         setTransactions(data.transactions || data); // adjust if API returns differently

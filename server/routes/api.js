@@ -16,21 +16,32 @@ router.patch('/branch/:id', updateBranch);
 router.delete('/branch/:id', deleteBranch);
 // Manager Routes
 router.post('/manager', async (req, res) => {
-    try {
-        const { name, email, phone, branch, status } = req.body;
-        if (!name || !email || !phone || !branch) {
-            return res.status(400).json({ error: 'Missing required fields' });
-        }
-        const existing = await Manager.findOne({ email });
-        if (existing) {
-            return res.status(400).json({ error: 'Manager with this email already exists' });
-        }
-        const manager = new Manager({ name, email, phone, branch, status });
-        await manager.save();
-        res.status(201).json(manager);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+  try {
+    const { name, email, phone, branch, branchId, status, password } = req.body;
+    if (!name || !email || !phone || !branch || !branchId || !password) {
+      return res.status(400).json({ error: 'Missing required fields' });
     }
+    // Check if manager already exists
+    const existingManager = await Manager.findOne({ email });
+    if (existingManager) {
+      return res.status(400).json({ error: 'Manager with this email already exists' });
+    }
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ error: 'User with this email already exists' });
+    }
+    // Create manager document (branch is name)
+    const manager = new Manager({ name, email, phone, branch, status });
+    await manager.save();
+    // Create user document for login (branchId is id)
+    const user = new User({ name, email, password, role: 'Manager', branchId });
+    await user.save();
+    // Return manager info (do not return password)
+    res.status(201).json(manager);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 router.get('/manager', async (req, res) => {

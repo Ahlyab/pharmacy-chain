@@ -2,7 +2,8 @@ import GreenProgressBar from '../GreenProgressBar';
 import React, { useState, useEffect } from 'react';
 import jsPDF from 'jspdf';
 import { Search, FileText, Download, Eye } from 'lucide-react';
-import { VITE_BASE_URL, VITE_BASE_URL_VERCEL, VITE_IS_VERCEL } from '../../data';
+import { VITE_BASE_URL } from '../../data';
+// ...existing code...
 
 interface Bill {
   id: string;
@@ -34,8 +35,7 @@ const Billing: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const BASE_URL = VITE_IS_VERCEL ? VITE_BASE_URL_VERCEL : VITE_BASE_URL;
-        const res = await fetch(`${BASE_URL}/transaction`);
+        const res = await fetch(`${VITE_BASE_URL}/transaction`);
         if (!res.ok) throw new Error('Failed to fetch bills');
         const data = await res.json();
         // Map backend status to Bill status

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, DollarSign, Receipt, Search } from 'lucide-react';
-import { VITE_BASE_URL, VITE_BASE_URL_VERCEL, VITE_IS_VERCEL } from '../../data';
+// ...existing code...
 import GreenProgressBar from '../GreenProgressBar';
 
 interface Transaction {
@@ -57,7 +57,7 @@ const TransactionHistory: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const BASE_URL = VITE_IS_VERCEL ? VITE_BASE_URL_VERCEL : VITE_BASE_URL;
+  const BASE_URL = import.meta.env.VITE_IS_VERCEL ? import.meta.env.VITE_BASE_URL_VERCEL : import.meta.env.VITE_BASE_URL;
         const res = await fetch(`${BASE_URL}/transaction`);
         if (!res.ok) throw new Error('Failed to fetch transactions');
         const data = await res.json();

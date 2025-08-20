@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { VITE_BASE_URL, VITE_BASE_URL_VERCEL, VITE_IS_VERCEL } from '../../data';
+import { VITE_BASE_URL } from '../../data';
+// ...existing code...
 import { Package, AlertTriangle, TrendingUp, Search } from 'lucide-react';
 
 interface InventoryItem {
@@ -27,8 +28,7 @@ const InventoryOverview: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const BASE_URL = VITE_IS_VERCEL ? VITE_BASE_URL_VERCEL : VITE_BASE_URL;
-        const response = await fetch(`${BASE_URL}/inventory`);
+        const response = await fetch(`${VITE_BASE_URL}/inventory`);
         if (!response.ok) throw new Error('Failed to fetch inventory');
         const data = await response.json();
         // Ensure each item has a status property
