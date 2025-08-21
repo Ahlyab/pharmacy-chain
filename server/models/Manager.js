@@ -1,11 +1,18 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
-const managerSchema = new mongoose.Schema({
-	name: { type: String, required: true },
-	email: { type: String, required: true, unique: true },
-	phone: { type: String, required: true },
-	branch: { type: String, required: true },
-	status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' }
-}, { timestamps: true });
+const managerSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true },
+    email: { type: String, required: true, unique: true },
+    phone: { type: String, required: true },
+    branch: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Branch",
+      required: true,
+    },
+    status: { type: String, enum: ["Active", "Inactive"], default: "Active" },
+  },
+  { timestamps: true }
+);
 
-export default mongoose.model('Manager', managerSchema);
+export default mongoose.model("Manager", managerSchema);

@@ -7,55 +7,75 @@ import Transaction from "../models/Transaction.js";
 import POS from "../models/POS.js";
 import User from "../models/User.js";
 import mongoose from "mongoose"; // Added for health check
-import Manager from '../models/Manager.js';
-import { createBranch, getBranches, updateBranch, deleteBranch, updateManager, deleteManager } from '../controllers/branchController.js';
+import Manager from "../models/Manager.js";
+import {
+  createBranch,
+  getBranches,
+  updateBranch,
+  deleteBranch,
+  updateManager,
+  deleteManager,
+} from "../controllers/branchController.js";
 // Branch Routes
-router.post('/branch', createBranch);
-router.get('/branch', getBranches);
-router.patch('/branch/:id', updateBranch);
-router.delete('/branch/:id', deleteBranch);
+router.post("/branch", createBranch);
+router.get("/branch", getBranches);
+router.patch("/branch/:id", updateBranch);
+router.delete("/branch/:id", deleteBranch);
 // Manager Routes
-router.post('/manager', async (req, res) => {
+router.post("/manager", async (req, res) => {
   try {
-    const { name, email, phone, branch, branchId, status, password } = req.body;
-    if (!name || !email || !phone || !branch || !branchId || !password) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    const { name, email, phone, branchId, status, password } = req.body;
+    if (!name || !email || !phone || !branchId || !password) {
+      return res.status(400).json({ error: "Missing required fields" });
     }
     // Check if manager already exists
     const existingManager = await Manager.findOne({ email });
     if (existingManager) {
-      return res.status(400).json({ error: 'Manager with this email already exists' });
+      return res
+        .status(400)
+        .json({ error: "Manager with this email already exists" });
     }
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ error: 'User with this email already exists' });
+      return res
+        .status(400)
+        .json({ error: "User with this email already exists" });
     }
-    // Create manager document (branch is name)
-    const manager = new Manager({ name, email, phone, branch, status });
+    // Create manager document (store branch as ObjectId)
+    const manager = new Manager({
+      name,
+      email,
+      phone,
+      branch: branchId,
+      status,
+    });
     await manager.save();
     // Create user document for login (branchId is id)
-    const user = new User({ name, email, password, role: 'Manager', branchId });
+    const user = new User({ name, email, password, role: "manager", branchId });
     await user.save();
-    // Return manager info (do not return password)
-    res.status(201).json(manager);
+    // Return manager info (populate branch name for convenience)
+    const populated = await Manager.findById(manager._id).populate(
+      "branch",
+      "name"
+    );
+    res.status(201).json(populated);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-router.get('/manager', async (req, res) => {
-    try {
-        const managers = await Manager.find();
-        res.status(200).json(managers);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+router.get("/manager", async (req, res) => {
+  try {
+    const managers = await Manager.find().populate("branch", "name");
+    res.status(200).json(managers);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-router.patch('/manager/:id', updateManager);
-router.delete('/manager/:id', deleteManager);
-
+router.patch("/manager/:id", updateManager);
+router.delete("/manager/:id", deleteManager);
 
 // Health check endpoint
 router.get("/health", async (req, res) => {
@@ -213,6 +233,9 @@ router.post("/inventory", async (req, res) => {
       price: Number(req.body.price),
       supplier: req.body.supplier,
       expiryDate: new Date(req.body.expiryDate),
+      branchId: req.body.branchId
+        ? new mongoose.Types.ObjectId(req.body.branchId)
+        : undefined,
     };
 
     // Validate numbers
@@ -249,6 +272,9 @@ router.patch("/inventory/:id", async (req, res) => {
     if (updateData.expiryDate) {
       updateData.expiryDate = new Date(updateData.expiryDate);
     }
+    if (updateData.branchId) {
+      updateData.branchId = new mongoose.Types.ObjectId(updateData.branchId);
+    }
     const updated = await Inventory.findByIdAndUpdate(id, updateData, {
       new: true,
     });
@@ -277,9 +303,49 @@ router.delete("/inventory/:id", async (req, res) => {
 
 router.get("/inventory", async (req, res) => {
   try {
-    const inventories = await Inventory.find();
+    const inventories = await Inventory.find().populate("branchId", "name");
     res.status(200).json(inventories);
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Import inventory from Excel
+router.post("/inventory/import", async (req, res) => {
+  try {
+    const { branchId } = req.body;
+    const products = req.body;
+
+    if (!Array.isArray(products)) {
+      return res.status(400).json({ error: "Products must be an array" });
+    }
+
+    const inventoryData = products.map((product) => ({
+      name: product.name || product.Product || "",
+      category: product.category || product.Composition || "",
+      stock: Number(product.stock || product.Quantity || 0),
+      minStock: Number(product.minStock || 0),
+      price: Number(product.price || product["Retail price VAT included"] || 0),
+      supplier: product.supplier || product["Supplier name"] || "",
+      expiryDate: product.expiryDate
+        ? new Date(product.expiryDate)
+        : new Date(),
+      branchId: branchId ? new mongoose.Types.ObjectId(branchId) : undefined,
+      // Map other fields from Excel if available
+      store: product.store || product.Store,
+      supplierId: product.supplierId || product.Supplier,
+      manufacturer: product.manufacturer || product.Manufacturer,
+      composition: product.composition || product.Composition,
+      sku: product.sku || product.SKU,
+    }));
+
+    const result = await Inventory.insertMany(inventoryData);
+    res.status(201).json({
+      message: `Imported ${result.length} products`,
+      products: result,
+    });
+  } catch (error) {
+    console.error("Error in inventory import:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -287,7 +353,27 @@ router.get("/inventory", async (req, res) => {
 // Transaction Routes
 router.post("/transaction", async (req, res) => {
   try {
-    const transaction = new Transaction(req.body);
+    const { branchId, paymentMethod, ...transactionData } = req.body;
+
+    // Validate payment method
+    if (!["cash", "card", "transfer"].includes(paymentMethod)) {
+      return res.status(400).json({
+        error: "Invalid payment method. Must be cash, card, or transfer",
+      });
+    }
+
+    // Validate branchId
+    if (!branchId) {
+      return res.status(400).json({ error: "branchId is required" });
+    }
+
+    // Convert branchId to ObjectId
+    const transaction = new Transaction({
+      ...transactionData,
+      paymentMethod,
+      branchId: new mongoose.Types.ObjectId(branchId),
+    });
+
     await transaction.save();
     res.status(201).json(transaction);
   } catch (error) {
@@ -297,8 +383,10 @@ router.post("/transaction", async (req, res) => {
 
 router.get("/transaction", async (req, res) => {
   try {
-    // Populate productId to get product name if needed
-    const transactions = await Transaction.find().populate("items.productId");
+    // Populate productId and branchId to get product name and branch name
+    const transactions = await Transaction.find()
+      .populate("items.productId")
+      .populate("branchId", "name");
     // Map backend fields to frontend expected fields
     const mapped = transactions.map((t) => ({
       id: t.transactionId,
@@ -312,6 +400,7 @@ router.get("/transaction", async (req, res) => {
       total: t.totalAmount,
       paymentMethod: t.paymentMethod || "N/A",
       status: t.status || "Completed",
+      branchName: t.branchId?.name || "N/A",
     }));
     res.status(200).json(mapped);
   } catch (error) {
@@ -565,7 +654,7 @@ router.get("/pos", async (req, res) => {
                 "productId": "689864c0fd782f5852a48fef",
                 "quantity": 1,
                 "price": 6,
-                "_id": "6898eaca7bec02d1b3fc58c3"
+                "productId": "6898eaca7bec02d1b3fc58c3"
             }
         ],
         "totalAmount": 7,
@@ -578,20 +667,111 @@ router.get("/pos", async (req, res) => {
  */
 router.get("/sales/recent", async (req, res) => {
   try {
-    // populate productId to get product name
+    // populate productId and branchId to get product name and branch name
     const recentSales = await Transaction.find()
       .sort({ date: -1 })
       .limit(10)
-      .populate("items.productId");
+      .populate("items.productId")
+      .populate("branchId", "name");
     // map backend fields to frontend expected fields
     const mapped = recentSales.map((s) => ({
       id: s.transactionId,
       date: s.date,
       customer: s.customerName || "",
+      branchName: s.branchId?.name || "N/A",
     }));
     res.status(200).json(recentSales);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
+
+// User Routes
+router.post("/user", async (req, res) => {
+  try {
+    const { name, email, password, role, branchId } = req.body;
+    if (!name || !email || !password || !role) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res
+        .status(400)
+        .json({ error: "User with this email already exists" });
+    }
+
+    const user = new User({ name, email, password, role, branchId });
+    await user.save();
+
+    // Return user info without password
+    const { password: _, ...userInfo } = user.toObject();
+    res.status(201).json(userInfo);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/user", async (req, res) => {
+  try {
+    const users = await User.find({}, { password: 0 }); // Exclude password field
+    res.status(200).json(users);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/user/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findById(id, { password: 0 }); // Exclude password field
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    res.status(200).json(user);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.patch("/user/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { password, ...updateData } = req.body;
+
+    const updateFields = { ...updateData };
+
+    // If password is provided, hash it before updating
+    if (password) {
+      const bcrypt = await import("bcrypt");
+      updateFields.password = await bcrypt.hash(password, 10);
+    }
+
+    const user = await User.findByIdAndUpdate(id, updateFields, { new: true });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Return user info without password
+    const { password: _, ...userInfo } = user.toObject();
+    res.status(200).json(userInfo);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete("/user/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findByIdAndDelete(id);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    res.status(200).json({ message: "User deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

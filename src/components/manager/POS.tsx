@@ -1,6 +1,7 @@
 import GreenProgressBar from "../GreenProgressBar";
 import React, { useState, useEffect, useCallback } from "react";
-import { VITE_BASE_URL } from '../../data';
+import { VITE_BASE_URL } from "../../data";
+import { useAuth } from "../../contexts/AuthContext";
 import {
   Search,
   Plus,
@@ -9,6 +10,7 @@ import {
   Trash2,
   CreditCard,
   DollarSign,
+  Banknote,
 } from "lucide-react";
 
 interface Product {
@@ -28,6 +30,7 @@ interface CartItem extends Product {
 }
 
 const POS: React.FC = () => {
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [paymentMethod, setPaymentMethod] = useState("cash");
@@ -56,7 +59,7 @@ const POS: React.FC = () => {
 
   const BASE_URL = VITE_BASE_URL;
 
-  // Fetch products from API (same as InventoryManagement)
+  // Fetch products from API (filtered by manager's branch)
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -64,14 +67,26 @@ const POS: React.FC = () => {
       const res = await fetch(`${BASE_URL}/inventory`);
       if (!res.ok) throw new Error("Failed to fetch products");
       const data = await res.json();
-      const productsWithStatus = data.map(addStatus);
+
+      // Filter products by manager's branch if available
+      let filteredData = data;
+      if (user?.branchId) {
+        filteredData = data.filter(
+          (product: any) =>
+            product.branchId === user.branchId ||
+            (typeof product.branchId === "object" &&
+              product.branchId?._id === user.branchId)
+        );
+      }
+
+      const productsWithStatus = filteredData.map(addStatus);
       setProducts(productsWithStatus);
     } catch (err: any) {
       setError(err.message || "Error fetching products");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user?.branchId]);
 
   useEffect(() => {
     fetchProducts();
@@ -134,6 +149,11 @@ const POS: React.FC = () => {
       return;
     }
 
+    if (!user?.branchId) {
+      alert("Branch information not available. Please contact administrator.");
+      return;
+    }
+
     // Branch and company info (replace with real data as needed)
     const COMPANY_NAME = "Ahlyab Pharmacy Chain";
     const BRANCH_ADDRESS = "123 Main Street, City, Country";
@@ -153,6 +173,7 @@ const POS: React.FC = () => {
       customerName: customerName.trim() ? customerName : undefined,
       cashierName: cashierName.trim() ? cashierName : undefined,
       paymentMethod: paymentMethod,
+      branchId: user?.branchId,
       date: new Date(),
     };
 
@@ -219,6 +240,14 @@ const POS: React.FC = () => {
         <div className="lg:col-span-2 space-y-4">
           <div className="bg-white rounded-lg shadow p-6">
             <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-lg font-medium text-gray-900">Products</h3>
+                {user?.branchId && (
+                  <span className="text-sm text-gray-500">
+                    Showing products from your branch
+                  </span>
+                )}
+              </div>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <input
@@ -427,6 +456,17 @@ const POS: React.FC = () => {
                     <CreditCard className="h-4 w-4 mr-1" />
                     Card
                   </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      value="transfer"
+                      checked={paymentMethod === "transfer"}
+                      onChange={(e) => setPaymentMethod(e.target.value)}
+                      className="mr-2"
+                    />
+                    <Banknote className="h-4 w-4 mr-1" />
+                    Transfer
+                  </label>
                 </div>
               </div>
 
@@ -460,6 +500,9 @@ const POS: React.FC = () => {
             </div>
             <div className="text-center text-xs text-gray-500 mb-4">
               Manager: {lastTransaction.managerContact}
+            </div>
+            <div className="text-center text-xs text-gray-500 mb-2">
+              Branch: {user?.branchId || "N/A"}
             </div>
             <div className="mb-2 text-xs text-gray-500">
               Date: {lastTransaction.date}

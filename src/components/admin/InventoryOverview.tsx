@@ -1,23 +1,28 @@
-import React, { useState, useEffect } from 'react';
-import { VITE_BASE_URL } from '../../data';
+import React, { useState, useEffect } from "react";
+import { VITE_BASE_URL } from "../../data";
 // ...existing code...
-import { Package, AlertTriangle, TrendingUp, Search } from 'lucide-react';
+import { Package, AlertTriangle, TrendingUp, Search } from "lucide-react";
+
+interface Branch {
+  id: string;
+  name: string;
+}
 
 interface InventoryItem {
   id: string;
   name: string;
   category: string;
-  branch: string;
+  branch: Branch;
   stock: number;
   minStock: number;
   price: number;
-  status: 'In Stock' | 'Low Stock' | 'Out of Stock';
+  status: "In Stock" | "Low Stock" | "Out of Stock";
 }
 
 const InventoryOverview: React.FC = () => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedBranch, setSelectedBranch] = useState('All');
-  const [selectedStatus, setSelectedStatus] = useState('All');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedBranch, setSelectedBranch] = useState("All");
+  const [selectedStatus, setSelectedStatus] = useState("All");
 
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,21 +34,24 @@ const InventoryOverview: React.FC = () => {
       setError(null);
       try {
         const response = await fetch(`${VITE_BASE_URL}/inventory`);
-        if (!response.ok) throw new Error('Failed to fetch inventory');
+        if (!response.ok) throw new Error("Failed to fetch inventory");
         const data = await response.json();
         // Ensure each item has a status property
-        const inventoryWithStatus = (data.inventory || data).map((item: any) => ({
-          ...item,
-          status:
-            item.stock === 0
-              ? 'Out of Stock'
-              : item.stock <= item.minStock
-              ? 'Low Stock'
-              : 'In Stock',
-        }));
+        const inventoryWithStatus = (data.inventory || data).map(
+          (item: any) => ({
+            ...item,
+            branch: item.branchId,
+            status:
+              item.stock === 0
+                ? "Out of Stock"
+                : item.stock <= item.minStock
+                ? "Low Stock"
+                : "In Stock",
+          })
+        );
         setInventory(inventoryWithStatus);
       } catch (err: any) {
-        setError(err.message || 'Error fetching inventory');
+        setError(err.message || "Error fetching inventory");
       } finally {
         setLoading(false);
       }
@@ -52,50 +60,60 @@ const InventoryOverview: React.FC = () => {
   }, []);
 
   // Dynamically get branches from inventory
-  const branches = ['All', ...Array.from(new Set(inventory.map(item => item.branch)))];
-  const statuses = ['All', 'In Stock', 'Low Stock', 'Out of Stock'];
+  const branches = [
+    "All",
+    ...Array.from(new Set(inventory.map((item) => item.branch))),
+  ];
+  const statuses = ["All", "In Stock", "Low Stock", "Out of Stock"];
 
-  const filteredInventory = inventory.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         item.category.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesBranch = selectedBranch === 'All' || item.branch === selectedBranch;
-    const matchesStatus = selectedStatus === 'All' || item.status === selectedStatus;
-    
+  const filteredInventory = inventory.filter((item) => {
+    const matchesSearch =
+      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.category.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesBranch =
+      selectedBranch === "All" || item.branch.name === selectedBranch;
+    const matchesStatus =
+      selectedStatus === "All" || item.status === selectedStatus;
+
     return matchesSearch && matchesBranch && matchesStatus;
   });
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'In Stock':
-        return 'bg-green-100 text-green-800';
-      case 'Low Stock':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'Out of Stock':
-        return 'bg-red-100 text-red-800';
+      case "In Stock":
+        return "bg-green-100 text-green-800";
+      case "Low Stock":
+        return "bg-yellow-100 text-yellow-800";
+      case "Out of Stock":
+        return "bg-red-100 text-red-800";
       default:
-        return 'bg-gray-100 text-gray-800';
+        return "bg-gray-100 text-gray-800";
     }
   };
 
   const stats = [
     {
-      name: 'Total Products',
+      name: "Total Products",
       value: inventory.length.toString(),
       icon: Package,
-      color: 'bg-blue-500'
+      color: "bg-blue-500",
     },
     {
-      name: 'Low Stock Items',
-      value: inventory.filter(item => item.status === 'Low Stock').length.toString(),
+      name: "Low Stock Items",
+      value: inventory
+        .filter((item) => item.status === "Low Stock")
+        .length.toString(),
       icon: AlertTriangle,
-      color: 'bg-yellow-500'
+      color: "bg-yellow-500",
     },
     {
-      name: 'Out of Stock',
-      value: inventory.filter(item => item.status === 'Out of Stock').length.toString(),
+      name: "Out of Stock",
+      value: inventory
+        .filter((item) => item.status === "Out of Stock")
+        .length.toString(),
       icon: TrendingUp,
-      color: 'bg-red-500'
-    }
+      color: "bg-red-500",
+    },
   ];
 
   return (
@@ -116,8 +134,12 @@ const InventoryOverview: React.FC = () => {
                   <Icon className="h-6 w-6 text-white" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">{stat.name}</p>
-                  <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                  <p className="text-sm font-medium text-gray-600">
+                    {stat.name}
+                  </p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {stat.value}
+                  </p>
                 </div>
               </div>
             </div>
@@ -138,24 +160,31 @@ const InventoryOverview: React.FC = () => {
               className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          
+
           <select
             value={selectedBranch}
             onChange={(e) => setSelectedBranch(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            {branches.map(branch => (
-              <option key={branch} value={branch}>{branch}</option>
+            {branches.map((branch) => (
+              <option
+                key={typeof branch === "string" ? branch : branch.id}
+                value={typeof branch === "string" ? branch : branch.name}
+              >
+                {typeof branch === "string" ? branch : branch.name}
+              </option>
             ))}
           </select>
-          
+
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            {statuses.map(status => (
-              <option key={status} value={status}>{status}</option>
+            {statuses.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
             ))}
           </select>
         </div>
@@ -165,7 +194,9 @@ const InventoryOverview: React.FC = () => {
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto">
           {loading ? (
-            <div className="p-6 text-center text-gray-500">Loading inventory...</div>
+            <div className="p-6 text-center text-gray-500">
+              Loading inventory...
+            </div>
           ) : error ? (
             <div className="p-6 text-center text-red-500">{error}</div>
           ) : (
@@ -194,22 +225,34 @@ const InventoryOverview: React.FC = () => {
                   <tr key={item.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{item.name}</div>
-                        <div className="text-sm text-gray-500">{item.category}</div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {item.name}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {item.category}
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {item.branch}
+                      {item.branch.name}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{item.stock} units</div>
-                      <div className="text-sm text-gray-500">Min: {item.minStock}</div>
+                      <div className="text-sm text-gray-900">
+                        {item.stock} units
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        Min: {item.minStock}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       ${item.price}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(item.status)}`}>
+                      <span
+                        className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(
+                          item.status
+                        )}`}
+                      >
                         {item.status}
                       </span>
                     </td>
