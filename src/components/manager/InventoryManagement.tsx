@@ -67,7 +67,11 @@ const InventoryManagement: React.FC = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await fetch(`${BASE_URL}/inventory`);
+        const url = user?.branchId
+          ? `${BASE_URL}/inventory?branchId=${user.branchId}`
+          : `${BASE_URL}/inventory`;
+
+        const response = await fetch(url);
         if (!response.ok) throw new Error("Failed to fetch products");
         const data = await response.json();
         setProducts(data.map(addStatus));
@@ -76,7 +80,7 @@ const InventoryManagement: React.FC = () => {
       }
     };
     fetchProducts();
-  }, [BASE_URL]);
+  }, [BASE_URL, user?.branchId]);
 
   // Import handler for Excel/PDF
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {

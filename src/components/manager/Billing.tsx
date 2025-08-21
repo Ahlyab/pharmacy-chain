@@ -1,8 +1,9 @@
-import GreenProgressBar from '../GreenProgressBar';
-import React, { useState, useEffect } from 'react';
-import jsPDF from 'jspdf';
-import { Search, FileText, Download, Eye } from 'lucide-react';
-import { VITE_BASE_URL } from '../../data';
+import GreenProgressBar from "../GreenProgressBar";
+import React, { useState, useEffect } from "react";
+import jsPDF from "jspdf";
+import { Search, FileText, Download, Eye } from "lucide-react";
+import { VITE_BASE_URL } from "../../data";
+import { useAuth } from "../../contexts/AuthContext";
 // ...existing code...
 
 interface Bill {
@@ -16,27 +17,35 @@ interface Bill {
   }>;
   total: number;
   paymentMethod: string;
-  status: 'Paid' | 'Pending' | 'Refunded';
+  status: "Paid" | "Pending" | "Refunded";
 }
 
 const Billing: React.FC = () => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('All');
-  const [dateRange, setDateRange] = useState('7');
+  const { user } = useAuth();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState("All");
+  const [dateRange, setDateRange] = useState("7");
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [billToView, setBillToView] = useState<Bill | null>(null); // for view/print
   const [billToDownload, setBillToDownload] = useState<Bill | null>(null); // for download
-  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  const [sortConfig, setSortConfig] = useState<{
+    key: string;
+    direction: "asc" | "desc";
+  } | null>(null);
 
   useEffect(() => {
     const fetchBills = async () => {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${VITE_BASE_URL}/transaction`);
-        if (!res.ok) throw new Error('Failed to fetch bills');
+        const url = user?.branchId
+          ? `${VITE_BASE_URL}/transaction?branchId=${user.branchId}`
+          : `${VITE_BASE_URL}/transaction`;
+
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("Failed to fetch bills");
         const data = await res.json();
         // Map backend status to Bill status
         const mapped = (data.transactions || data).map((t: any) => ({
@@ -46,64 +55,72 @@ const Billing: React.FC = () => {
           items: t.items,
           total: t.total,
           paymentMethod: t.paymentMethod,
-          status: t.status === 'Completed' ? 'Paid' : (t.status || 'Pending'),
+          status: t.status === "Completed" ? "Paid" : t.status || "Pending",
         }));
         setBills(mapped);
       } catch (err: any) {
-        setError(err.message || 'Error fetching bills');
+        setError(err.message || "Error fetching bills");
       } finally {
         setLoading(false);
       }
     };
     fetchBills();
-  }, []);
+  }, [user?.branchId]);
 
-  const statuses = ['All', 'Paid', 'Pending', 'Refunded'];
+  const statuses = ["All", "Paid", "Pending", "Refunded"];
 
   // Filter by search, status, and date range
   const now = new Date();
-  const filteredBills = bills
-    .filter(bill => {
-      if (!bill || !bill.id || !bill.customer) return false;
-      const matchesSearch = bill.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        bill.customer.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus = selectedStatus === 'All' || bill.status === selectedStatus;
-      // Date filter
-      const txnDate = new Date(bill.date);
-      let matchesDate = true;
-      if (dateRange === 'today') {
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        matchesDate = txnDate >= today && txnDate < new Date(today.getTime() + 24 * 60 * 60 * 1000);
-      } else {
-        const days = parseInt(dateRange, 10);
-        const dateLimit = new Date(now);
-        dateLimit.setDate(now.getDate() - days);
-        matchesDate = txnDate >= dateLimit;
-      }
-      return matchesSearch && matchesStatus && matchesDate;
-    });
+  const filteredBills = bills.filter((bill) => {
+    if (!bill || !bill.id || !bill.customer) return false;
+    const matchesSearch =
+      bill.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      bill.customer.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus =
+      selectedStatus === "All" || bill.status === selectedStatus;
+    // Date filter
+    const txnDate = new Date(bill.date);
+    let matchesDate = true;
+    if (dateRange === "today") {
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      matchesDate =
+        txnDate >= today &&
+        txnDate < new Date(today.getTime() + 24 * 60 * 60 * 1000);
+    } else {
+      const days = parseInt(dateRange, 10);
+      const dateLimit = new Date(now);
+      dateLimit.setDate(now.getDate() - days);
+      matchesDate = txnDate >= dateLimit;
+    }
+    return matchesSearch && matchesStatus && matchesDate;
+  });
 
   // Sorting
   const sortedBills = React.useMemo(() => {
-    if (!sortConfig) return filteredBills.slice().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    if (!sortConfig)
+      return filteredBills
+        .slice()
+        .sort(
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+        );
     const sorted = [...filteredBills];
     sorted.sort((a, b) => {
       let aValue: any = a[sortConfig.key as keyof Bill];
       let bValue: any = b[sortConfig.key as keyof Bill];
-      if (sortConfig.key === 'items') {
+      if (sortConfig.key === "items") {
         aValue = a.items.length;
         bValue = b.items.length;
       }
-      if (sortConfig.key === 'date') {
+      if (sortConfig.key === "date") {
         aValue = new Date(a.date).getTime();
         bValue = new Date(b.date).getTime();
       }
-      if (typeof aValue === 'string' && typeof bValue === 'string') {
+      if (typeof aValue === "string" && typeof bValue === "string") {
         aValue = aValue.toLowerCase();
         bValue = bValue.toLowerCase();
       }
-      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+      if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
       return 0;
     });
     return sorted;
@@ -111,31 +128,31 @@ const Billing: React.FC = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'Paid':
-        return 'bg-green-100 text-green-800';
-      case 'Pending':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'Refunded':
-        return 'bg-red-100 text-red-800';
+      case "Paid":
+        return "bg-green-100 text-green-800";
+      case "Pending":
+        return "bg-yellow-100 text-yellow-800";
+      case "Refunded":
+        return "bg-red-100 text-red-800";
       default:
-        return 'bg-gray-100 text-gray-800';
+        return "bg-gray-100 text-gray-800";
     }
   };
 
   // Payment method badge color
   const getPaymentColor = (method: string) => {
     switch (method.toLowerCase()) {
-      case 'cash':
-        return 'bg-blue-100 text-blue-800';
-      case 'card':
-      case 'credit card':
-        return 'bg-purple-100 text-purple-800';
-      case 'upi':
-        return 'bg-green-100 text-green-800';
-      case 'wallet':
-        return 'bg-yellow-100 text-yellow-800';
+      case "cash":
+        return "bg-blue-100 text-blue-800";
+      case "card":
+      case "credit card":
+        return "bg-purple-100 text-purple-800";
+      case "upi":
+        return "bg-green-100 text-green-800";
+      case "wallet":
+        return "bg-yellow-100 text-yellow-800";
       default:
-        return 'bg-gray-100 text-gray-800';
+        return "bg-gray-100 text-gray-800";
     }
   };
 
@@ -159,15 +176,15 @@ const Billing: React.FC = () => {
 
     let y = 55;
     doc.setFontSize(12);
-    doc.text('Items:', 10, y);
+    doc.text("Items:", 10, y);
     y += 7;
     doc.setFontSize(10);
-    doc.text('Product', 10, y);
-    doc.text('Price', 70, y);
-    doc.text('Qty', 110, y);
-    doc.text('Total', 140, y);
+    doc.text("Product", 10, y);
+    doc.text("Price", 70, y);
+    doc.text("Qty", 110, y);
+    doc.text("Total", 140, y);
     y += 5;
-    bill.items.forEach(item => {
+    bill.items.forEach((item) => {
       doc.text(item.name, 10, y);
       doc.text(`$${item.price.toFixed(2)}`, 70, y);
       doc.text(`${item.quantity}`, 110, y);
@@ -181,7 +198,7 @@ const Billing: React.FC = () => {
   };
 
   const totalRevenue = filteredBills
-    .filter(bill => bill.status === 'Paid')
+    .filter((bill) => bill.status === "Paid")
     .reduce((sum, bill) => sum + bill.total, 0);
 
   return (
@@ -200,7 +217,9 @@ const Billing: React.FC = () => {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Total Bills</p>
-              <p className="text-2xl font-bold text-gray-900">{sortedBills.length}</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {sortedBills.length}
+              </p>
             </div>
           </div>
         </div>
@@ -213,7 +232,7 @@ const Billing: React.FC = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Paid Bills</p>
               <p className="text-2xl font-bold text-gray-900">
-                {sortedBills.filter(b => b.status === 'Paid').length}
+                {sortedBills.filter((b) => b.status === "Paid").length}
               </p>
             </div>
           </div>
@@ -227,7 +246,7 @@ const Billing: React.FC = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Pending Bills</p>
               <p className="text-2xl font-bold text-gray-900">
-                {sortedBills.filter(b => b.status === 'Pending').length}
+                {sortedBills.filter((b) => b.status === "Pending").length}
               </p>
             </div>
           </div>
@@ -240,7 +259,9 @@ const Billing: React.FC = () => {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Total Revenue</p>
-              <p className="text-2xl font-bold text-gray-900">${totalRevenue.toFixed(2)}</p>
+              <p className="text-2xl font-bold text-gray-900">
+                ${totalRevenue.toFixed(2)}
+              </p>
             </div>
           </div>
         </div>
@@ -259,17 +280,19 @@ const Billing: React.FC = () => {
               className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          
+
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            {statuses.map(status => (
-              <option key={status} value={status}>{status}</option>
+            {statuses.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
             ))}
           </select>
-          
+
           <select
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value)}
@@ -296,33 +319,118 @@ const Billing: React.FC = () => {
                   <tr>
                     <th
                       className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none"
-                      onClick={() => setSortConfig(sortConfig?.key === 'id' ? { key: 'id', direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' } : { key: 'id', direction: 'asc' })}
+                      onClick={() =>
+                        setSortConfig(
+                          sortConfig?.key === "id"
+                            ? {
+                                key: "id",
+                                direction:
+                                  sortConfig.direction === "asc"
+                                    ? "desc"
+                                    : "asc",
+                              }
+                            : { key: "id", direction: "asc" }
+                        )
+                      }
                     >
-                      Bill ID {sortConfig?.key === 'id' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
+                      Bill ID{" "}
+                      {sortConfig?.key === "id"
+                        ? sortConfig.direction === "asc"
+                          ? "▲"
+                          : "▼"
+                        : ""}
                     </th>
                     <th
                       className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none"
-                      onClick={() => setSortConfig(sortConfig?.key === 'date' ? { key: 'date', direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' } : { key: 'date', direction: 'asc' })}
+                      onClick={() =>
+                        setSortConfig(
+                          sortConfig?.key === "date"
+                            ? {
+                                key: "date",
+                                direction:
+                                  sortConfig.direction === "asc"
+                                    ? "desc"
+                                    : "asc",
+                              }
+                            : { key: "date", direction: "asc" }
+                        )
+                      }
                     >
-                      Date & Time {sortConfig?.key === 'date' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
+                      Date & Time{" "}
+                      {sortConfig?.key === "date"
+                        ? sortConfig.direction === "asc"
+                          ? "▲"
+                          : "▼"
+                        : ""}
                     </th>
                     <th
                       className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none"
-                      onClick={() => setSortConfig(sortConfig?.key === 'customer' ? { key: 'customer', direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' } : { key: 'customer', direction: 'asc' })}
+                      onClick={() =>
+                        setSortConfig(
+                          sortConfig?.key === "customer"
+                            ? {
+                                key: "customer",
+                                direction:
+                                  sortConfig.direction === "asc"
+                                    ? "desc"
+                                    : "asc",
+                              }
+                            : { key: "customer", direction: "asc" }
+                        )
+                      }
                     >
-                      Customer {sortConfig?.key === 'customer' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
+                      Customer{" "}
+                      {sortConfig?.key === "customer"
+                        ? sortConfig.direction === "asc"
+                          ? "▲"
+                          : "▼"
+                        : ""}
                     </th>
                     <th
                       className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none"
-                      onClick={() => setSortConfig(sortConfig?.key === 'items' ? { key: 'items', direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' } : { key: 'items', direction: 'asc' })}
+                      onClick={() =>
+                        setSortConfig(
+                          sortConfig?.key === "items"
+                            ? {
+                                key: "items",
+                                direction:
+                                  sortConfig.direction === "asc"
+                                    ? "desc"
+                                    : "asc",
+                              }
+                            : { key: "items", direction: "asc" }
+                        )
+                      }
                     >
-                      Items {sortConfig?.key === 'items' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
+                      Items{" "}
+                      {sortConfig?.key === "items"
+                        ? sortConfig.direction === "asc"
+                          ? "▲"
+                          : "▼"
+                        : ""}
                     </th>
                     <th
                       className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none"
-                      onClick={() => setSortConfig(sortConfig?.key === 'total' ? { key: 'total', direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' } : { key: 'total', direction: 'asc' })}
+                      onClick={() =>
+                        setSortConfig(
+                          sortConfig?.key === "total"
+                            ? {
+                                key: "total",
+                                direction:
+                                  sortConfig.direction === "asc"
+                                    ? "desc"
+                                    : "asc",
+                              }
+                            : { key: "total", direction: "asc" }
+                        )
+                      }
                     >
-                      Total {sortConfig?.key === 'total' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
+                      Total{" "}
+                      {sortConfig?.key === "total"
+                        ? sortConfig.direction === "asc"
+                          ? "▲"
+                          : "▼"
+                        : ""}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Payment
@@ -354,12 +462,20 @@ const Billing: React.FC = () => {
                         ${bill.total.toFixed(2)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getPaymentColor(bill.paymentMethod)}`}>
+                        <span
+                          className={`px-2 py-1 text-xs font-medium rounded-full ${getPaymentColor(
+                            bill.paymentMethod
+                          )}`}
+                        >
                           {bill.paymentMethod}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(bill.status)}`}>
+                        <span
+                          className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(
+                            bill.status
+                          )}`}
+                        >
                           {bill.status}
                         </span>
                       </td>
@@ -399,9 +515,15 @@ const Billing: React.FC = () => {
             >
               &times;
             </button>
-            <h2 className="text-xl font-bold mb-2 text-center">{billToView.customer}</h2>
-            <div className="text-center text-xs text-gray-500 mb-2">Bill ID: {billToView.id}</div>
-            <div className="mb-2 text-xs text-gray-500">Date: {billToView.date}</div>
+            <h2 className="text-xl font-bold mb-2 text-center">
+              {billToView.customer}
+            </h2>
+            <div className="text-center text-xs text-gray-500 mb-2">
+              Bill ID: {billToView.id}
+            </div>
+            <div className="mb-2 text-xs text-gray-500">
+              Date: {billToView.date}
+            </div>
             <table className="w-full text-xs mb-4">
               <thead>
                 <tr className="border-b">
@@ -417,7 +539,9 @@ const Billing: React.FC = () => {
                     <td>{item.name}</td>
                     <td className="text-right">${item.price.toFixed(2)}</td>
                     <td className="text-right">{item.quantity}</td>
-                    <td className="text-right">${(item.price * item.quantity).toFixed(2)}</td>
+                    <td className="text-right">
+                      ${(item.price * item.quantity).toFixed(2)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -426,7 +550,10 @@ const Billing: React.FC = () => {
               <span>Total:</span>
               <span>${billToView.total.toFixed(2)}</span>
             </div>
-            <div className="mb-2 text-xs">Payment Method: <span className="font-semibold">{billToView.paymentMethod}</span></div>
+            <div className="mb-2 text-xs">
+              Payment Method:{" "}
+              <span className="font-semibold">{billToView.paymentMethod}</span>
+            </div>
             <div className="text-center mt-4 flex gap-2 justify-center">
               <button
                 className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 print:hidden"
@@ -458,9 +585,15 @@ const Billing: React.FC = () => {
             >
               &times;
             </button>
-            <h2 className="text-xl font-bold mb-2 text-center">{billToDownload.customer}</h2>
-            <div className="text-center text-xs text-gray-500 mb-2">Bill ID: {billToDownload.id}</div>
-            <div className="mb-2 text-xs text-gray-500">Date: {billToDownload.date}</div>
+            <h2 className="text-xl font-bold mb-2 text-center">
+              {billToDownload.customer}
+            </h2>
+            <div className="text-center text-xs text-gray-500 mb-2">
+              Bill ID: {billToDownload.id}
+            </div>
+            <div className="mb-2 text-xs text-gray-500">
+              Date: {billToDownload.date}
+            </div>
             <table className="w-full text-xs mb-4">
               <thead>
                 <tr className="border-b">
@@ -476,7 +609,9 @@ const Billing: React.FC = () => {
                     <td>{item.name}</td>
                     <td className="text-right">${item.price.toFixed(2)}</td>
                     <td className="text-right">{item.quantity}</td>
-                    <td className="text-right">${(item.price * item.quantity).toFixed(2)}</td>
+                    <td className="text-right">
+                      ${(item.price * item.quantity).toFixed(2)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -485,7 +620,12 @@ const Billing: React.FC = () => {
               <span>Total:</span>
               <span>${billToDownload.total.toFixed(2)}</span>
             </div>
-            <div className="mb-2 text-xs">Payment Method: <span className="font-semibold">{billToDownload.paymentMethod}</span></div>
+            <div className="mb-2 text-xs">
+              Payment Method:{" "}
+              <span className="font-semibold">
+                {billToDownload.paymentMethod}
+              </span>
+            </div>
             <div className="text-center mt-4 flex gap-2 justify-center">
               <button
                 className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 print:hidden"

@@ -64,22 +64,15 @@ const POS: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${BASE_URL}/inventory`);
+      const url = user?.branchId
+        ? `${BASE_URL}/inventory?branchId=${user.branchId}`
+        : `${BASE_URL}/inventory`;
+
+      const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to fetch products");
       const data = await res.json();
 
-      // Filter products by manager's branch if available
-      let filteredData = data;
-      if (user?.branchId) {
-        filteredData = data.filter(
-          (product: any) =>
-            product.branchId === user.branchId ||
-            (typeof product.branchId === "object" &&
-              product.branchId?._id === user.branchId)
-        );
-      }
-
-      const productsWithStatus = filteredData.map(addStatus);
+      const productsWithStatus = data.map(addStatus);
       setProducts(productsWithStatus);
     } catch (err: any) {
       setError(err.message || "Error fetching products");

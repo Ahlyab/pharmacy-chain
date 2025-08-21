@@ -197,7 +197,15 @@ router.post("/billing", async (req, res) => {
 
 router.get("/billing", async (req, res) => {
   try {
-    const billings = await Billing.find();
+    const { branchId } = req.query;
+    let query = {};
+
+    // If branchId is provided, filter by it
+    if (branchId && branchId !== "all") {
+      query.branchId = new mongoose.Types.ObjectId(branchId);
+    }
+
+    const billings = await Billing.find(query);
     res.status(200).json(billings);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -303,7 +311,18 @@ router.delete("/inventory/:id", async (req, res) => {
 
 router.get("/inventory", async (req, res) => {
   try {
-    const inventories = await Inventory.find().populate("branchId", "name");
+    const { branchId } = req.query;
+    let query = {};
+
+    // If branchId is provided, filter by it
+    if (branchId && branchId !== "all") {
+      query.branchId = new mongoose.Types.ObjectId(branchId);
+    }
+
+    const inventories = await Inventory.find(query).populate(
+      "branchId",
+      "name"
+    );
     res.status(200).json(inventories);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -383,8 +402,16 @@ router.post("/transaction", async (req, res) => {
 
 router.get("/transaction", async (req, res) => {
   try {
+    const { branchId } = req.query;
+    let query = {};
+
+    // If branchId is provided, filter by it
+    if (branchId && branchId !== "all") {
+      query.branchId = new mongoose.Types.ObjectId(branchId);
+    }
+
     // Populate productId and branchId to get product name and branch name
-    const transactions = await Transaction.find()
+    const transactions = await Transaction.find(query)
       .populate("items.productId")
       .populate("branchId", "name");
     // Map backend fields to frontend expected fields
@@ -667,8 +694,16 @@ router.get("/pos", async (req, res) => {
  */
 router.get("/sales/recent", async (req, res) => {
   try {
+    const { branchId } = req.query;
+    let query = {};
+
+    // If branchId is provided, filter by it
+    if (branchId && branchId !== "all") {
+      query.branchId = new mongoose.Types.ObjectId(branchId);
+    }
+
     // populate productId and branchId to get product name and branch name
-    const recentSales = await Transaction.find()
+    const recentSales = await Transaction.find(query)
       .sort({ date: -1 })
       .limit(10)
       .populate("items.productId")

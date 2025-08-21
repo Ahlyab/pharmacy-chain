@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { VITE_BASE_URL } from '../../data';
+import { VITE_BASE_URL } from "../../data";
+import { useAuth } from "../../contexts/AuthContext";
 import {
   Package,
   ShoppingCart,
@@ -10,6 +11,7 @@ import {
 import GreenProgressBar from "../GreenProgressBar";
 
 const Dashboard: React.FC = () => {
+  const { user } = useAuth();
   const [products, setProducts] = useState<any[]>([]);
   const [sales, setSales] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,13 +23,21 @@ const Dashboard: React.FC = () => {
     const fetchData = async () => {
       try {
         // Fetch products
-        const productsResponse = await fetch(`${BASE_URL}/inventory`);
+        const productsUrl = user?.branchId
+          ? `${BASE_URL}/inventory?branchId=${user.branchId}`
+          : `${BASE_URL}/inventory`;
+
+        const productsResponse = await fetch(productsUrl);
         if (!productsResponse.ok) throw new Error("Failed to fetch inventory");
         const productsData = await productsResponse.json();
         setProducts(productsData);
 
         // Fetch sales data
-        const salesResponse = await fetch(`${BASE_URL}/sales/recent`);
+        const salesUrl = user?.branchId
+          ? `${BASE_URL}/sales/recent?branchId=${user.branchId}`
+          : `${BASE_URL}/sales/recent`;
+
+        const salesResponse = await fetch(salesUrl);
         if (salesResponse.ok) {
           const salesData = await salesResponse.json();
           setSales(salesData);
@@ -41,7 +51,7 @@ const Dashboard: React.FC = () => {
       }
     };
     fetchData();
-  }, []);
+  }, [user?.branchId]);
 
   // Calculate stats
   const criticalProducts = products.filter((p) => p.stock === 0);
