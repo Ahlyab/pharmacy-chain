@@ -1,5 +1,6 @@
-import React from "react";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
+import { VITE_BASE_URL } from "../../data";
+import { useAuth } from "../../contexts/AuthContext";
 import {
   Package,
   ShoppingCart,
@@ -8,25 +9,35 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import GreenProgressBar from "../GreenProgressBar";
-import { config } from "../../config/env";
 
 const Dashboard: React.FC = () => {
+  const { user } = useAuth();
   const [products, setProducts] = useState<any[]>([]);
   const [sales, setSales] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const BASE_URL = VITE_BASE_URL;
+
   useEffect(() => {
     const fetchData = async () => {
       try {
         // Fetch products
-        const productsResponse = await fetch(`${config.apiUrl}/api/inventory`);
+        const productsUrl = user?.branchId
+          ? `${BASE_URL}/inventory?branchId=${user.branchId}`
+          : `${BASE_URL}/inventory`;
+
+        const productsResponse = await fetch(productsUrl);
         if (!productsResponse.ok) throw new Error("Failed to fetch inventory");
         const productsData = await productsResponse.json();
         setProducts(productsData);
 
         // Fetch sales data
-        const salesResponse = await fetch(`${config.apiUrl}/api/sales/recent`);
+        const salesUrl = user?.branchId
+          ? `${BASE_URL}/sales/recent?branchId=${user.branchId}`
+          : `${BASE_URL}/sales/recent`;
+
+        const salesResponse = await fetch(salesUrl);
         if (salesResponse.ok) {
           const salesData = await salesResponse.json();
           setSales(salesData);
@@ -40,7 +51,7 @@ const Dashboard: React.FC = () => {
       }
     };
     fetchData();
-  }, []);
+  }, [user?.branchId]);
 
   // Calculate stats
   const criticalProducts = products.filter((p) => p.stock === 0);
@@ -49,7 +60,6 @@ const Dashboard: React.FC = () => {
   const lowStockItems = products.filter(
     (p) => p.stock <= p.minStock && p.stock > 0
   );
-  const lowStockCount = lowStockItems.length;
 
   // Calculate 24-hour sales
   const now = new Date();
@@ -100,7 +110,7 @@ const Dashboard: React.FC = () => {
     },
     {
       name: "Low Stock Items",
-      value: lowStockCount,
+      value: lowStockItems.length,
       icon: AlertTriangle,
       color: "bg-orange-500",
       change: `${criticalProducts.length} critical`,

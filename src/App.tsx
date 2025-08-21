@@ -19,7 +19,8 @@ function AppRoutes() {
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="*" element={<Navigate to="/login" />} />
+        {/* Fallback for any other route to redirect to login */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     );
   }
@@ -42,12 +43,7 @@ function AppRoutes() {
           )
         }
       />
-      <Route
-        path="*"
-        element={
-          <Navigate to={user.role === "admin" ? "/admin" : "/manager"} />
-        }
-      />
+      {/* Remove catch-all redirect to prevent infinite loop */}
     </Routes>
   );
 }
