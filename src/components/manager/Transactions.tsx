@@ -33,6 +33,7 @@ const Transactions: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
 
   useEffect(() => {
     const fetchTransactions = async () => {
@@ -71,13 +72,45 @@ const Transactions: React.FC = () => {
         selectedStatus === "All" || transaction.status === selectedStatus;
       // Date filter
       const txnDate = new Date(transaction.date);
-      const days = parseInt(dateRange, 10);
-      const dateLimit = new Date(now);
-      dateLimit.setDate(now.getDate() - days);
-      const matchesDate = txnDate >= dateLimit;
+      let matchesDate = true;
+      if (dateRange === "today") {
+        const todayStr = now.toISOString().slice(0, 10);
+        matchesDate = transaction.date.slice(0, 10) === todayStr;
+      } else {
+        const days = parseInt(dateRange, 10);
+        const dateLimit = new Date(now);
+        dateLimit.setDate(now.getDate() - days);
+        matchesDate = txnDate >= dateLimit;
+      }
       return matchesSearch && matchesStatus && matchesDate;
-    })
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    });
+
+  // Sorting
+  const sortedTransactions = React.useMemo(() => {
+    if (!sortConfig) return filteredTransactions;
+    const sorted = [...filteredTransactions];
+    sorted.sort((a, b) => {
+      let aValue = a[sortConfig.key as keyof Transaction];
+      let bValue = b[sortConfig.key as keyof Transaction];
+      if (sortConfig.key === "date") {
+        aValue = new Date(aValue as string).getTime();
+        bValue = new Date(bValue as string).getTime();
+      }
+      if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [filteredTransactions, sortConfig]);
+
+  const handleSort = (key: string) => {
+    setSortConfig((prev) => {
+      if (prev && prev.key === key) {
+        return { key, direction: prev.direction === "asc" ? "desc" : "asc" };
+      }
+      return { key, direction: "asc" };
+    });
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -213,6 +246,7 @@ const Transactions: React.FC = () => {
             onChange={(e) => setDateRange(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
+            <option value="today">Today</option>
             <option value="7">Last 7 days</option>
             <option value="30">Last 30 days</option>
             <option value="90">Last 3 months</option>
@@ -231,31 +265,61 @@ const Transactions: React.FC = () => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none"
+                      onClick={() => handleSort("id")}
+                    >
                       Transaction ID
+                      {sortConfig?.key === "id" && (
+                        <span className="ml-1">{sortConfig.direction === "asc" ? "▲" : "▼"}</span>
+                      )}
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none"
+                      onClick={() => handleSort("date")}
+                    >
                       Date & Time
+                      {sortConfig?.key === "date" && (
+                        <span className="ml-1">{sortConfig.direction === "asc" ? "▲" : "▼"}</span>
+                      )}
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none"
+                      onClick={() => handleSort("customer")}
+                    >
                       Customer
+                      {sortConfig?.key === "customer" && (
+                        <span className="ml-1">{sortConfig.direction === "asc" ? "▲" : "▼"}</span>
+                      )}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Items
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none"
+                      onClick={() => handleSort("total")}
+                    >
                       Total
+                      {sortConfig?.key === "total" && (
+                        <span className="ml-1">{sortConfig.direction === "asc" ? "▲" : "▼"}</span>
+                      )}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Payment
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none"
+                      onClick={() => handleSort("status")}
+                    >
                       Status
+                      {sortConfig?.key === "status" && (
+                        <span className="ml-1">{sortConfig.direction === "asc" ? "▲" : "▼"}</span>
+                      )}
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredTransactions.map((transaction) => (
+                  {sortedTransactions.map((transaction) => (
                     <tr key={transaction.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         {transaction.id}

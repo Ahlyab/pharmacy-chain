@@ -8,6 +8,7 @@ import ManagerManagement from './admin/ManagerManagement';
 import InventoryOverview from './admin/InventoryOverview';
 import TransactionHistory from './admin/TransactionHistory';
 import Dashboard from './admin/Dashboard';
+import SupplierManagement from './admin/SupplierManagement';
 
 const AdminDashboard: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -18,6 +19,7 @@ const AdminDashboard: React.FC = () => {
     { name: 'Managers', path: '/admin/managers', icon: 'Users' },
     { name: 'Inventory Overview', path: '/admin/inventory', icon: 'Package' },
     { name: 'Transactions', path: '/admin/transactions', icon: 'Receipt' },
+    { name: 'Suppliers', path: '/admin/suppliers', icon: 'ShoppingCart' },
   ];
 
   const [loading, setLoading] = useState(true);
@@ -44,6 +46,7 @@ const AdminDashboard: React.FC = () => {
               <Route path="/managers" element={<ManagerManagement />} />
               <Route path="/inventory" element={<InventoryOverview />} />
               <Route path="/transactions" element={<TransactionHistory />} />
+                <Route path="/suppliers" element={<SupplierManagement />} />
               <Route path="*" element={<Navigate to="/admin" />} />
             </Routes>
           </GreenProgressBar>

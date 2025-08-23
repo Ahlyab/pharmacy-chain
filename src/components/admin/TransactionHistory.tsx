@@ -39,6 +39,7 @@ const TransactionHistory: React.FC = () => {
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [dateRange, setDateRange] = useState("7");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [branches, setBranches] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sortColumn, setSortColumn] = useState<string>("date");
@@ -68,14 +69,26 @@ const TransactionHistory: React.FC = () => {
         setLoading(false);
       }
     };
+    const fetchBranches = async () => {
+      try {
+        const res = await fetch(`${config.apiUrl}/api/branch`);
+        if (!res.ok) throw new Error("Failed to fetch branches");
+        const data = await res.json();
+        // If data is an array of branch objects, extract names
+        const branchNames = Array.isArray(data)
+          ? data.map((b: any) => b.name || b.branchName || b._id || b.id)
+          : [];
+        setBranches(branchNames);
+      } catch {
+        setBranches([]);
+      }
+    };
     fetchTransactions();
+    fetchBranches();
   }, []);
 
-  // Branches from transactions
-  const branches = [
-    "All",
-    ...Array.from(new Set(transactions.map((t) => t.branch).filter(Boolean))),
-  ];
+  // Branches for dropdown ("All" + fetched branches)
+  const branchOptions = ["All", ...branches.filter(Boolean)];
   const statuses = ["All", "Completed", "Pending", "Refunded"];
 
   // Filter by search, branch, status, and date range
@@ -270,7 +283,7 @@ const TransactionHistory: React.FC = () => {
             onChange={(e) => setSelectedBranch(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            {branches.map((branch) => (
+            {branchOptions.map((branch) => (
               <option key={branch} value={branch}>
                 {branch}
               </option>

@@ -52,7 +52,7 @@ const InventoryManagement: React.FC = () => {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [expiryFilter, setExpiryFilter] = useState("All");
-  const [branchFilter, setBranchFilter] = useState("All");
+  const [branchFilter, setBranchFilter] = useState<string>("All");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Helper to add status to a product
@@ -67,14 +67,24 @@ const InventoryManagement: React.FC = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const url = user?.branchId
-          ? `${BASE_URL}/inventory?branchId=${user.branchId}`
-          : `${BASE_URL}/inventory`;
-
-        const response = await fetch(url);
+        // Always fetch all products
+        const response = await fetch(`${BASE_URL}/inventory`);
         if (!response.ok) throw new Error("Failed to fetch products");
         const data = await response.json();
         setProducts(data.map(addStatus));
+
+        // Set branchFilter to user's branch name if available
+        if (user?.branchId && data.length > 0) {
+          // Find branch name for manager's branch
+          const branchProduct = data.find(
+            (p: any) =>
+              typeof p.branchId === "object" && p.branchId?._id === user.branchId
+          );
+          const branchName = branchProduct?.branchId?.name ?? null;
+          if (branchName) {
+            setBranchFilter(branchName);
+          }
+        }
       } catch (err) {
         alert("Error fetching products: " + (err as Error).message);
       }
@@ -171,11 +181,23 @@ const InventoryManagement: React.FC = () => {
       setShowModal(false);
       setEditingProduct(null);
       setFormData(initialFormState);
-      // Refresh products after add/edit
+      // Refresh products after add/edit (fetch all products)
       const response = await fetch(`${BASE_URL}/inventory`);
       if (response.ok) {
         const data = await response.json();
         setProducts(data.map(addStatus));
+        // Reset branchFilter to manager's branch name if available
+        if (user?.branchId && data.length > 0) {
+          // Find branch name for manager's branch
+          const branchProduct = data.find(
+            (p: any) =>
+              typeof p.branchId === "object" && p.branchId?._id === user.branchId
+          );
+          const branchName = branchProduct?.branchId?.name ?? null;
+          if (branchName) {
+            setBranchFilter(branchName);
+          }
+        }
       }
     } catch (err) {
       alert("Error: " + (err as Error).message);
@@ -259,16 +281,16 @@ const InventoryManagement: React.FC = () => {
       product.category.toLowerCase().includes(searchLower) ||
       product.supplier.toLowerCase().includes(searchLower);
     const matchesCategory =
-      categoryFilter === "All" || product.category === categoryFilter;
+      categoryFilter.toLowerCase() === "all" || product.category.toLowerCase() === categoryFilter.toLowerCase();
     const expiryStatus = getExpiryStatus(product.expiryDate);
     const matchesExpiry =
-      expiryFilter === "All" || expiryStatus === expiryFilter;
+      expiryFilter.toLowerCase() === "all" || expiryStatus.toLowerCase() === expiryFilter.toLowerCase();
     const productBranchName =
       typeof product.branchId === "object" && product.branchId?.name
         ? product.branchId.name
         : "N/A";
     const matchesBranch =
-      branchFilter === "All" || productBranchName === branchFilter;
+      branchFilter.toLowerCase() === "all" || productBranchName.toLowerCase() === branchFilter.toLowerCase();
     return matchesSearch && matchesCategory && matchesExpiry && matchesBranch;
   });
 
@@ -431,12 +453,12 @@ const InventoryManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* Table - lucide-react icons for actions, name wraps, no horizontal scroll */}
-      <div className="rounded-lg shadow-lg">
+      {/* Table - lucide-react icons for actions, name wraps, actions always visible */}
+      <div className="rounded-lg shadow-lg overflow-x-auto">
         <table className="min-w-full bg-white">
           <thead className="bg-blue-50">
             <tr>
-              <th className="px-4 py-2 text-left">Name</th>
+              <th className="px-4 py-2 text-left max-w-[220px] w-1/5">Name</th>
               <th className="px-4 py-2 text-left">Category</th>
               <th className="px-4 py-2 text-left">Stock</th>
               <th className="px-4 py-2 text-left">Min Stock</th>
@@ -445,7 +467,7 @@ const InventoryManagement: React.FC = () => {
               <th className="px-4 py-2 text-left">Branch</th>
               <th className="px-4 py-2 text-left">Expiry Date</th>
               <th className="px-4 py-2 text-center">Status</th>
-              <th className="px-4 py-2 text-center">Actions</th>
+              <th className="px-4 py-2 text-center w-[110px]">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -458,7 +480,7 @@ const InventoryManagement: React.FC = () => {
             ) : (
               filteredProducts.map((product) => (
                 <tr key={product.id} className="hover:bg-blue-50 transition">
-                  <td className="px-4 py-2 font-semibold text-left break-words whitespace-normal max-w-[180px]">
+                  <td className="px-4 py-2 font-semibold text-left break-words whitespace-normal max-w-[220px] w-1/5">
                     {product.name}
                   </td>
                   <td className="px-4 py-2 text-left">{product.category}</td>
@@ -486,7 +508,7 @@ const InventoryManagement: React.FC = () => {
                       {product.status}
                     </span>
                   </td>
-                  <td className="px-4 py-2 text-center flex gap-1 justify-center">
+                  <td className="px-4 py-2 text-center flex gap-1 justify-center w-[110px] shrink-0">
                     <button
                       className="p-1 rounded-full hover:bg-blue-100"
                       title="Edit"
