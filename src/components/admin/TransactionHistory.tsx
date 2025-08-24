@@ -17,6 +17,7 @@ interface Transaction {
   total: number;
   paymentMethod: string;
   status: "Completed" | "Pending" | "Refunded";
+  branchName: string;
 }
 
 const TransactionHistory: React.FC = () => {
@@ -62,7 +63,10 @@ const TransactionHistory: React.FC = () => {
         const res = await fetch(`${config.apiUrl}/api/transaction`);
         if (!res.ok) throw new Error("Failed to fetch transactions");
         const data = await res.json();
-        setTransactions(data.transactions || data);
+        // Handle both array response and wrapped response
+        const transactionsData = Array.isArray(data) ? data : (data.transactions || []);
+        console.log('Fetched transactions:', transactionsData);
+        setTransactions(transactionsData);
       } catch (err: any) {
         setError(err.message || "Error fetching transactions");
       } finally {
@@ -95,13 +99,13 @@ const TransactionHistory: React.FC = () => {
   const now = new Date();
   const filteredTransactions = transactions
     .filter((transaction) => {
-      if (!transaction || !transaction.id || !transaction.customer)
+      if (!transaction || !transaction.id)
         return false;
       const matchesSearch =
         transaction.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        transaction.customer.toLowerCase().includes(searchTerm.toLowerCase());
+        (transaction.customer && transaction.customer.toLowerCase().includes(searchTerm.toLowerCase()));
       const matchesBranch =
-        selectedBranch === "All" || transaction.branch === selectedBranch;
+        selectedBranch === "All" || transaction.branchName === selectedBranch;
       const matchesStatus =
         selectedStatus === "All" || transaction.status === selectedStatus;
       // Date filter
@@ -117,9 +121,26 @@ const TransactionHistory: React.FC = () => {
         dateLimit.setDate(now.getDate() - days);
         matchesDate = txnDate >= dateLimit;
       }
-      return matchesSearch && matchesBranch && matchesStatus && matchesDate;
-    })
-    .sort((a, b) => {
+      const result = matchesSearch && matchesBranch && matchesStatus && matchesDate;
+      if (!result) {
+        console.log('Transaction filtered out:', {
+          id: transaction.id,
+          customer: transaction.customer,
+          branchName: transaction.branchName,
+          status: transaction.status,
+          date: transaction.date,
+          matchesSearch,
+          matchesBranch,
+          matchesStatus,
+          matchesDate
+        });
+      }
+      return result;
+    });
+  
+  console.log('Filtered transactions:', filteredTransactions);
+  
+  const sortedTransactions = filteredTransactions.sort((a, b) => {
       let valA, valB;
       switch (sortColumn) {
         case "id":
@@ -131,12 +152,12 @@ const TransactionHistory: React.FC = () => {
           valB = new Date(b.date).getTime();
           break;
         case "branch":
-          valA = a.branch;
-          valB = b.branch;
+          valA = a.branchName;
+          valB = b.branchName;
           break;
         case "customer":
-          valA = a.customer;
-          valB = b.customer;
+          valA = a.customer || "";
+          valB = b.customer || "";
           break;
         case "items":
           valA = a.items?.length || 0;
@@ -193,22 +214,22 @@ const TransactionHistory: React.FC = () => {
     }
   };
 
-  const totalRevenue = filteredTransactions
+  const totalRevenue = sortedTransactions
     .filter((t) => t.status === "Completed")
     .reduce((sum, t) => sum + t.total, 0);
-  const completedCount = filteredTransactions.filter(
+  const completedCount = sortedTransactions.filter(
     (t) => t.status === "Completed"
   ).length;
   const avgTransaction = totalRevenue / Math.max(completedCount, 1);
   const todayStr = now.toISOString().slice(0, 10);
-  const completedToday = filteredTransactions.filter(
+  const completedToday = sortedTransactions.filter(
     (t) => t.status === "Completed" && t.date.slice(0, 10) === todayStr
   ).length;
 
   const stats = [
     {
       name: "Total Transactions",
-      value: filteredTransactions.length.toString(),
+      value: sortedTransactions.length.toString(),
       icon: Receipt,
       color: "bg-blue-500",
     },
@@ -390,8 +411,8 @@ const TransactionHistory: React.FC = () => {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredTransactions.map((transaction) => (
+                                 <tbody className="bg-white divide-y divide-gray-200">
+                   {sortedTransactions.map((transaction) => (
                     <tr key={transaction.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         {transaction.id}
@@ -400,7 +421,7 @@ const TransactionHistory: React.FC = () => {
                         {formatDateTime(transaction.date)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {transaction.branch}
+                        {transaction.branchName}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {transaction.customer}

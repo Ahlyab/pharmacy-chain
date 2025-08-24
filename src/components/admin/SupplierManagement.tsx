@@ -44,12 +44,14 @@ const SupplierManagement: React.FC = () => {
 
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(false);
 
   // Fetch suppliers from backend
   useEffect(() => {
     const fetchSuppliers = async () => {
       try {
-  const response = await fetch(`${config.apiUrl}/api/supplier`);
+        setLoading(true);
+        const response = await fetch(`${config.apiUrl}/api/supplier`);
         if (!response.ok) throw new Error("Failed to fetch suppliers");
         const data = await response.json();
         setSuppliers(data.map((s: any) => ({
@@ -66,7 +68,9 @@ const SupplierManagement: React.FC = () => {
           notes: s.notes ?? '',
         })));
       } catch (err) {
-        // Optionally handle error
+        console.error('Error fetching suppliers:', err);
+      } finally {
+        setLoading(false);
       }
     };
     fetchSuppliers();
@@ -181,7 +185,13 @@ const SupplierManagement: React.FC = () => {
       </div>
 
       {/* Supplier Cards */}
-  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {loading ? (
+        <div className="col-span-full text-center py-8">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <p className="mt-2 text-gray-600">Loading suppliers...</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {suppliers
           .filter(supplier => {
             const term = searchTerm.toLowerCase();
@@ -203,7 +213,13 @@ const SupplierManagement: React.FC = () => {
             }}>
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-bold">{supplier.name}</h3>
-              <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs">Active</span>
+              <span className={`px-2 py-1 rounded text-xs ${
+                supplier.status === 'Active' 
+                  ? 'bg-green-100 text-green-700' 
+                  : 'bg-red-100 text-red-700'
+              }`}>
+                {supplier.status || 'Active'}
+              </span>
             </div>
             <div className="text-gray-700"><span className="font-semibold">Company:</span> {supplier.company || '-'}</div>
             <div className="text-gray-700"><span className="font-semibold">Email:</span> {supplier.email || '-'}</div>
@@ -214,6 +230,11 @@ const SupplierManagement: React.FC = () => {
             <div className="flex items-center gap-2">
               <span role="img" aria-label="phone">📞</span> {supplier.contact}
             </div>
+            {/* Delivery count indicator */}
+            <div className="text-gray-700 mt-2">
+              <span className="font-semibold">Deliveries:</span> {supplier.deliveries?.length || 0}
+            </div>
+            
             {/* Products removed from card. Deliveries managed in details view. */}
             <div className="flex flex-col sm:flex-row gap-2 mt-auto">
               <button type="button" className="bg-blue-100 text-blue-700 px-3 py-2 rounded flex-1"
@@ -242,7 +263,8 @@ const SupplierManagement: React.FC = () => {
             </div>
           </div>
         ))}
-      </div>
+        </div>
+      )}
 
       {/* Add/Edit Supplier Dialog */}
       {(showAddDialog || editSupplier) && (

@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, ChevronDown } from "lucide-react";
 import { VITE_BASE_URL } from "../../data";
 import Swal from "sweetalert2";
 import { useAuth } from "../../contexts/AuthContext";
 import * as XLSX from "xlsx";
-// ...existing code...
 
 interface Product {
   id: string;
@@ -31,6 +30,19 @@ interface FormProduct {
   expiryDate: string;
 }
 
+interface Supplier {
+  id: string;
+  name: string;
+  contact: string;
+  address: string;
+  productsSupplied: string[];
+  email?: string;
+  company?: string;
+  gst?: string;
+  status?: string;
+  notes?: string;
+}
+
 const initialFormState: FormProduct = {
   id: "",
   name: "",
@@ -46,6 +58,7 @@ const InventoryManagement: React.FC = () => {
   const { user } = useAuth();
   const BASE_URL = VITE_BASE_URL;
   const [products, setProducts] = useState<Product[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState<FormProduct>(initialFormState);
@@ -53,7 +66,10 @@ const InventoryManagement: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [expiryFilter, setExpiryFilter] = useState("All");
   const [branchFilter, setBranchFilter] = useState<string>("All");
+  const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
+  const [supplierSearch, setSupplierSearch] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const supplierDropdownRef = useRef<HTMLDivElement>(null);
 
   // Helper to add status to a product
   const addStatus = (product: any) => {
@@ -62,6 +78,29 @@ const InventoryManagement: React.FC = () => {
     else if (product.stock <= product.minStock) status = "Low Stock";
     else status = "In Stock";
     return { ...product, status, id: product._id || product.id };
+  };
+
+  // Fetch suppliers from backend
+  const fetchSuppliers = async () => {
+    try {
+      const response = await fetch(`${BASE_URL}/supplier`);
+      if (!response.ok) throw new Error("Failed to fetch suppliers");
+      const data = await response.json();
+      setSuppliers(data.map((s: any) => ({
+        id: s._id,
+        name: s.name ?? '',
+        contact: s.contact ?? '',
+        address: s.address ?? '',
+        productsSupplied: s.productsSupplied ?? [],
+        email: s.email ?? '',
+        company: s.company ?? '',
+        gst: s.gst ?? '',
+        status: s.status ?? 'Active',
+        notes: s.notes ?? '',
+      })));
+    } catch (err) {
+      console.error("Error fetching suppliers:", err);
+    }
   };
 
   useEffect(() => {
@@ -89,8 +128,63 @@ const InventoryManagement: React.FC = () => {
         alert("Error fetching products: " + (err as Error).message);
       }
     };
+    
     fetchProducts();
+    fetchSuppliers();
   }, [BASE_URL, user?.branchId]);
+
+  // Handle clicking outside supplier dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (supplierDropdownRef.current && !supplierDropdownRef.current.contains(event.target as Node)) {
+        setShowSupplierDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Filter suppliers based on search
+  const filteredSuppliers = suppliers.filter(supplier =>
+    supplier.name.toLowerCase().includes(supplierSearch.toLowerCase())
+  ).slice(0, 10); // Limit to 10 results for better performance
+
+  // Handle supplier selection
+  const handleSupplierSelect = (supplier: Supplier) => {
+    setFormData({ ...formData, supplier: supplier.name });
+    setShowSupplierDropdown(false);
+    setSupplierSearch(supplier.name);
+  };
+
+  // Handle supplier input change
+  const handleSupplierInputChange = (value: string) => {
+    setFormData({ ...formData, supplier: value });
+    setSupplierSearch(value);
+    if (value.trim() === '') {
+      setShowSupplierDropdown(false);
+    } else {
+      setShowSupplierDropdown(true);
+    }
+  };
+
+  // Handle supplier input focus
+  const handleSupplierFocus = () => {
+    setShowSupplierDropdown(true);
+  };
+
+  // Handle supplier input key down
+  const handleSupplierKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      setShowSupplierDropdown(false);
+      // If there's a search term and no exact match, use it as the supplier
+      if (supplierSearch.trim() && !suppliers.some(s => s.name.toLowerCase() === supplierSearch.toLowerCase())) {
+        setFormData({ ...formData, supplier: supplierSearch.trim() });
+      }
+    }
+  };
 
   // Import handler for Excel/PDF
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -181,6 +275,8 @@ const InventoryManagement: React.FC = () => {
       setShowModal(false);
       setEditingProduct(null);
       setFormData(initialFormState);
+      setShowSupplierDropdown(false);
+      setSupplierSearch("");
       // Refresh products after add/edit (fetch all products)
       const response = await fetch(`${BASE_URL}/inventory`);
       if (response.ok) {
@@ -211,6 +307,8 @@ const InventoryManagement: React.FC = () => {
       expiryDate = new Date(expiryDate).toISOString().slice(0, 10);
     }
     setFormData({ ...product, expiryDate });
+    setSupplierSearch(product.supplier);
+    setShowSupplierDropdown(false);
     setShowModal(true);
   };
 
@@ -323,7 +421,6 @@ const InventoryManagement: React.FC = () => {
       isRequired: true,
     },
     { key: "price", label: "Price ($)", inputType: "number", isRequired: true },
-    { key: "supplier", label: "Supplier", inputType: "text", isRequired: true },
     {
       key: "expiryDate",
       label: "Expiry Date",
@@ -446,7 +543,11 @@ const InventoryManagement: React.FC = () => {
           </button>
           <button
             className="px-4 py-2 bg-blue-600 text-white rounded shadow hover:bg-blue-700 flex items-center gap-2"
-            onClick={() => setShowModal(true)}
+            onClick={() => {
+              setShowModal(true);
+              setShowSupplierDropdown(false);
+              setSupplierSearch("");
+            }}
           >
             Add Product
           </button>
@@ -562,6 +663,83 @@ const InventoryManagement: React.FC = () => {
                   />
                 </div>
               ))}
+              
+              {/* Custom Supplier Field */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Supplier *
+                </label>
+                <div className="relative" ref={supplierDropdownRef}>
+                  <input
+                    type="text"
+                    required
+                    value={formData.supplier}
+                    onChange={(e) => handleSupplierInputChange(e.target.value)}
+                    onFocus={handleSupplierFocus}
+                    onKeyDown={handleSupplierKeyDown}
+                    placeholder="Search or enter supplier name..."
+                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSupplierDropdown(!showSupplierDropdown);
+                      if (!showSupplierDropdown) {
+                        if (formData.supplier.trim() === '') {
+                          setSupplierSearch("");
+                        } else {
+                          setSupplierSearch(formData.supplier);
+                        }
+                      } else {
+                        setSupplierSearch("");
+                      }
+                    }}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    title="Toggle supplier dropdown"
+                  >
+                    <ChevronDown className={`w-4 h-4 transition-transform ${showSupplierDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  {/* Supplier Dropdown */}
+                  {showSupplierDropdown && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                      {filteredSuppliers.length > 0 ? (
+                        filteredSuppliers.map((supplier) => (
+                          <div
+                            key={supplier.id}
+                            className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                            onClick={() => handleSupplierSelect(supplier)}
+                          >
+                            <div className="font-medium">{supplier.name}</div>
+                            {supplier.company && (
+                              <div className="text-sm text-gray-500">{supplier.company}</div>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-gray-500">
+                          {supplierSearch ? "No suppliers found" : "Type to search suppliers"}
+                        </div>
+                      )}
+                      {supplierSearch && supplierSearch.trim() !== formData.supplier && (
+                        <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                          Press Enter to add "{supplierSearch}" as new supplier
+                        </div>
+                      )}
+                      {!supplierSearch && suppliers.length > 0 && (
+                        <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                          {suppliers.length} suppliers available
+                        </div>
+                      )}
+                      {suppliers.length === 0 && (
+                        <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                          No suppliers in system. Type to add new supplier.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
               <div className="flex justify-end space-x-2 pt-2">
                 <button
                   type="button"
@@ -569,6 +747,8 @@ const InventoryManagement: React.FC = () => {
                     setShowModal(false);
                     setEditingProduct(null);
                     setFormData(initialFormState);
+                    setShowSupplierDropdown(false);
+                    setSupplierSearch("");
                   }}
                   className="px-4 py-2 bg-gray-300 rounded"
                 >

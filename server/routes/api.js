@@ -62,6 +62,86 @@ router.delete("/supplier/:id", async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
+
+// Supplier Delivery Routes
+router.post("/supplier/:id/delivery", async (req, res) => {
+  try {
+    const { date, deliveryTime, products, quantity, notes } = req.body;
+    if (!date || !deliveryTime || !products || !quantity) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+    
+    const supplier = await Supplier.findById(req.params.id);
+    if (!supplier) {
+      return res.status(404).json({ error: "Supplier not found" });
+    }
+    
+    const newDelivery = {
+      date,
+      deliveryTime,
+      products,
+      quantity,
+      notes: notes || ""
+    };
+    
+    supplier.deliveries.push(newDelivery);
+    await supplier.save();
+    
+    res.status(201).json(newDelivery);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.get("/supplier/:id/deliveries", async (req, res) => {
+  try {
+    const supplier = await Supplier.findById(req.params.id);
+    if (!supplier) {
+      return res.status(404).json({ error: "Supplier not found" });
+    }
+    
+    res.status(200).json(supplier.deliveries || []);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.patch("/supplier/:id/delivery/:deliveryId", async (req, res) => {
+  try {
+    const supplier = await Supplier.findById(req.params.id);
+    if (!supplier) {
+      return res.status(404).json({ error: "Supplier not found" });
+    }
+    
+    const delivery = supplier.deliveries.id(req.params.deliveryId);
+    if (!delivery) {
+      return res.status(404).json({ error: "Delivery not found" });
+    }
+    
+    Object.assign(delivery, req.body);
+    await supplier.save();
+    
+    res.status(200).json(delivery);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.delete("/supplier/:id/delivery/:deliveryId", async (req, res) => {
+  try {
+    const supplier = await Supplier.findById(req.params.id);
+    if (!supplier) {
+      return res.status(404).json({ error: "Supplier not found" });
+    }
+    
+    supplier.deliveries.pull(req.params.deliveryId);
+    await supplier.save();
+    
+    res.status(200).json({ message: "Delivery deleted" });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
 // Manager Routes
 router.post("/manager", async (req, res) => {
   try {

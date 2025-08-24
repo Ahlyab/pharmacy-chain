@@ -63,11 +63,11 @@ const Transactions: React.FC = () => {
   const now = new Date();
   const filteredTransactions = transactions
     .filter((transaction) => {
-      if (!transaction || !transaction.id || !transaction.customer)
+      if (!transaction || !transaction.id)
         return false;
       const matchesSearch =
         transaction.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        transaction.customer.toLowerCase().includes(searchTerm.toLowerCase());
+        (transaction.customer && transaction.customer.toLowerCase().includes(searchTerm.toLowerCase()));
       const matchesStatus =
         selectedStatus === "All" || transaction.status === selectedStatus;
       // Date filter

@@ -72,10 +72,10 @@ const Billing: React.FC = () => {
   // Filter by search, status, and date range
   const now = new Date();
   const filteredBills = bills.filter((bill) => {
-    if (!bill || !bill.id || !bill.customer) return false;
+    if (!bill || !bill.id) return false;
     const matchesSearch =
       bill.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      bill.customer.toLowerCase().includes(searchTerm.toLowerCase());
+      (bill.customer && bill.customer.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesStatus =
       selectedStatus === "All" || bill.status === selectedStatus;
     // Date filter
