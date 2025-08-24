@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { config } from '../../config/env';
 import SupplierDetails from './SupplierDetails';
 
 interface Delivery {
   id: string;
   date: string;
+  deliveryTime: string;
   products: string;
   quantity: number;
   notes?: string;
@@ -38,50 +40,120 @@ const SupplierManagement: React.FC = () => {
   });
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editSupplier, setEditSupplier] = useState<Supplier | null>(null);
+  // Removed unused isSubmitting state
 
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  // Placeholder for fetching suppliers from backend
+  // Fetch suppliers from backend
   useEffect(() => {
-    // TODO: Fetch suppliers from API
-    setSuppliers([
-      {
-        id: '1',
-        name: 'ABC Pharma',
-        contact: '1234567890',
-        address: '123 Main St',
-        productsSupplied: ['Paracetamol', 'Ibuprofen'],
-        deliveries: [],
-      },
-    ]);
+    const fetchSuppliers = async () => {
+      try {
+  const response = await fetch(`${config.apiUrl}/api/supplier`);
+        if (!response.ok) throw new Error("Failed to fetch suppliers");
+        const data = await response.json();
+        setSuppliers(data.map((s: any) => ({
+          id: s._id,
+          name: s.name ?? '',
+          contact: s.contact ?? '',
+          address: s.address ?? '',
+          productsSupplied: s.productsSupplied ?? [],
+          deliveries: s.deliveries ?? [],
+          email: s.email ?? '',
+          company: s.company ?? '',
+          gst: s.gst ?? '',
+          status: s.status ?? 'Active',
+          notes: s.notes ?? '',
+        })));
+      } catch (err) {
+        // Optionally handle error
+      }
+    };
+    fetchSuppliers();
   }, []);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    setNewSupplier({
-      ...newSupplier,
-      [e.target.name]: e.target.value,
-    });
-  };
 
-  const handleAddSupplier = (e: React.FormEvent) => {
+  const handleAddSupplier = async (e: React.FormEvent) => {
     e.preventDefault();
-    const supplier: Supplier = {
-      id: Date.now().toString(),
-      name: newSupplier.name,
-      contact: newSupplier.contact,
-      address: newSupplier.address,
-      productsSupplied: newSupplier.productsSupplied.split(',').map(p => p.trim()),
-      deliveries: [],
-      email: newSupplier.email,
-      company: newSupplier.company,
-      gst: newSupplier.gst,
-      status: newSupplier.status,
-      notes: newSupplier.notes,
-    } as any;
-    setSuppliers([...suppliers, supplier]);
-    setNewSupplier({ name: '', contact: '', address: '', productsSupplied: '', email: '', company: '', gst: '', status: 'Active', notes: '' });
-    setShowAddDialog(false);
-    // TODO: Send supplier to backend
+    try {
+      if (editSupplier) {
+        // Edit supplier
+        const payload = {
+          name: editSupplier.name,
+          contact: editSupplier.contact,
+          address: editSupplier.address,
+          productsSupplied: Array.isArray(editSupplier.productsSupplied)
+            ? editSupplier.productsSupplied
+            : [],
+          deliveries: editSupplier.deliveries || [],
+          email: editSupplier.email,
+          company: editSupplier.company,
+          gst: editSupplier.gst,
+          status: editSupplier.status,
+          notes: editSupplier.notes,
+        };
+        const response = await fetch(`${config.apiUrl}/api/supplier/${editSupplier.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) throw new Error("Failed to update supplier");
+        const updatedSupplier = await response.json();
+        setSuppliers(suppliers.map(s => s.id === editSupplier.id ? {
+          ...s,
+          ...updatedSupplier,
+          id: updatedSupplier._id,
+        } : s));
+        setEditSupplier(null);
+        setShowAddDialog(false);
+      } else {
+        // Add supplier
+        const payload = {
+          name: newSupplier.name,
+          contact: newSupplier.contact,
+          address: newSupplier.address,
+          deliveries: [],
+          email: newSupplier.email ?? '',
+          company: newSupplier.company ?? '',
+          gst: newSupplier.gst ?? '',
+          status: newSupplier.status ?? 'Active',
+          notes: newSupplier.notes ?? '',
+        };
+        const response = await fetch(`${config.apiUrl}/api/supplier`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) throw new Error("Failed to add supplier");
+  await response.json();
+        // Refetch suppliers from backend to ensure all details are shown
+        const refetch = async () => {
+          try {
+            const response = await fetch(`${config.apiUrl}/api/supplier`);
+            if (!response.ok) throw new Error("Failed to fetch suppliers");
+            const data = await response.json();
+            setSuppliers(data.map((s: any) => ({
+              id: s._id,
+              name: s.name ?? '',
+              contact: s.contact ?? '',
+              address: s.address ?? '',
+              productsSupplied: s.productsSupplied ?? [],
+              deliveries: s.deliveries ?? [],
+              email: s.email ?? '',
+              company: s.company ?? '',
+              gst: s.gst ?? '',
+              status: s.status ?? 'Active',
+              notes: s.notes ?? '',
+            })));
+          } catch {}
+        };
+        await refetch();
+        setNewSupplier({ name: '', contact: '', address: '', productsSupplied: '', email: '', company: '', gst: '', status: 'Active', notes: '' });
+        setShowAddDialog(false);
+      }
+    } catch (err) {
+      alert("Error adding/updating supplier");
+    }
   };
 
   if (selectedSupplier) {
@@ -94,23 +166,36 @@ const SupplierManagement: React.FC = () => {
   }
 
   return (
-    <div className="p-6">
+  <div className="p-4 sm:p-6">
       <h2 className="text-2xl font-bold mb-1">Supplier Management</h2>
       <p className="mb-4 text-gray-600">Manage your suppliers and their deliveries</p>
-      <div className="flex justify-between items-center mb-4">
+  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4">
         <input
           type="text"
-          placeholder="Search supplier by name, address, phone..."
+          placeholder="Search supplier by name, address, phone, company, email, GST..."
           className="border p-2 w-1/2"
-          // TODO: Add search logic
+          value={searchTerm}
+          onChange={e => setSearchTerm(e.target.value)}
         />
         <button onClick={() => setShowAddDialog(true)} className="bg-blue-600 text-white px-4 py-2 rounded">+ Add Supplier</button>
       </div>
 
       {/* Supplier Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {suppliers.map(supplier => (
-          <div key={supplier.id} className="bg-white rounded shadow p-4 flex flex-col gap-2 group cursor-pointer"
+  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {suppliers
+          .filter(supplier => {
+            const term = searchTerm.toLowerCase();
+            return (
+              supplier.name.toLowerCase().includes(term) ||
+              supplier.address.toLowerCase().includes(term) ||
+              supplier.contact.toLowerCase().includes(term) ||
+              (supplier.company ?? '').toLowerCase().includes(term) ||
+              (supplier.email ?? '').toLowerCase().includes(term) ||
+              (supplier.gst ?? '').toLowerCase().includes(term)
+            );
+          })
+          .map(supplier => (
+          <div key={supplier.id} className="bg-white rounded shadow p-4 flex flex-col gap-2 group cursor-pointer transition hover:shadow-lg h-full"
             onClick={e => {
               // Only open delivery details if not clicking Edit/Delete
               if ((e.target as HTMLElement).closest('button')) return;
@@ -130,16 +215,30 @@ const SupplierManagement: React.FC = () => {
               <span role="img" aria-label="phone">📞</span> {supplier.contact}
             </div>
             {/* Products removed from card. Deliveries managed in details view. */}
-            <div className="flex gap-2 mt-2">
-              <button type="button" className="bg-blue-100 text-blue-700 px-3 py-1 rounded flex-1"
+            <div className="flex flex-col sm:flex-row gap-2 mt-auto">
+              <button type="button" className="bg-blue-100 text-blue-700 px-3 py-2 rounded flex-1"
                 onClick={e => {
                   e.stopPropagation();
                   setEditSupplier(supplier);
+                  setShowAddDialog(true);
                 }}>
                 Edit
               </button>
-              <button type="button" className="bg-red-100 text-red-700 px-3 py-1 rounded flex-1"
-                onClick={e => e.stopPropagation()}>Delete</button>
+              <button type="button" className="bg-red-100 text-red-700 px-3 py-2 rounded flex-1"
+                onClick={async e => {
+                  e.stopPropagation();
+                  if (window.confirm('Are you sure you want to delete this supplier?')) {
+                    try {
+                      const response = await fetch(`${config.apiUrl}/api/supplier/${supplier.id}`, {
+                        method: 'DELETE',
+                      });
+                      if (!response.ok) throw new Error('Failed to delete supplier');
+                      setSuppliers(suppliers.filter(s => s.id !== supplier.id));
+                    } catch (err) {
+                      alert('Error deleting supplier');
+                    }
+                  }
+                }}>Delete</button>
             </div>
           </div>
         ))}
@@ -147,20 +246,43 @@ const SupplierManagement: React.FC = () => {
 
       {/* Add/Edit Supplier Dialog */}
       {(showAddDialog || editSupplier) && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md relative">
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 px-2">
+          <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 w-full max-w-md relative">
             <button className="absolute top-2 right-2 text-gray-500" onClick={() => { setShowAddDialog(false); setEditSupplier(null); }}>&times;</button>
             <h3 className="text-xl font-bold mb-4">{editSupplier ? 'Edit Supplier' : 'Add Supplier'}</h3>
             <form onSubmit={handleAddSupplier} className="space-y-2">
-              <input type="text" name="name" placeholder="Supplier Name" value={editSupplier ? editSupplier.name : newSupplier.name} onChange={handleInputChange} className="border p-2 w-full" required />
-              <input type="text" name="company" placeholder="Company" value={editSupplier ? editSupplier.company : newSupplier.company} onChange={handleInputChange} className="border p-2 w-full" />
-              <input type="email" name="email" placeholder="Email" value={editSupplier ? editSupplier.email : newSupplier.email} onChange={handleInputChange} className="border p-2 w-full" />
-              <input type="text" name="gst" placeholder="GST Number" value={editSupplier ? editSupplier.gst : newSupplier.gst} onChange={handleInputChange} className="border p-2 w-full" />
-              <input type="text" name="contact" placeholder="Contact Number" value={editSupplier ? editSupplier.contact : newSupplier.contact} onChange={handleInputChange} className="border p-2 w-full" required />
-              <input type="text" name="address" placeholder="Address" value={editSupplier ? editSupplier.address : newSupplier.address} onChange={handleInputChange} className="border p-2 w-full" required />
-              <input type="text" name="productsSupplied" placeholder="Products Supplied (comma separated)" value={editSupplier ? editSupplier.productsSupplied?.join(', ') : newSupplier.productsSupplied} onChange={handleInputChange} className="border p-2 w-full" />
-              <textarea name="notes" placeholder="Notes" value={editSupplier ? editSupplier.notes : newSupplier.notes} onChange={handleInputChange} className="border p-2 w-full" />
-              <select name="status" value={editSupplier ? editSupplier.status : newSupplier.status} onChange={handleInputChange} className="border p-2 w-full">
+              <input type="text" name="name" placeholder="Supplier Name" value={editSupplier ? editSupplier.name : newSupplier.name} onChange={e => {
+                if (editSupplier) setEditSupplier({ ...editSupplier, name: e.target.value });
+                else setNewSupplier({ ...newSupplier, name: e.target.value });
+              }} className="border p-2 w-full" required />
+              <input type="text" name="company" placeholder="Company" value={editSupplier ? editSupplier.company : newSupplier.company} onChange={e => {
+                if (editSupplier) setEditSupplier({ ...editSupplier, company: e.target.value });
+                else setNewSupplier({ ...newSupplier, company: e.target.value });
+              }} className="border p-2 w-full" />
+              <input type="email" name="email" placeholder="Email" value={editSupplier ? editSupplier.email : newSupplier.email} onChange={e => {
+                if (editSupplier) setEditSupplier({ ...editSupplier, email: e.target.value });
+                else setNewSupplier({ ...newSupplier, email: e.target.value });
+              }} className="border p-2 w-full" />
+              <input type="text" name="gst" placeholder="GST Number" value={editSupplier ? editSupplier.gst : newSupplier.gst} onChange={e => {
+                if (editSupplier) setEditSupplier({ ...editSupplier, gst: e.target.value });
+                else setNewSupplier({ ...newSupplier, gst: e.target.value });
+              }} className="border p-2 w-full" />
+              <input type="text" name="contact" placeholder="Contact Number" value={editSupplier ? editSupplier.contact : newSupplier.contact} onChange={e => {
+                if (editSupplier) setEditSupplier({ ...editSupplier, contact: e.target.value });
+                else setNewSupplier({ ...newSupplier, contact: e.target.value });
+              }} className="border p-2 w-full" required />
+              <input type="text" name="address" placeholder="Address" value={editSupplier ? editSupplier.address : newSupplier.address} onChange={e => {
+                if (editSupplier) setEditSupplier({ ...editSupplier, address: e.target.value });
+                else setNewSupplier({ ...newSupplier, address: e.target.value });
+              }} className="border p-2 w-full" required />
+              <textarea name="notes" placeholder="Notes" value={editSupplier ? editSupplier.notes : newSupplier.notes} onChange={e => {
+                if (editSupplier) setEditSupplier({ ...editSupplier, notes: e.target.value });
+                else setNewSupplier({ ...newSupplier, notes: e.target.value });
+              }} className="border p-2 w-full" />
+              <select name="status" value={editSupplier ? editSupplier.status : newSupplier.status} onChange={e => {
+                if (editSupplier) setEditSupplier({ ...editSupplier, status: e.target.value });
+                else setNewSupplier({ ...newSupplier, status: e.target.value });
+              }} className="border p-2 w-full">
                 <option value="Active">Active</option>
                 <option value="Inactive">Inactive</option>
               </select>

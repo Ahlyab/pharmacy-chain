@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 interface Delivery {
   id: string;
   date: string;
+  deliveryTime: string;
   products: string;
   quantity: number;
   notes?: string;
@@ -21,6 +22,7 @@ const SupplierDetails: React.FC<{ supplier: Supplier; onBack: () => void }> = ({
   const [deliveries, setDeliveries] = useState<Delivery[]>(supplier.deliveries || []);
   const [newDelivery, setNewDelivery] = useState({
     date: '',
+    deliveryTime: '',
     products: '',
     quantity: 0,
     notes: '',
@@ -39,12 +41,13 @@ const SupplierDetails: React.FC<{ supplier: Supplier; onBack: () => void }> = ({
     const delivery: Delivery = {
       id: Date.now().toString(),
       date: newDelivery.date,
+      deliveryTime: newDelivery.deliveryTime,
       products: newDelivery.products,
       quantity: Number(newDelivery.quantity),
       notes: newDelivery.notes,
     };
     setDeliveries([...deliveries, delivery]);
-    setNewDelivery({ date: '', products: '', quantity: 0, notes: '' });
+    setNewDelivery({ date: '', deliveryTime: '', products: '', quantity: 0, notes: '' });
     setShowDeliveryDialog(false);
     // TODO: Send delivery to backend
   };
@@ -67,6 +70,7 @@ const SupplierDetails: React.FC<{ supplier: Supplier; onBack: () => void }> = ({
             <h3 className="text-xl font-bold mb-4">Add Delivery</h3>
             <form onSubmit={handleAddDelivery} className="space-y-2">
               <input type="date" name="date" value={newDelivery.date} onChange={handleDeliveryChange} className="border p-2 w-full" required />
+              <input type="time" name="deliveryTime" value={newDelivery.deliveryTime} onChange={handleDeliveryChange} className="border p-2 w-full" required />
               <input type="text" name="products" placeholder="Products" value={newDelivery.products} onChange={handleDeliveryChange} className="border p-2 w-full" required />
               <input type="number" name="quantity" placeholder="Quantity" value={newDelivery.quantity} onChange={handleDeliveryChange} className="border p-2 w-full" required />
               <textarea name="notes" placeholder="Notes" value={newDelivery.notes} onChange={handleDeliveryChange} className="border p-2 w-full" />
@@ -79,6 +83,7 @@ const SupplierDetails: React.FC<{ supplier: Supplier; onBack: () => void }> = ({
         <thead>
           <tr>
             <th className="border px-2 py-1">Date</th>
+            <th className="border px-2 py-1">Time</th>
             <th className="border px-2 py-1">Products</th>
             <th className="border px-2 py-1">Quantity</th>
             <th className="border px-2 py-1">Notes</th>
@@ -88,6 +93,7 @@ const SupplierDetails: React.FC<{ supplier: Supplier; onBack: () => void }> = ({
           {deliveries.map(delivery => (
             <tr key={delivery.id}>
               <td className="border px-2 py-1">{delivery.date}</td>
+              <td className="border px-2 py-1">{delivery.deliveryTime}</td>
               <td className="border px-2 py-1">{delivery.products}</td>
               <td className="border px-2 py-1">{delivery.quantity}</td>
               <td className="border px-2 py-1">{delivery.notes}</td>

@@ -1,5 +1,7 @@
 import express from "express";
 const router = express.Router();
+import warehouseRoutes from "./warehouse.js";
+import Supplier from "../models/Supplier.js";
 import jwt from "jsonwebtoken";
 import Billing from "../models/Billing.js";
 import Inventory from "../models/Inventory.js";
@@ -21,6 +23,45 @@ router.post("/branch", createBranch);
 router.get("/branch", getBranches);
 router.patch("/branch/:id", updateBranch);
 router.delete("/branch/:id", deleteBranch);
+// Supplier Routes
+router.post("/supplier", async (req, res) => {
+  try {
+    const supplier = new Supplier(req.body);
+    await supplier.save();
+    res.status(201).json(supplier);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.get("/supplier", async (req, res) => {
+  try {
+    const suppliers = await Supplier.find();
+    res.status(200).json(suppliers);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.patch("/supplier/:id", async (req, res) => {
+  try {
+    const supplier = await Supplier.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!supplier) return res.status(404).json({ error: "Supplier not found" });
+    res.status(200).json(supplier);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.delete("/supplier/:id", async (req, res) => {
+  try {
+    const supplier = await Supplier.findByIdAndDelete(req.params.id);
+    if (!supplier) return res.status(404).json({ error: "Supplier not found" });
+    res.status(200).json({ message: "Supplier deleted" });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
 // Manager Routes
 router.post("/manager", async (req, res) => {
   try {
@@ -808,5 +849,9 @@ router.delete("/user/:id", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+
+// Warehouse routes
+router.use("/warehouse", warehouseRoutes);
 
 export default router;
