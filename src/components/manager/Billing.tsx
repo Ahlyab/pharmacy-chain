@@ -4,7 +4,6 @@ import jsPDF from "jspdf";
 import { Search, FileText, Download, Eye } from "lucide-react";
 import { VITE_BASE_URL } from "../../data";
 import { useAuth } from "../../contexts/AuthContext";
-// ...existing code...
 
 interface Bill {
   id: string;
@@ -34,6 +33,19 @@ const Billing: React.FC = () => {
     key: string;
     direction: "asc" | "desc";
   } | null>(null);
+
+  // Helper function to format date and time
+  const formatDateTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const formattedHours = hours % 12 || 12;
+    const formattedMinutes = minutes.toString().padStart(2, '0');
+    const formattedDate = date.toLocaleDateString();
+    
+    return `${formattedDate} ${formattedHours}:${formattedMinutes} ${ampm}`;
+  };
 
   useEffect(() => {
     const fetchBills = async () => {
@@ -450,7 +462,7 @@ const Billing: React.FC = () => {
                         {bill.id}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {bill.date}
+                        {formatDateTime(bill.date)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {bill.customer}
@@ -522,7 +534,7 @@ const Billing: React.FC = () => {
               Bill ID: {billToView.id}
             </div>
             <div className="mb-2 text-xs text-gray-500">
-              Date: {billToView.date}
+              Date: {formatDateTime(billToView.date)}
             </div>
             <table className="w-full text-xs mb-4">
               <thead>
@@ -592,7 +604,7 @@ const Billing: React.FC = () => {
               Bill ID: {billToDownload.id}
             </div>
             <div className="mb-2 text-xs text-gray-500">
-              Date: {billToDownload.date}
+              Date: {formatDateTime(billToDownload.date)}
             </div>
             <table className="w-full text-xs mb-4">
               <thead>

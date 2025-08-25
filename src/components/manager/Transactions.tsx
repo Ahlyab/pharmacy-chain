@@ -9,7 +9,6 @@ import {
   Receipt,
   TrendingUp,
 } from "lucide-react";
-// ...existing code...
 
 interface Transaction {
   id: string;
@@ -34,6 +33,19 @@ const Transactions: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
+
+  // Helper function to format date and time
+  const formatDateTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const formattedHours = hours % 12 || 12;
+    const formattedMinutes = minutes.toString().padStart(2, '0');
+    const formattedDate = date.toLocaleDateString();
+    
+    return `${formattedDate} ${formattedHours}:${formattedMinutes} ${ampm}`;
+  };
 
   useEffect(() => {
     const fetchTransactions = async () => {
@@ -325,7 +337,7 @@ const Transactions: React.FC = () => {
                         {transaction.id}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {transaction.date}
+                        {formatDateTime(transaction.date)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {transaction.customer}

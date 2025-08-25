@@ -10,6 +10,8 @@ import POS from "../models/POS.js";
 import User from "../models/User.js";
 import mongoose from "mongoose"; // Added for health check
 import Manager from "../models/Manager.js";
+import multer from "multer";
+import * as XLSX from "xlsx";
 import {
   createBranch,
   getBranches,
@@ -18,6 +20,24 @@ import {
   updateManager,
   deleteManager,
 } from "../controllers/branchController.js";
+
+// Configure multer for file uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
+        file.mimetype === 'application/vnd.ms-excel' ||
+        file.originalname.endsWith('.xlsx') || 
+        file.originalname.endsWith('.xls')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only Excel files are allowed'));
+    }
+  }
+});
 // Branch Routes
 router.post("/branch", createBranch);
 router.get("/branch", getBranches);
@@ -361,6 +381,7 @@ router.post("/inventory", async (req, res) => {
       minStock: Number(req.body.minStock),
       price: Number(req.body.price),
       supplier: req.body.supplier,
+      supplierId: req.body.supplierId, // Include supplierId if provided
       expiryDate: new Date(req.body.expiryDate),
       branchId: req.body.branchId
         ? new mongoose.Types.ObjectId(req.body.branchId)
@@ -385,7 +406,13 @@ router.post("/inventory", async (req, res) => {
     console.log("POST /inventory body:", inventoryData);
     const inventory = new Inventory(inventoryData);
     await inventory.save();
-    res.status(201).json(inventory);
+    
+    // Populate supplier information before sending response
+    const populatedInventory = await Inventory.findById(inventory._id)
+      .populate("supplierId", "name company contact email address gst status")
+      .populate("branchId", "name");
+      
+    res.status(201).json(populatedInventory);
   } catch (error) {
     console.error("Error in POST /inventory:", error);
     res.status(500).json({ error: error.message });
@@ -404,13 +431,24 @@ router.patch("/inventory/:id", async (req, res) => {
     if (updateData.branchId) {
       updateData.branchId = new mongoose.Types.ObjectId(updateData.branchId);
     }
+    if (updateData.supplierId) {
+      updateData.supplierId = new mongoose.Types.ObjectId(updateData.supplierId);
+    }
+    
     const updated = await Inventory.findByIdAndUpdate(id, updateData, {
       new: true,
     });
+    
     if (!updated) {
       return res.status(404).json({ error: "Inventory item not found" });
     }
-    res.status(200).json(updated);
+    
+    // Populate supplier information before sending response
+    const populatedInventory = await Inventory.findById(id)
+      .populate("supplierId", "name company contact email address gst status")
+      .populate("branchId", "name");
+      
+    res.status(200).json(populatedInventory);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -440,10 +478,9 @@ router.get("/inventory", async (req, res) => {
       query.branchId = new mongoose.Types.ObjectId(branchId);
     }
 
-    const inventories = await Inventory.find(query).populate(
-      "branchId",
-      "name"
-    );
+    const inventories = await Inventory.find(query)
+      .populate("branchId", "name")
+      .populate("supplierId", "name company contact email address gst status"); // Populate supplier details
     res.status(200).json(inventories);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -453,11 +490,14 @@ router.get("/inventory", async (req, res) => {
 // Import inventory from Excel
 router.post("/inventory/import", async (req, res) => {
   try {
-    const { branchId } = req.body;
-    const products = req.body;
+    const { branchId, products } = req.body;
 
     if (!Array.isArray(products)) {
       return res.status(400).json({ error: "Products must be an array" });
+    }
+
+    if (!branchId) {
+      return res.status(400).json({ error: "branchId is required" });
     }
 
     const inventoryData = products.map((product) => ({
@@ -479,14 +519,338 @@ router.post("/inventory/import", async (req, res) => {
       sku: product.sku || product.SKU,
     }));
 
+    console.log(`Importing ${inventoryData.length} products for branch: ${branchId}`);
+    
     const result = await Inventory.insertMany(inventoryData);
+    
+    console.log(`Successfully imported ${result.length} products for branch: ${branchId}`);
+    
     res.status(201).json({
-      message: `Imported ${result.length} products`,
+      message: `Imported ${result.length} products to branch`,
       products: result,
+      branchId: branchId
     });
   } catch (error) {
     console.error("Error in inventory import:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      error: error.message,
+      details: "Failed to import products to database"
+    });
+  }
+});
+
+// Excel File Upload and Import Endpoint
+router.post("/inventory/import-excel", upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const { branchId } = req.body;
+    if (!branchId) {
+      return res.status(400).json({ error: "Branch ID is required" });
+    }
+
+    // Process the Excel file
+    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const rawData = XLSX.utils.sheet_to_json(worksheet);
+
+    if (rawData.length === 0) {
+      return res.status(400).json({ error: "Excel file is empty or has no data" });
+    }
+
+    // Check if required columns exist
+    const firstRow = rawData[0];
+    const hasRequiredColumns = firstRow && (
+      (firstRow.SKU || firstRow.sku || firstRow.Sku) &&
+      (firstRow.Quantity || firstRow.quantity || firstRow.QUANTITY) &&
+      (firstRow['Retail price VAT included'] || firstRow['retail price VAT included'] || firstRow.retail_price_VAT_included)
+    );
+
+    if (!hasRequiredColumns) {
+      return res.status(400).json({ 
+        error: "Excel file must contain columns: SKU, Quantity, and Retail price VAT included (case insensitive)" 
+      });
+    }
+
+    // Helper function to check if a column is an ID/UUID column
+    const isIdColumn = (columnName) => {
+      if (!columnName) return false;
+      const lowerCol = columnName.toLowerCase();
+      return lowerCol.includes('id') || 
+             lowerCol.includes('uuid') || 
+             lowerCol.endsWith('_id') || 
+             lowerCol === 'id' ||
+             lowerCol === 'uuid';
+    };
+
+    // Helper function to get the human-readable name column
+    const getReadableColumn = (row, baseName) => {
+      // Priority order: name column first, then base column
+      const nameColumn = row[`${baseName}_name`] || row[`${baseName} name`] || row[`${baseName}Name`];
+      const baseColumn = row[baseName] || row[baseName.charAt(0).toUpperCase() + baseName.slice(1)];
+      
+      return nameColumn || baseColumn || '';
+    };
+
+    console.log(rawData);
+
+    // Process the data - Skip ID columns, keep only human-readable names
+    const jsonData = rawData
+      .map((row) => {
+        // Map only human-readable columns from Excel to our data structure
+        const processedRow = {
+          // Core required fields - Updated mapping based on user requirements
+          //sku has two column choose second on
+          name: row.SKU_1 || row.sku_1 || row.Sku_1 || row.SKU || row.sku || row.Sku || '', // SKU is the product name sku has two column choose second one
+          category: '',
+          stock: parseInt(row.Quantity || row.quantity || row.QUANTITY || '0') || 0,
+          minStock: parseInt(row['Reserved quantity'] || row['reserved quantity'] || row.reserved_quantity || '0') || 0,
+          price: parseFloat(row['Retail price VAT included'] || row['retail price VAT included'] || row.retail_price_VAT_included || '0') || 0,
+          supplier: row['Supplier name'] || row['supplier name'] || row.supplier_name || '', // Use supplier_name for supplier
+          expiryDate: row['Expiration date'] || row['expiration date'] || row.expiration_date || row.Expiry || row.expiry || '',
+          
+          // Human-readable fields only (skip ID columns)
+          supplierCompany: row['supplier_entity_name'] || '',
+          store: row.Store_1 || row.store_1 || row.STORE_1 || row.Store || row.store || row.STORE || '',
+          manufacturer: row['Manufacturer name'] || row['manufacturer name'] || row.manufacturer_name || row.Manufacturer || row.manufacturer || '',
+          composition: row.composition_name || row['Composition name'] || row['composition name'] || row.composition_name || row.COMPOSITION_NAME || row.Composition || row.composition || row.COMPOSITION || '',
+          series: row.Series || row.series || row.SERIES || '',
+          reservedQuantity: parseInt(row['Reserved quantity'] || row['reserved quantity'] || row.reserved_quantity || '0') || 0,
+          purchasePriceExclVAT: parseFloat(row['Purchase price VAT excluded'] || row['purchase price VAT excluded'] || row.purchase_price_VAT_excluded || '0') || 0,
+          vat: parseFloat(row.VAT || row.vat || row.Vat || '0') || 0,
+          retailPriceVATIncluded: parseFloat(row['Retail price VAT included'] || row['retail price VAT included'] || row.retail_price_VAT_included || '0') || 0,
+          divider: row.Divider || row.divider || row.DIVIDER || '',
+          dividerCustom: row['divider_custom'] || row['Divider custom'] || row['divider custom'] || '',
+        };
+        
+        // Process date fields
+        if (processedRow.expiryDate) {
+          const d = new Date(processedRow.expiryDate);
+          if (!isNaN(d.getTime())) {
+            processedRow.expiryDate = d.toISOString().slice(0, 10);
+          } else {
+            // If date parsing fails, set to a default future date
+            const futureDate = new Date();
+            futureDate.setFullYear(futureDate.getFullYear() + 1);
+            processedRow.expiryDate = futureDate.toISOString().slice(0, 10);
+          }
+        } else {
+          // Set default expiry date to 1 year from now
+          const futureDate = new Date();
+          futureDate.setFullYear(futureDate.getFullYear() + 1);
+          processedRow.expiryDate = futureDate.toISOString().slice(0, 10);
+        }
+        
+        return processedRow;
+      })
+      .filter((row) => {
+        // Filter out rows with missing essential data
+        return row.name && row.name.trim() !== '' && 
+               row.stock >= 0 && row.retailPriceVATIncluded > 0;
+      });
+
+    if (jsonData.length === 0) {
+      return res.status(400).json({ error: "No valid products found in the Excel file" });
+    }
+
+    // Get unique suppliers from imported data (using human-readable names)
+    const supplierMap = new Map();
+    for (const product of jsonData) {
+      if (product.supplier && product.supplier.trim() !== '') {
+        const supplierName = product.supplier.trim();
+        if (!supplierMap.has(supplierName)) {
+          // Find the corresponding supplier entity from the original data
+          const originalRow = rawData.find(row => 
+            (row['Supplier name'] || row['supplier name'] || row.supplier_name || '') === supplierName
+          );
+          
+          supplierMap.set(supplierName, {
+            name: supplierName,
+            contact: 'Imported from Excel',
+            address: 'Address to be updated',
+            email: '',
+            company: product.supplierCompany || originalRow?.['Supplier entity'] || originalRow?.['supplier entity'] || originalRow?.supplier_entity || '',
+            gst: '',
+            notes: '',
+            productsSupplied: [],
+            status: 'Active'
+          });
+        }
+      }
+    }
+
+    // Create new suppliers if needed and get their IDs
+    const suppliersToCreate = [];
+    const supplierIdMap = new Map(); // Map supplier name to MongoDB ID
+    
+    for (const [supplierName, supplierDetails] of supplierMap) {
+      const existingSupplier = await Supplier.findOne({ 
+        name: { $regex: new RegExp(`^${supplierName}$`, 'i') } 
+      });
+      
+      if (existingSupplier) {
+        // Supplier exists, use its ID
+        supplierIdMap.set(supplierName, existingSupplier._id);
+      } else {
+        // Supplier doesn't exist, create new one
+        suppliersToCreate.push(supplierDetails);
+      }
+    }
+
+    let suppliersCreated = 0;
+    for (const supplier of suppliersToCreate) {
+      try {
+        const newSupplier = new Supplier(supplier);
+        await newSupplier.save();
+        supplierIdMap.set(supplier.name, newSupplier._id);
+        suppliersCreated++;
+      } catch (error) {
+        console.error(`Failed to create supplier ${supplier.name}:`, error);
+      }
+    }
+
+    // Update jsonData to include supplier IDs
+    jsonData.forEach(product => {
+      if (product.supplier && supplierIdMap.has(product.supplier)) {
+        product.supplierId = supplierIdMap.get(product.supplier);
+      }
+    });
+
+    // Check existing products and prepare update/insert operations
+    const existingProducts = await Inventory.find({ branchId });
+    const productsToUpdate = [];
+    const productsToInsert = [];
+
+    for (const importedProduct of jsonData) {
+      const existingProduct = existingProducts.find((ep) => 
+        ep.name.toLowerCase() === importedProduct.name.toLowerCase() &&
+        ep.composition?.toLowerCase() === importedProduct.composition?.toLowerCase() &&
+        ep.supplier.toLowerCase() === importedProduct.supplier.toLowerCase()
+      );
+      
+      if (existingProduct) {
+        // Product exists, prepare for update with stock addition
+        const updatedProduct = {
+          id: existingProduct._id,
+          name: importedProduct.name,
+          category: importedProduct.category,
+          stock: existingProduct.stock + importedProduct.stock, // Add to existing stock
+          minStock: importedProduct.minStock, // Update min stock
+          price: importedProduct.retailPriceVATIncluded, // Use VAT included price
+          supplier: importedProduct.supplier, // Keep supplier name for display
+          supplierId: importedProduct.supplierId, // Store supplier MongoDB ID
+          expiryDate: importedProduct.expiryDate,
+          // Update all other human-readable fields (no ID fields)
+          store: importedProduct.store,
+          manufacturer: importedProduct.manufacturer,
+          composition: importedProduct.composition,
+          series: importedProduct.series,
+          reservedQuantity: importedProduct.reservedQuantity,
+          purchasePriceExclVAT: importedProduct.purchasePriceExclVAT,
+          vat: importedProduct.vat,
+          retailPriceVATIncluded: importedProduct.retailPriceVATIncluded,
+          divider: importedProduct.divider,
+          dividerCustom: importedProduct.dividerCustom,
+        };
+        productsToUpdate.push(updatedProduct);
+      } else {
+        // New product, prepare for insert with all human-readable fields
+        const newProduct = {
+          name: importedProduct.name,
+          category: importedProduct.category,
+          stock: importedProduct.stock,
+          minStock: importedProduct.minStock,
+          price: importedProduct.retailPriceVATIncluded, // Use VAT included price
+          supplier: importedProduct.supplier, // Keep supplier name for display
+          supplierId: importedProduct.supplierId, // Store supplier MongoDB ID
+          expiryDate: importedProduct.expiryDate,
+          branchId: branchId,
+          // Include all human-readable fields (no ID fields)
+          store: importedProduct.store,
+          manufacturer: importedProduct.manufacturer,
+          composition: importedProduct.composition,
+          series: importedProduct.series,
+          reservedQuantity: importedProduct.reservedQuantity,
+          purchasePriceExclVAT: importedProduct.purchasePriceExclVAT,
+          vat: importedProduct.vat,
+          retailPriceVATIncluded: importedProduct.retailPriceVATIncluded,
+          divider: importedProduct.divider,
+          dividerCustom: importedProduct.dividerCustom,
+        };
+        productsToInsert.push(newProduct);
+      }
+    }
+
+    // Process updates and inserts
+    let updatedCount = 0;
+    let insertedCount = 0;
+
+    // Update existing products
+    for (const product of productsToUpdate) {
+      try {
+        const { id, ...updateData } = product;
+        await Inventory.findByIdAndUpdate(id, { ...updateData, branchId });
+        updatedCount++;
+      } catch (error) {
+        console.error(`Failed to update product ${product.name}:`, error);
+      }
+    }
+
+    // Insert new products
+    if (productsToInsert.length > 0) {
+      try {
+        const insertResult = await Inventory.insertMany(productsToInsert);
+        insertedCount = insertResult.length;
+      } catch (error) {
+        throw new Error(`Error inserting new products: ${error.message}`);
+      }
+    }
+
+    // Calculate summary statistics
+    const importedCategories = [...new Set(jsonData.map(p => p.category))];
+    const totalValue = jsonData.reduce((sum, p) => sum + (p.stock * p.retailPriceVATIncluded), 0);
+    const totalPurchaseValue = jsonData.reduce((sum, p) => sum + (p.stock * p.purchasePriceExclVAT), 0);
+    const uniqueSuppliers = [...new Set(jsonData.map(p => p.supplier).filter(Boolean))];
+    const uniqueManufacturers = [...new Set(jsonData.map(p => p.manufacturer).filter(Boolean))];
+    const uniqueStores = [...new Set(jsonData.map(p => p.store).filter(Boolean))];
+
+    // Calculate stock addition for updated products
+    let totalStockAdded = 0;
+    if (productsToUpdate.length > 0) {
+      totalStockAdded = productsToUpdate.reduce((sum, p) => {
+        const originalProduct = existingProducts.find((ep) => ep._id.toString() === p.id);
+        return sum + (p.stock - (originalProduct?.stock || 0));
+      }, 0);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully imported ${jsonData.length} products`,
+      summary: {
+        totalProcessed: jsonData.length,
+        productsUpdated: updatedCount,
+        productsAdded: insertedCount,
+        stockAdded: totalStockAdded,
+        suppliersCreated: suppliersCreated,
+        uniqueSuppliers: uniqueSuppliers.length,
+        uniqueManufacturers: uniqueManufacturers.length,
+        uniqueStores: uniqueStores.length,
+        categories: importedCategories,
+        totalRetailValue: totalValue,
+        totalPurchaseValue: totalPurchaseValue,
+        dataEfficiency: "ID columns skipped, only human-readable names stored"
+      }
+    });
+
+  } catch (error) {
+    console.error('Excel import error:', error);
+    res.status(500).json({ 
+      error: "Error processing Excel file", 
+      details: error.message 
+    });
   }
 });
 
@@ -577,242 +941,6 @@ router.get("/pos", async (req, res) => {
 });
 
 // get recent sales
-/**
- * [
-    {
-        "_id": "689b95a9c6b9ec713585dac4",
-        "transactionId": "TXN1755026857866",
-        "items": [
-            {
-                "productId": "68986203d34b42afbb8a99e6",
-                "quantity": 1,
-                "price": 2,
-                "_id": "689b95a9c6b9ec713585dac5"
-            },
-            {
-                "productId": "6898622ad34b42afbb8a99e8",
-                "quantity": 1,
-                "price": 8,
-                "_id": "689b95a9c6b9ec713585dac6"
-            },
-            {
-                "productId": "689862bbd34b42afbb8a99ec",
-                "quantity": 1,
-                "price": 1,
-                "_id": "689b95a9c6b9ec713585dac7"
-            }
-        ],
-        "totalAmount": 11,
-        "customerName": "Usman",
-        "cashierName": "Arslan",
-        "paymentMethod": "cash",
-        "date": "2025-08-12T19:27:37.866Z",
-        "__v": 0
-    },
-    {
-        "_id": "689b1177f951fd5b2ca23017",
-        "transactionId": "TXN1754993015445",
-        "items": [
-            {
-                "productId": "68986203d34b42afbb8a99e6",
-                "quantity": 1,
-                "price": 2,
-                "_id": "689b1177f951fd5b2ca23018"
-            }
-        ],
-        "totalAmount": 2,
-        "customerName": "Ahlyab Asad",
-        "cashierName": "Arslan",
-        "paymentMethod": "cash",
-        "date": "2025-08-12T10:03:35.445Z",
-        "__v": 0
-    },
-    {
-        "_id": "6899f131831b144770d4a83f",
-        "transactionId": "TXN1754919217590",
-        "items": [
-            {
-                "productId": "6898622ad34b42afbb8a99e8",
-                "quantity": 2,
-                "price": 8,
-                "_id": "6899f131831b144770d4a840"
-            },
-            {
-                "productId": "6898627bd34b42afbb8a99ea",
-                "quantity": 1,
-                "price": 4,
-                "_id": "6899f131831b144770d4a841"
-            },
-            {
-                "productId": "689862bbd34b42afbb8a99ec",
-                "quantity": 1,
-                "price": 1,
-                "_id": "6899f131831b144770d4a842"
-            },
-            {
-                "productId": "68986203d34b42afbb8a99e6",
-                "quantity": 1,
-                "price": 2,
-                "_id": "6899f131831b144770d4a843"
-            }
-        ],
-        "totalAmount": 23,
-        "paymentMethod": "cash",
-        "date": "2025-08-11T13:33:37.591Z",
-        "__v": 0
-    },
-    {
-        "_id": "6899094757e3a1a7453c20e7",
-        "transactionId": "TXN1754859847597",
-        "items": [
-            {
-                "productId": "68986203d34b42afbb8a99e6",
-                "quantity": 1,
-                "price": 2,
-                "_id": "6899094757e3a1a7453c20e8"
-            },
-            {
-                "productId": "689862bbd34b42afbb8a99ec",
-                "quantity": 1,
-                "price": 1,
-                "_id": "6899094757e3a1a7453c20e9"
-            }
-        ],
-        "totalAmount": 3,
-        "paymentMethod": "cash",
-        "date": "2025-08-10T21:04:07.597Z",
-        "__v": 0
-    },
-    {
-        "_id": "689906a557e3a1a7453c20dc",
-        "transactionId": "TXN1754859173190",
-        "items": [
-            {
-                "productId": "6898622ad34b42afbb8a99e8",
-                "quantity": 4,
-                "price": 8,
-                "_id": "689906a557e3a1a7453c20dd"
-            },
-            {
-                "productId": "689862bbd34b42afbb8a99ec",
-                "quantity": 1,
-                "price": 1,
-                "_id": "689906a557e3a1a7453c20de"
-            },
-            {
-                "productId": "6898627bd34b42afbb8a99ea",
-                "quantity": 1,
-                "price": 4,
-                "_id": "689906a557e3a1a7453c20df"
-            }
-        ],
-        "totalAmount": 37,
-        "customerName": "customer tester",
-        "paymentMethod": "cash",
-        "date": "2025-08-10T20:52:53.190Z",
-        "__v": 0
-    },
-    {
-        "_id": "6898f635f1b3b772952c9632",
-        "transactionId": "TXN1754854965836",
-        "items": [
-            {
-                "productId": "689864c0fd782f5852a48fef",
-                "quantity": 1,
-                "price": 6,
-                "_id": "6898f635f1b3b772952c9633"
-            }
-        ],
-        "totalAmount": 6,
-        "customerName": "Fahad",
-        "cashierName": "Arslan",
-        "paymentMethod": "card",
-        "date": "2025-08-10T19:42:45.836Z",
-        "__v": 0
-    },
-    {
-        "_id": "6898f60cf1b3b772952c95d2",
-        "transactionId": "TXN1754854924775",
-        "items": [
-            {
-                "productId": "68986203d34b42afbb8a99e6",
-                "quantity": 1,
-                "price": 2,
-                "_id": "6898f60cf1b3b772952c95d3"
-            }
-        ],
-        "totalAmount": 2,
-        "customerName": "Sulayman",
-        "cashierName": "Arslan",
-        "paymentMethod": "cash",
-        "date": "2025-08-10T19:42:04.775Z",
-        "__v": 0
-    },
-    {
-        "_id": "6898f5b9ad5bd578eae15e36",
-        "transactionId": "TXN1754854841777",
-        "items": [
-            {
-                "productId": "6898627bd34b42afbb8a99ea",
-                "quantity": 1,
-                "price": 4,
-                "_id": "6898f5b9ad5bd578eae15e37"
-            }
-        ],
-        "totalAmount": 4,
-        "customerName": "Ghulam Mustfa",
-        "cashierName": "Arslan",
-        "date": "2025-08-10T19:40:41.777Z",
-        "__v": 0
-    },
-    {
-        "_id": "6898f55bad5bd578eae15ddf",
-        "transactionId": "TXN1754854747175",
-        "items": [
-            {
-                "productId": "689862bbd34b42afbb8a99ec",
-                "quantity": 1,
-                "price": 1,
-                "_id": "6898f55bad5bd578eae15de0"
-            },
-            {
-                "productId": "6898622ad34b42afbb8a99e8",
-                "quantity": 1,
-                "price": 8,
-                "_id": "6898f55bad5bd578eae15de1"
-            }
-        ],
-        "totalAmount": 9,
-        "customerName": "Fazeel Ahmad",
-        "cashierName": "Arslan",
-        "date": "2025-08-10T19:39:07.176Z",
-        "__v": 0
-    },
-    {
-        "_id": "6898eaca7bec02d1b3fc58c1",
-        "transactionId": "TXN1754852041985",
-        "items": [
-            {
-                "productId": "689862bbd34b42afbb8a99ec",
-                "quantity": 1,
-                "price": 1,
-                "_id": "6898eaca7bec02d1b3fc58c2"
-            },
-            {
-                "productId": "689864c0fd782f5852a48fef",
-                "quantity": 1,
-                "price": 6,
-                "productId": "6898eaca7bec02d1b3fc58c3"
-            }
-        ],
-        "totalAmount": 7,
-        "customerName": "ppppp",
-        "cashierName": "Arslan",
-        "date": "2025-08-10T18:54:01.985Z",
-        "__v": 0
-    }
-]
- */
 router.get("/sales/recent", async (req, res) => {
   try {
     const { branchId } = req.query;
@@ -929,7 +1057,6 @@ router.delete("/user/:id", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
 
 // Warehouse routes
 router.use("/warehouse", warehouseRoutes);
