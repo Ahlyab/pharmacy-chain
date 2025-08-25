@@ -100,9 +100,15 @@ const POS: React.FC = () => {
               : item
           )
         );
+      } else {
+        alert(`Cannot add more ${product.name}. Only ${product.stock} available in stock.`);
       }
     } else {
-      setCart([...cart, { ...product, quantity: 1 }]);
+      if (product.stock > 0) {
+        setCart([...cart, { ...product, quantity: 1 }]);
+      } else {
+        alert(`${product.name} is out of stock.`);
+      }
     }
   };
 
@@ -115,6 +121,8 @@ const POS: React.FC = () => {
         setCart(
           cart.map((item) => (item._id === _id ? { ...item, quantity } : item))
         );
+      } else if (product && quantity > product.stock) {
+        alert(`Cannot set quantity to ${quantity}. Only ${product.stock} available in stock.`);
       }
     }
   };
@@ -145,6 +153,14 @@ const POS: React.FC = () => {
     if (!user?.branchId) {
       alert("Branch information not available. Please contact administrator.");
       return;
+    }
+
+    // Validate stock quantities before proceeding
+    for (const item of cart) {
+      if (item.quantity > item.stock) {
+        alert(`Cannot complete transaction: ${item.name} quantity (${item.quantity}) exceeds available stock (${item.stock})`);
+        return;
+      }
     }
 
     // Branch and company info (replace with real data as needed)
@@ -180,6 +196,10 @@ const POS: React.FC = () => {
       if (!response.ok) {
         throw new Error("Failed to save transaction");
       }
+
+      // Update stock quantities after successful transaction
+      await updateStockQuantities();
+
       // Show bill using the original transaction object (with all display info)
       setLastTransaction({
         customer: customerName.trim() ? customerName : COMPANY_NAME,
@@ -204,6 +224,48 @@ const POS: React.FC = () => {
     }
   };
 
+  // Function to update stock quantities after sale
+  const updateStockQuantities = async () => {
+    try {
+      // Update stock for each item in cart
+      for (const item of cart) {
+        const newStock = item.stock - item.quantity;
+        
+        const updateResponse = await fetch(`${BASE_URL}/inventory/${item._id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            stock: newStock
+          }),
+        });
+
+        if (!updateResponse.ok) {
+          console.error(`Failed to update stock for product ${item.name}`);
+          // Log the error but don't fail the entire transaction
+          // The stock will be refreshed when fetchProducts() is called
+        }
+      }
+
+      // Update local products state to reflect new stock quantities
+      setProducts(prevProducts => 
+        prevProducts.map(product => {
+          const cartItem = cart.find(item => item._id === product._id);
+          if (cartItem) {
+            return {
+              ...product,
+              stock: product.stock - cartItem.quantity
+            };
+          }
+          return product;
+        })
+      );
+    } catch (error) {
+      console.error("Error updating stock quantities:", error);
+      // Even if stock update fails, we don't want to fail the entire transaction
+      // The stock will be refreshed when fetchProducts() is called
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
@@ -224,6 +286,62 @@ const POS: React.FC = () => {
           />
           <div className="text-xs text-gray-400 mt-1">
             This will remain until changed or cleared.
+          </div>
+        </div>
+      </div>
+
+      {/* Stock Summary */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="flex items-center space-x-3">
+            <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-gray-900">{products.length}</div>
+              <div className="text-sm text-gray-600">Total Products</div>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <div className="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-gray-900">
+                {products.filter(p => p.stock > (p.minStock || 5)).length}
+              </div>
+              <div className="text-sm text-gray-600">In Stock</div>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <div className="w-12 h-12 bg-yellow-600 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-gray-900">
+                {products.filter(p => p.stock > 0 && p.stock <= (p.minStock || 5)).length}
+              </div>
+              <div className="text-sm text-gray-600">Low Stock</div>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <div className="w-12 h-12 bg-red-600 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-gray-900">
+                {products.filter(p => p.stock === 0).length}
+              </div>
+              <div className="text-sm text-gray-600">Out of Stock</div>
+            </div>
           </div>
         </div>
       </div>
@@ -286,6 +404,8 @@ const POS: React.FC = () => {
                         className={
                           "border border-gray-200 rounded-lg p-4 transition-shadow " +
                           (isExpired ? "bg-red-100 " : "") +
+                          (product.stock === 0 ? "bg-gray-100 " : "") +
+                          (product.stock > 0 && product.stock <= (product.minStock || 5) ? "bg-yellow-100 " : "") +
                           (!isOutOfStock && !isExpired
                             ? "hover:shadow-md cursor-pointer"
                             : "opacity-60 cursor-not-allowed")
@@ -306,16 +426,23 @@ const POS: React.FC = () => {
                           </span>
                           <span
                             className={
-                              "text-xs " +
+                              "text-xs font-semibold " +
                               (isOutOfStock
-                                ? "text-red-600 font-semibold"
-                                : "text-gray-500")
+                                ? "text-red-600"
+                                : product.stock <= (product.minStock || 5)
+                                ? "text-yellow-600"
+                                : "text-green-600")
                             }
                           >
                             {product.stock} in stock
                           </span>
                         </div>
                         {expiryDisplay}
+                        {product.stock > 0 && product.stock <= (product.minStock || 5) && (
+                          <div className="text-xs text-yellow-600 font-semibold mt-1">
+                            ⚠️ Low Stock Alert
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -353,6 +480,9 @@ const POS: React.FC = () => {
                       </h4>
                       <p className="text-xs text-gray-500">
                         ${item.price} each
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        Stock: {item.stock - item.quantity} remaining
                       </p>
                     </div>
                     <div className="flex items-center space-x-2">

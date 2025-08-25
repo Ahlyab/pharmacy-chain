@@ -8,17 +8,21 @@ import ManagerManagement from './admin/ManagerManagement';
 import InventoryOverview from './admin/InventoryOverview';
 import TransactionHistory from './admin/TransactionHistory';
 import Dashboard from './admin/Dashboard';
+import SupplierManagement from './admin/SupplierManagement';
+import WarehouseManagement from './admin/WarehouseManagement';
 
 const AdminDashboard: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const menuItems = [
-    { name: 'Dashboard', path: '/admin', icon: 'BarChart3' },
-    { name: 'Branches', path: '/admin/branches', icon: 'Building2' },
-    { name: 'Managers', path: '/admin/managers', icon: 'Users' },
-    { name: 'Inventory Overview', path: '/admin/inventory', icon: 'Package' },
-    { name: 'Transactions', path: '/admin/transactions', icon: 'Receipt' },
-  ];
+    const menuItems = [
+      { name: 'Dashboard', path: '/admin', icon: 'BarChart3' },
+      { name: 'Branches', path: '/admin/branches', icon: 'Building2' },
+      { name: 'Managers', path: '/admin/managers', icon: 'Users' },
+      { name: 'Inventory Overview', path: '/admin/inventory', icon: 'Package' },
+      { name: 'Transactions', path: '/admin/transactions', icon: 'Receipt' },
+      { name: 'Suppliers', path: '/admin/suppliers', icon: 'ShoppingCart' },
+      { name: 'Warehouse', path: '/admin/warehouse', icon: 'FileText' },
+    ];
 
   const [loading, setLoading] = useState(true);
   useEffect(() => {
@@ -44,6 +48,8 @@ const AdminDashboard: React.FC = () => {
               <Route path="/managers" element={<ManagerManagement />} />
               <Route path="/inventory" element={<InventoryOverview />} />
               <Route path="/transactions" element={<TransactionHistory />} />
+              <Route path="/suppliers" element={<SupplierManagement />} />
+              <Route path="/warehouse" element={<WarehouseManagement />} />
               <Route path="*" element={<Navigate to="/admin" />} />
             </Routes>
           </GreenProgressBar>

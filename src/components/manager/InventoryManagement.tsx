@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, ChevronDown } from "lucide-react";
 import { VITE_BASE_URL } from "../../data";
 import Swal from "sweetalert2";
 import { useAuth } from "../../contexts/AuthContext";
-import * as XLSX from "xlsx";
-// ...existing code...
 
 interface Product {
   id: string;
@@ -14,10 +12,21 @@ interface Product {
   minStock: number;
   price: number;
   supplier: string;
+  supplierId?: string; // MongoDB supplier ID reference
   expiryDate: string;
   status?: string;
   branchId?: { _id: string; name: string } | string;
-  // ...other optional fields...
+  // Human-readable fields only (no ID/UUID columns)
+  store?: string;
+  manufacturer?: string;
+  composition?: string;
+  series?: string;
+  reservedQuantity?: number;
+  purchasePriceExclVAT?: number;
+  vat?: number;
+  retailPriceVATIncluded?: number;
+  divider?: string;
+  dividerCustom?: string;
 }
 
 interface FormProduct {
@@ -28,7 +37,30 @@ interface FormProduct {
   minStock: number;
   price: number;
   supplier: string;
+  supplierId?: string; // MongoDB supplier ID reference
   expiryDate: string;
+  // Human-readable fields for form
+  store?: string;
+  manufacturer?: string;
+  composition?: string;
+  series?: string;
+  reservedQuantity?: number;
+  purchasePriceExclVAT?: number;
+  vat?: number;
+  retailPriceVATIncluded?: number;
+}
+
+interface Supplier {
+  id: string;
+  name: string;
+  contact: string;
+  address: string;
+  productsSupplied: string[];
+  email?: string;
+  company?: string;
+  gst?: string;
+  status?: string;
+  notes?: string;
 }
 
 const initialFormState: FormProduct = {
@@ -39,21 +71,34 @@ const initialFormState: FormProduct = {
   minStock: 0,
   price: 0,
   supplier: "",
+  supplierId: "",
   expiryDate: "",
+  store: "",
+  manufacturer: "",
+  composition: "",
+  series: "",
+  reservedQuantity: 0,
+  purchasePriceExclVAT: 0,
+  vat: 0,
+  retailPriceVATIncluded: 0,
 };
 
 const InventoryManagement: React.FC = () => {
   const { user } = useAuth();
   const BASE_URL = VITE_BASE_URL;
   const [products, setProducts] = useState<Product[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState<FormProduct>(initialFormState);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [expiryFilter, setExpiryFilter] = useState("All");
-  const [branchFilter, setBranchFilter] = useState("All");
+  const [branchFilter, setBranchFilter] = useState<string>("All");
+  const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
+  const [supplierSearch, setSupplierSearch] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const supplierDropdownRef = useRef<HTMLDivElement>(null);
 
   // Helper to add status to a product
   const addStatus = (product: any) => {
@@ -64,82 +109,240 @@ const InventoryManagement: React.FC = () => {
     return { ...product, status, id: product._id || product.id };
   };
 
+  // Fetch suppliers from backend
+  const fetchSuppliers = async () => {
+    try {
+      const response = await fetch(`${BASE_URL}/supplier`);
+      if (!response.ok) throw new Error("Failed to fetch suppliers");
+      const data = await response.json();
+      setSuppliers(data.map((s: any) => ({
+        id: s._id,
+        name: s.name ?? '',
+        contact: s.contact ?? '',
+        address: s.address ?? '',
+        productsSupplied: s.productsSupplied ?? [],
+        email: s.email ?? '',
+        company: s.company ?? '',
+        gst: s.gst ?? '',
+        status: s.status ?? 'Active',
+        notes: s.notes ?? '',
+      })));
+    } catch (err) {
+      console.error("Error fetching suppliers:", err);
+    }
+  };
+
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const url = user?.branchId
-          ? `${BASE_URL}/inventory?branchId=${user.branchId}`
-          : `${BASE_URL}/inventory`;
-
-        const response = await fetch(url);
+        // Always fetch all products
+        const response = await fetch(`${BASE_URL}/inventory`);
         if (!response.ok) throw new Error("Failed to fetch products");
         const data = await response.json();
         setProducts(data.map(addStatus));
+
+        // Set branchFilter to user's branch name if available
+        if (user?.branchId && data.length > 0) {
+          // Find branch name for manager's branch
+          const branchProduct = data.find(
+            (p: any) =>
+              typeof p.branchId === "object" && p.branchId?._id === user.branchId
+          );
+          const branchName = branchProduct?.branchId?.name ?? null;
+          if (branchName) {
+            setBranchFilter(branchName);
+          }
+        }
       } catch (err) {
         alert("Error fetching products: " + (err as Error).message);
       }
     };
+    
     fetchProducts();
+    fetchSuppliers();
   }, [BASE_URL, user?.branchId]);
 
-  // Import handler for Excel/PDF
+  // Handle clicking outside supplier dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (supplierDropdownRef.current && !supplierDropdownRef.current.contains(event.target as Node)) {
+        setShowSupplierDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Filter suppliers based on search
+  const filteredSuppliers = suppliers.filter(supplier =>
+    supplier.name.toLowerCase().includes(supplierSearch.toLowerCase())
+  ).slice(0, 10); // Limit to 10 results for better performance
+
+  // Handle supplier selection
+  const handleSupplierSelect = (supplier: Supplier) => {
+    setFormData({ ...formData, supplier: supplier.name });
+    setShowSupplierDropdown(false);
+    setSupplierSearch(supplier.name);
+  };
+
+  // Handle supplier input change
+  const handleSupplierInputChange = (value: string) => {
+    setFormData({ ...formData, supplier: value });
+    setSupplierSearch(value);
+    if (value.trim() === '') {
+      setShowSupplierDropdown(false);
+    } else {
+      setShowSupplierDropdown(true);
+    }
+  };
+
+  // Handle supplier input focus
+  const handleSupplierFocus = () => {
+    setShowSupplierDropdown(true);
+  };
+
+  // Handle supplier input key down
+  const handleSupplierKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      setShowSupplierDropdown(false);
+      // If there's a search term and no exact match, use it as the supplier
+      if (supplierSearch.trim() && !suppliers.some(s => s.name.toLowerCase() === supplierSearch.toLowerCase())) {
+        setFormData({ ...formData, supplier: supplierSearch.trim() });
+      }
+    }
+  };
+
+  // Import handler for Excel/PDF - Updated to use backend processing
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    if (!user?.branchId) {
+      Swal.fire({
+        title: 'Branch Access Required',
+        text: 'You must be logged in to a specific branch to import products.',
+        icon: 'warning',
+        confirmButtonText: 'OK'
+      });
+      return;
+    }
+    
     const fileType = file.name.split(".").pop()?.toLowerCase();
     if (fileType === "xlsx" || fileType === "xls") {
       try {
-        const reader = new FileReader();
-        reader.onload = async (evt) => {
-          const data = new Uint8Array(evt.target?.result as ArrayBuffer);
-          const workbook = XLSX.read(data, { type: "array" });
-          const sheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils
-            .sheet_to_json(worksheet)
-            .map((row: any) => {
-              const dateFields = ["expiryDate"];
-              dateFields.forEach((field) => {
-                if (row[field]) {
-                  const d = new Date(row[field]);
-                  if (!isNaN(d.getTime())) {
-                    row[field] = d.toISOString().slice(0, 10);
-                  }
-                }
-              });
-              return row;
-            });
-          try {
-            const response = await fetch(`${BASE_URL}/inventory/import`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                products: jsonData,
-                branchId: user?.branchId,
-              }),
-            });
-            if (!response.ok)
-              throw new Error("Failed to import products to database");
-            alert("Excel import successful! Rows: " + jsonData.length);
-            // Refresh products after import
-            const productsResponse = await fetch(`${BASE_URL}/inventory`);
-            if (productsResponse.ok) {
-              const productsData = await productsResponse.json();
-              setProducts(productsData.map(addStatus));
-            }
-          } catch (err) {
-            alert("Error saving imported products: " + (err as Error).message);
+        // Show confirmation dialog
+        const confirmResult = await Swal.fire({
+          title: 'Confirm Import',
+          text: `Import products from "${file.name}" to your branch?`,
+          html: `
+            <div class="text-left">
+              <p><strong>File:</strong> ${file.name}</p>
+              <p><strong>Size:</strong> ${(file.size / 1024 / 1024).toFixed(2)} MB</p>
+              <p><strong>Branch:</strong> ${user.branchId}</p>
+              <p><strong>Smart Import:</strong> Existing products will be updated, new ones will be added</p>
+              <p><strong>Stock Update:</strong> Stock will be ADDED to existing products (not replaced)</p>
+              <p><strong>Supplier Management:</strong> New suppliers will be automatically created</p>
+              <p><strong>Field Mapping:</strong> SKU → Product Name, Supplier Name → Supplier, Supplier Entity → Company, Manufacturer Name → Manufacturer, etc.</p>
+              <p><strong>Matching criteria:</strong> Product Name + Composition + Supplier</p>
+            </div>
+          `,
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonText: 'Yes, Import',
+          cancelButtonText: 'Cancel',
+          confirmButtonColor: '#3085d6',
+          cancelButtonColor: '#d33'
+        });
+        
+        if (!confirmResult.isConfirmed) {
+          return;
+        }
+        
+        // Show loading message
+        Swal.fire({
+          title: 'Uploading and Processing...',
+          text: 'Please wait while we process your Excel file...',
+          allowOutsideClick: false,
+          didOpen: () => {
+            Swal.showLoading();
           }
-        };
-        reader.readAsArrayBuffer(file);
+        });
+        
+        // Create FormData and send to backend
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('branchId', user.branchId);
+        
+        const response = await fetch(`${BASE_URL}/inventory/import-excel`, {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        
+        // Show success message with summary
+        const { summary } = result;
+        Swal.fire({
+          title: 'Import Successful!',
+          html: `
+            <div class="text-left">
+              <p><strong>Total processed:</strong> ${summary.totalProcessed}</p>
+              <p><strong>Products updated:</strong> ${summary.productsUpdated}</p>
+              <p><strong>Products added:</strong> ${summary.productsAdded}</p>
+              <p><strong>Stock added to existing products:</strong> +${summary.stockAdded}</p>
+              <p><strong>Suppliers created:</strong> ${summary.suppliersCreated}</p>
+              <p><strong>Unique suppliers:</strong> ${summary.uniqueSuppliers}</p>
+              <p><strong>Unique manufacturers:</strong> ${summary.uniqueManufacturers}</p>
+              <p><strong>Categories:</strong> ${summary.categories.join(', ')}</p>
+              <p><strong>Total retail value:</strong> $${summary.totalRetailValue.toFixed(2)}</p>
+              <p><strong>Total purchase value:</strong> $${summary.totalPurchaseValue.toFixed(2)}</p>
+              <p><strong>Branch:</strong> ${user.branchId}</p>
+            </div>
+          `,
+          icon: 'success',
+          confirmButtonText: 'Great!'
+        });
+        
+        // Refresh products after import
+        const productsResponse = await fetch(`${BASE_URL}/inventory`);
+        if (productsResponse.ok) {
+          const productsData = await productsResponse.json();
+          setProducts(productsData.map(addStatus));
+          
+          // Ensure branch filter is set to current branch
+          if (user?.branchId && productsData.length > 0) {
+            const branchProduct = productsData.find(
+              (p: any) =>
+                typeof p.branchId === "object" && p.branchId?._id === user.branchId
+            );
+            const branchName = branchProduct?.branchId?.name ?? null;
+            if (branchName) {
+              setBranchFilter(branchName);
+            }
+          }
+        }
+        
       } catch (err) {
-        alert("Error importing Excel: " + (err as Error).message);
+        Swal.fire({
+          title: 'Import Failed',
+          text: "Error processing Excel file: " + (err as Error).message,
+          icon: 'error',
+          confirmButtonText: 'OK'
+        });
       }
     } else if (fileType === "pdf") {
-      alert("PDF import is not supported in browser. Please use Excel file.");
+      alert("PDF import is not supported. Please use Excel file.");
     } else {
       alert(
-        "Unsupported file type. Please upload an Excel (.xlsx/.xls) or PDF file."
+        "Unsupported file type. Please upload an Excel (.xlsx/.xls) file."
       );
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -148,6 +351,64 @@ const InventoryManagement: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // First, check if supplier exists or create it
+      let supplierId = formData.supplierId;
+      
+      if (!supplierId && formData.supplier.trim()) {
+        // Check if supplier exists
+        const supplierResponse = await fetch(`${BASE_URL}/supplier`);
+        if (supplierResponse.ok) {
+          const existingSuppliers = await supplierResponse.json();
+          const existingSupplier = existingSuppliers.find(
+            (s: any) => s.name.toLowerCase() === formData.supplier.toLowerCase()
+          );
+          
+          if (existingSupplier) {
+            supplierId = existingSupplier._id;
+          } else {
+            // Create new supplier
+            const newSupplierData = {
+              name: formData.supplier,
+              contact: 'Added from inventory form',
+              address: 'Address to be updated',
+              email: '',
+              company: '',
+              gst: '',
+              notes: '',
+              productsSupplied: [],
+              status: 'Active'
+            };
+            
+            const createSupplierResponse = await fetch(`${BASE_URL}/supplier`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(newSupplierData),
+            });
+            
+            if (createSupplierResponse.ok) {
+              const newSupplier = await createSupplierResponse.json();
+              supplierId = newSupplier._id;
+            }
+          }
+        }
+      }
+
+      // Prepare the data to send, including all new fields
+      const submitData = {
+        ...formData,
+        branchId: user?.branchId,
+        supplierId: supplierId, // Include supplier ID
+        // Ensure all new fields are included
+        store: formData.store || '',
+        manufacturer: formData.manufacturer || '',
+        composition: formData.composition || '',
+        series: formData.series || '',
+        reservedQuantity: formData.reservedQuantity || 0,
+        purchasePriceExclVAT: formData.purchasePriceExclVAT || 0,
+        vat: formData.vat || 0,
+        retailPriceVATIncluded: formData.retailPriceVATIncluded || formData.price || 0,
+      };
+
       if (editingProduct) {
         // Update product in backend
         const response = await fetch(
@@ -155,7 +416,7 @@ const InventoryManagement: React.FC = () => {
           {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...formData, branchId: user?.branchId }),
+            body: JSON.stringify(submitData),
           }
         );
         if (!response.ok) throw new Error("Failed to update product");
@@ -164,18 +425,32 @@ const InventoryManagement: React.FC = () => {
         const response = await fetch(`${BASE_URL}/inventory`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...formData, branchId: user?.branchId }),
+          body: JSON.stringify(submitData),
         });
         if (!response.ok) throw new Error("Failed to add product");
       }
       setShowModal(false);
       setEditingProduct(null);
       setFormData(initialFormState);
-      // Refresh products after add/edit
+      setShowSupplierDropdown(false);
+      setSupplierSearch("");
+      // Refresh products after add/edit (fetch all products)
       const response = await fetch(`${BASE_URL}/inventory`);
       if (response.ok) {
         const data = await response.json();
         setProducts(data.map(addStatus));
+        // Reset branchFilter to manager's branch name if available
+        if (user?.branchId && data.length > 0) {
+          // Find branch name for manager's branch
+          const branchProduct = data.find(
+            (p: any) =>
+              typeof p.branchId === "object" && p.branchId?._id === user.branchId
+          );
+          const branchName = branchProduct?.branchId?.name ?? null;
+          if (branchName) {
+            setBranchFilter(branchName);
+          }
+        }
       }
     } catch (err) {
       alert("Error: " + (err as Error).message);
@@ -188,7 +463,31 @@ const InventoryManagement: React.FC = () => {
     if (expiryDate && expiryDate.length > 10) {
       expiryDate = new Date(expiryDate).toISOString().slice(0, 10);
     }
-    setFormData({ ...product, expiryDate });
+    
+    // Populate form with all available fields
+    setFormData({
+      id: product.id,
+      name: product.name,
+      category: product.category,
+      stock: product.stock,
+      minStock: product.minStock,
+      price: product.price,
+      supplier: product.supplier,
+      supplierId: product.supplierId || '', // Ensure supplierId is populated
+      expiryDate: expiryDate,
+      // New fields
+      store: product.store || '',
+      manufacturer: product.manufacturer || '',
+      composition: product.composition || '',
+      series: product.series || '',
+      reservedQuantity: product.reservedQuantity || 0,
+      purchasePriceExclVAT: product.purchasePriceExclVAT || 0,
+      vat: product.vat || 0,
+      retailPriceVATIncluded: product.retailPriceVATIncluded || product.price || 0,
+    });
+    
+    setSupplierSearch(product.supplier);
+    setShowSupplierDropdown(false);
     setShowModal(true);
   };
 
@@ -233,9 +532,54 @@ const InventoryManagement: React.FC = () => {
     return "Valid";
   };
 
-  // Get unique categories for dropdown
+  // Download Excel template
+  // const downloadExcelTemplate = () => {
+  //   const templateData = [
+  //     {
+  //       name: "Paracetamol 500mg",
+  //       category: "Pain Relief",
+  //       stock: 100,
+  //       minStock: 20,
+  //       price: 5.99,
+  //       supplier: "ABC Pharmaceuticals",
+  //       expiryDate: "2025-12-31"
+  //     },
+  //     {
+  //       name: "Amoxicillin 250mg",
+  //       category: "Antibiotics",
+  //       stock: 50,
+  //       minStock: 10,
+  //       price: 12.99,
+  //       supplier: "XYZ Medical",
+  //       expiryDate: "2025-10-15"
+  //     }
+  //   ];
+
+  //   const ws = XLSX.utils.json_to_sheet(templateData);
+  //   const wb = XLSX.utils.book_new();
+  //   XLSX.utils.book_append_sheet(wb, ws, "Products");
+    
+  //   // Auto-size columns
+  //   const colWidths = [
+  //     { wch: 20 }, // name
+  //     { wch: 15 }, // category
+  //     { wch: 10 }, // stock
+  //     { wch: 10 }, // minStock
+  //     { wch: 10 }, // price
+  //     { wch: 20 }, // supplier
+  //     { wch: 12 }  // expiryDate
+  //   ];
+  //   ws['!cols'] = colWidths;
+    
+  //   XLSX.writeFile(wb, "inventory_template.xlsx");
+  // };
+
+  // Get unique categories for dropdown - updated to include composition
   const categories = Array.from(
-    new Set(products.map((p) => p.category).filter(Boolean))
+    new Set([
+      ...products.map((p) => p.category).filter(Boolean),
+      ...products.map((p) => p.composition).filter(Boolean)
+    ])
   );
 
   // Get unique branches for dropdown
@@ -257,18 +601,23 @@ const InventoryManagement: React.FC = () => {
     const matchesSearch =
       product.name.toLowerCase().includes(searchLower) ||
       product.category.toLowerCase().includes(searchLower) ||
-      product.supplier.toLowerCase().includes(searchLower);
+      product.supplier.toLowerCase().includes(searchLower) ||
+      (product.manufacturer && product.manufacturer.toLowerCase().includes(searchLower)) ||
+      (product.composition && product.composition.toLowerCase().includes(searchLower)) ||
+      (product.series && product.series.toLowerCase().includes(searchLower));
     const matchesCategory =
-      categoryFilter === "All" || product.category === categoryFilter;
+      categoryFilter.toLowerCase() === "all" || 
+      product.category.toLowerCase() === categoryFilter.toLowerCase() ||
+      (product.composition && product.composition.toLowerCase() === categoryFilter.toLowerCase());
     const expiryStatus = getExpiryStatus(product.expiryDate);
     const matchesExpiry =
-      expiryFilter === "All" || expiryStatus === expiryFilter;
+      expiryFilter.toLowerCase() === "all" || expiryStatus.toLowerCase() === expiryFilter.toLowerCase();
     const productBranchName =
       typeof product.branchId === "object" && product.branchId?.name
         ? product.branchId.name
         : "N/A";
     const matchesBranch =
-      branchFilter === "All" || productBranchName === branchFilter;
+      branchFilter.toLowerCase() === "all" || productBranchName.toLowerCase() === branchFilter.toLowerCase();
     return matchesSearch && matchesCategory && matchesExpiry && matchesBranch;
   });
 
@@ -289,10 +638,12 @@ const InventoryManagement: React.FC = () => {
   const badgeClass =
     "inline-flex flex-col items-center justify-center px-3 py-1 rounded-full text-xs font-bold w-fit min-w-[80px] text-center break-words";
 
-  // Modal field array
+  // Modal field array - updated to include new fields
   const modalFields = [
     { key: "name", label: "Product Name", inputType: "text", isRequired: true },
     { key: "category", label: "Category", inputType: "text", isRequired: true },
+    { key: "manufacturer", label: "Manufacturer", inputType: "text", isRequired: false },
+    { key: "composition", label: "Composition", inputType: "text", isRequired: false },
     { key: "stock", label: "Stock", inputType: "number", isRequired: true },
     {
       key: "minStock",
@@ -301,13 +652,17 @@ const InventoryManagement: React.FC = () => {
       isRequired: true,
     },
     { key: "price", label: "Price ($)", inputType: "number", isRequired: true },
-    { key: "supplier", label: "Supplier", inputType: "text", isRequired: true },
     {
       key: "expiryDate",
       label: "Expiry Date",
       inputType: "date",
       isRequired: true,
     },
+    { key: "series", label: "Series", inputType: "text", isRequired: false },
+    { key: "reservedQuantity", label: "Reserved Quantity", inputType: "number", isRequired: false },
+    { key: "purchasePriceExclVAT", label: "Purchase Price (excl. VAT)", inputType: "number", isRequired: false },
+    { key: "vat", label: "VAT (%)", inputType: "number", isRequired: false },
+    { key: "retailPriceVATIncluded", label: "Retail Price (incl. VAT)", inputType: "number", isRequired: false },
     // ...add other fields as needed...
   ];
 
@@ -374,18 +729,6 @@ const InventoryManagement: React.FC = () => {
             />
           </div>
           <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="All">All</option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-          <select
             value={expiryFilter}
             onChange={(e) => setExpiryFilter(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -411,7 +754,7 @@ const InventoryManagement: React.FC = () => {
         <div className="flex gap-2 ml-auto items-center">
           <input
             type="file"
-            accept=".xlsx,.xls,.pdf"
+            accept=".xlsx,.xls"
             ref={fileInputRef}
             style={{ display: "none" }}
             onChange={handleImportFile}
@@ -424,20 +767,24 @@ const InventoryManagement: React.FC = () => {
           </button>
           <button
             className="px-4 py-2 bg-blue-600 text-white rounded shadow hover:bg-blue-700 flex items-center gap-2"
-            onClick={() => setShowModal(true)}
+            onClick={() => {
+              setShowModal(true);
+              setShowSupplierDropdown(false);
+              setSupplierSearch("");
+            }}
           >
             Add Product
           </button>
         </div>
       </div>
 
-      {/* Table - lucide-react icons for actions, name wraps, no horizontal scroll */}
-      <div className="rounded-lg shadow-lg">
+      {/* Table - lucide-react icons for actions, name wraps, actions always visible */}
+      <div className="rounded-lg shadow-lg overflow-x-auto">
         <table className="min-w-full bg-white">
           <thead className="bg-blue-50">
             <tr>
-              <th className="px-4 py-2 text-left">Name</th>
-              <th className="px-4 py-2 text-left">Category</th>
+              <th className="px-4 py-2 text-left max-w-[180px] w-1/6">Name</th>
+              <th className="px-4 py-2 text-left">Manufacturer</th>
               <th className="px-4 py-2 text-left">Stock</th>
               <th className="px-4 py-2 text-left">Min Stock</th>
               <th className="px-4 py-2 text-left">Price</th>
@@ -445,26 +792,26 @@ const InventoryManagement: React.FC = () => {
               <th className="px-4 py-2 text-left">Branch</th>
               <th className="px-4 py-2 text-left">Expiry Date</th>
               <th className="px-4 py-2 text-center">Status</th>
-              <th className="px-4 py-2 text-center">Actions</th>
+              <th className="px-4 py-2 text-center w-[110px]">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={10} className="text-center py-4">
+                <td colSpan={11} className="text-center py-4">
                   No products found.
                 </td>
               </tr>
             ) : (
               filteredProducts.map((product) => (
                 <tr key={product.id} className="hover:bg-blue-50 transition">
-                  <td className="px-4 py-2 font-semibold text-left break-words whitespace-normal max-w-[180px]">
+                  <td className="px-4 py-2 font-semibold text-left break-words whitespace-normal max-w-[180px] w-1/6">
                     {product.name}
                   </td>
-                  <td className="px-4 py-2 text-left">{product.category}</td>
+                  <td className="px-4 py-2 text-left text-sm">{product.manufacturer || 'N/A'}</td>
                   <td className="px-4 py-2 text-left">{product.stock}</td>
                   <td className="px-4 py-2 text-left">{product.minStock}</td>
-                  <td className="px-4 py-2 text-left">{product.price}</td>
+                  <td className="px-4 py-2 text-left">${product.price}</td>
                   <td className="px-4 py-2 text-left">{product.supplier}</td>
                   <td className="px-4 py-2 text-left">
                     {typeof product.branchId === "object" &&
@@ -486,7 +833,7 @@ const InventoryManagement: React.FC = () => {
                       {product.status}
                     </span>
                   </td>
-                  <td className="px-4 py-2 text-center flex gap-1 justify-center">
+                  <td className="px-4 py-2 text-center flex gap-1 justify-center w-[110px] shrink-0">
                     <button
                       className="p-1 rounded-full hover:bg-blue-100"
                       title="Edit"
@@ -540,6 +887,83 @@ const InventoryManagement: React.FC = () => {
                   />
                 </div>
               ))}
+              
+              {/* Custom Supplier Field */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Supplier *
+                </label>
+                <div className="relative" ref={supplierDropdownRef}>
+                  <input
+                    type="text"
+                    required
+                    value={formData.supplier}
+                    onChange={(e) => handleSupplierInputChange(e.target.value)}
+                    onFocus={handleSupplierFocus}
+                    onKeyDown={handleSupplierKeyDown}
+                    placeholder="Search or enter supplier name..."
+                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSupplierDropdown(!showSupplierDropdown);
+                      if (!showSupplierDropdown) {
+                        if (formData.supplier.trim() === '') {
+                          setSupplierSearch("");
+                        } else {
+                          setSupplierSearch(formData.supplier);
+                        }
+                      } else {
+                        setSupplierSearch("");
+                      }
+                    }}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    title="Toggle supplier dropdown"
+                  >
+                    <ChevronDown className={`w-4 h-4 transition-transform ${showSupplierDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  {/* Supplier Dropdown */}
+                  {showSupplierDropdown && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                      {filteredSuppliers.length > 0 ? (
+                        filteredSuppliers.map((supplier) => (
+                          <div
+                            key={supplier.id}
+                            className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                            onClick={() => handleSupplierSelect(supplier)}
+                          >
+                            <div className="font-medium">{supplier.name}</div>
+                            {supplier.company && (
+                              <div className="text-sm text-gray-500">{supplier.company}</div>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-gray-500">
+                          {supplierSearch ? "No suppliers found" : "Type to search suppliers"}
+                        </div>
+                      )}
+                      {supplierSearch && supplierSearch.trim() !== formData.supplier && (
+                        <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                          Press Enter to add "{supplierSearch}" as new supplier
+                        </div>
+                      )}
+                      {!supplierSearch && suppliers.length > 0 && (
+                        <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                          {suppliers.length} suppliers available
+                        </div>
+                      )}
+                      {suppliers.length === 0 && (
+                        <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                          No suppliers in system. Type to add new supplier.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
               <div className="flex justify-end space-x-2 pt-2">
                 <button
                   type="button"
@@ -547,6 +971,8 @@ const InventoryManagement: React.FC = () => {
                     setShowModal(false);
                     setEditingProduct(null);
                     setFormData(initialFormState);
+                    setShowSupplierDropdown(false);
+                    setSupplierSearch("");
                   }}
                   className="px-4 py-2 bg-gray-300 rounded"
                 >

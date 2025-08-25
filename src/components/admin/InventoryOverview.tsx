@@ -62,7 +62,17 @@ const InventoryOverview: React.FC = () => {
   // Dynamically get branches from inventory
   const branches = [
     "All",
-    ...Array.from(new Set(inventory.map((item) => item.branch))),
+    ...Array.from(
+      new Set(
+        inventory.map((item) =>
+          item.branch && typeof item.branch === "object" && item.branch.name
+            ? item.branch.name
+            : typeof item.branch === "string"
+            ? item.branch
+            : "Unknown"
+        )
+      )
+    ),
   ];
   const statuses = ["All", "In Stock", "Low Stock", "Out of Stock"];
 
@@ -70,8 +80,12 @@ const InventoryOverview: React.FC = () => {
     const matchesSearch =
       item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.category.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesBranch =
-      selectedBranch === "All" || item.branch.name === selectedBranch;
+    const branchName = item.branch && typeof item.branch === "object" && item.branch.name
+      ? item.branch.name
+      : typeof item.branch === "string"
+      ? item.branch
+      : "Unknown";
+    const matchesBranch = selectedBranch === "All" || branchName === selectedBranch;
     const matchesStatus =
       selectedStatus === "All" || item.status === selectedStatus;
 
@@ -167,11 +181,8 @@ const InventoryOverview: React.FC = () => {
             className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {branches.map((branch) => (
-              <option
-                key={typeof branch === "string" ? branch : branch.id}
-                value={typeof branch === "string" ? branch : branch.name}
-              >
-                {typeof branch === "string" ? branch : branch.name}
+              <option key={branch} value={branch}>
+                {branch}
               </option>
             ))}
           </select>
@@ -234,7 +245,11 @@ const InventoryOverview: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {item.branch.name}
+                      {item.branch && typeof item.branch === "object" && item.branch.name
+                        ? item.branch.name
+                        : typeof item.branch === "string"
+                        ? item.branch
+                        : "Unknown"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
