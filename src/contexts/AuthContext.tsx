@@ -128,9 +128,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     localStorage.removeItem("token"); // Clear token on logout
   };
 
-  if (loading) {
-    return <div>Loading...</div>;
-  }
   return (
     <AuthContext.Provider value={{ user, login, logout }}>
       {children}

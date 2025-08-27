@@ -10,6 +10,7 @@ import POS from "../models/POS.js";
 import User from "../models/User.js";
 import mongoose from "mongoose"; // Added for health check
 import Manager from "../models/Manager.js";
+import Return from "../models/Return.js";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import {
@@ -359,7 +360,6 @@ router.post("/inventory", async (req, res) => {
   try {
     const requiredFields = [
       "name",
-      "category",
       "stock",
       "minStock",
       "price",
@@ -376,7 +376,7 @@ router.post("/inventory", async (req, res) => {
     // Convert types
     const inventoryData = {
       name: req.body.name,
-      category: req.body.category,
+      category: req.body.category || '', // Make category optional
       stock: Number(req.body.stock),
       minStock: Number(req.body.minStock),
       price: Number(req.body.price),
@@ -386,6 +386,15 @@ router.post("/inventory", async (req, res) => {
       branchId: req.body.branchId
         ? new mongoose.Types.ObjectId(req.body.branchId)
         : undefined,
+      // Include all new fields
+      store: req.body.store || '',
+      manufacturer: req.body.manufacturer || '',
+      composition: req.body.composition || '',
+      series: req.body.series || '',
+      reservedQuantity: Number(req.body.reservedQuantity) || 0,
+      purchasePriceExclVAT: Number(req.body.purchasePriceExclVAT) || 0,
+      vat: Number(req.body.vat) || 0,
+      retailPriceVATIncluded: Number(req.body.retailPriceVATIncluded) || Number(req.body.price) || 0,
     };
 
     // Validate numbers
@@ -908,6 +917,7 @@ router.get("/transaction", async (req, res) => {
         name: item.productId?.name || "",
         quantity: item.quantity,
         price: item.price,
+        productId: item.productId?._id || item.productId, // Include productId for returns
       })),
       total: t.totalAmount,
       paymentMethod: t.paymentMethod || "N/A",
@@ -915,6 +925,153 @@ router.get("/transaction", async (req, res) => {
       branchName: t.branchId?.name || "N/A",
     }));
     res.status(200).json(mapped);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Return Transaction Route
+router.post("/transaction/return", async (req, res) => {
+  try {
+    const { transactionId, branchId, returnItems, returnReason, returnAmount, originalTotal, processedBy } = req.body;
+
+    console.log("Return request received:", { transactionId, branchId, returnItems, returnReason, returnAmount, originalTotal, processedBy });
+
+    if (!transactionId || !branchId || !returnItems || !returnReason || !processedBy) {
+      return res.status(400).json({ 
+        error: "Missing required fields",
+        received: { transactionId, branchId, returnItems, returnReason, returnAmount, originalTotal, processedBy },
+        required: ["transactionId", "branchId", "returnItems", "returnReason", "processedBy"]
+      });
+    }
+
+    if (!Array.isArray(returnItems) || returnItems.length === 0) {
+      return res.status(400).json({ error: "returnItems must be a non-empty array" });
+    }
+
+    // Validate each return item
+    for (const item of returnItems) {
+      if (!item.name || typeof item.returnQuantity !== 'number' || item.returnQuantity < 0) {
+        return res.status(400).json({ 
+          error: "Invalid return item data",
+          item,
+          required: { name: "string", returnQuantity: "number >= 0" }
+        });
+      }
+    }
+
+    // Find the original transaction
+    const transaction = await Transaction.findOne({ transactionId });
+    if (!transaction) {
+      return res.status(404).json({ error: "Transaction not found" });
+    }
+
+    // Validate that transaction belongs to the specified branch
+    if (transaction.branchId.toString() !== branchId) {
+      return res.status(403).json({ error: "Transaction does not belong to this branch" });
+    }
+
+    // Check if transaction is already returned
+    if (transaction.status === "Returned") {
+      return res.status(400).json({ error: "Transaction is already returned" });
+    }
+
+    // Process return items and update inventory
+    for (const returnItem of returnItems) {
+      if (returnItem.returnQuantity > 0) {
+        // Find the product in inventory by name and branch
+        let inventoryItem = await Inventory.findOne({ 
+          name: returnItem.name,
+          branchId: new mongoose.Types.ObjectId(branchId)
+        });
+
+        if (!inventoryItem) {
+          // Try to find by name only (in case branchId is not set)
+          inventoryItem = await Inventory.findOne({ 
+            name: returnItem.name
+          });
+        }
+
+        if (inventoryItem) {
+          // Increase stock quantity (reverse the sale)
+          inventoryItem.stock += returnItem.returnQuantity;
+          await inventoryItem.save();
+          console.log(`Updated inventory for ${returnItem.name}: +${returnItem.returnQuantity} units (new total: ${inventoryItem.stock})`);
+        } else {
+          console.log(`Inventory item not found for product: ${returnItem.name} in branch: ${branchId}`);
+          // You could optionally create a new inventory item here if needed
+          // For now, we'll just log it and continue
+        }
+      }
+    }
+
+    // Update transaction status to "Returned"
+    transaction.status = "Returned";
+    await transaction.save();
+
+    // Create return record
+    const returnRecord = new Return({
+      originalTransactionId: transactionId,
+      branchId: new mongoose.Types.ObjectId(branchId),
+      returnReason,
+      returnItems: returnItems.filter(item => item.returnQuantity > 0).map(item => ({
+        productId: item.productId,
+        name: item.name,
+        originalQuantity: item.originalQuantity,
+        returnQuantity: item.returnQuantity,
+        price: item.price,
+        returnAmount: item.returnQuantity * item.price,
+      })),
+      totalReturnAmount: returnAmount,
+      originalTotalAmount: originalTotal,
+      processedBy,
+    });
+
+    await returnRecord.save();
+
+    // Count successful inventory updates
+    let inventoryUpdates = 0;
+    for (const returnItem of returnItems) {
+      if (returnItem.returnQuantity > 0) {
+        const inventoryItem = await Inventory.findOne({ 
+          name: returnItem.name,
+          branchId: new mongoose.Types.ObjectId(branchId)
+        });
+        if (inventoryItem) inventoryUpdates++;
+      }
+    }
+
+    res.status(200).json({ 
+      message: "Return processed successfully",
+      returnAmount,
+      returnedItems: returnItems.filter(item => item.returnQuantity > 0),
+      returnId: returnRecord._id,
+      inventoryUpdates,
+      totalItems: returnItems.filter(item => item.returnQuantity > 0).length
+    });
+
+  } catch (error) {
+    console.error("Return processing error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get Return History Route
+router.get("/returns", async (req, res) => {
+  try {
+    const { branchId } = req.query;
+    let query = {};
+
+    // If branchId is provided, filter by it
+    if (branchId && branchId !== "all") {
+      query.branchId = new mongoose.Types.ObjectId(branchId);
+    }
+
+    const returns = await Return.find(query)
+      .populate("branchId", "name")
+      .sort({ returnDate: -1 });
+
+    res.status(200).json(returns);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

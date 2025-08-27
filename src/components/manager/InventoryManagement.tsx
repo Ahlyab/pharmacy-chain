@@ -3,6 +3,7 @@ import { Pencil, Trash2, ChevronDown } from "lucide-react";
 import { VITE_BASE_URL } from "../../data";
 import Swal from "sweetalert2";
 import { useAuth } from "../../contexts/AuthContext";
+import Spinner from "../Spinner";
 
 interface Product {
   id: string;
@@ -66,7 +67,7 @@ interface Supplier {
 const initialFormState: FormProduct = {
   id: "",
   name: "",
-  category: "",
+  category: "", // Keep empty category for backend compatibility
   stock: 0,
   minStock: 0,
   price: 0,
@@ -92,13 +93,20 @@ const InventoryManagement: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState<FormProduct>(initialFormState);
   const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("All");
   const [expiryFilter, setExpiryFilter] = useState("All");
   const [branchFilter, setBranchFilter] = useState<string>("All");
   const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
   const [supplierSearch, setSupplierSearch] = useState("");
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const [productSearch, setProductSearch] = useState("");
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const supplierDropdownRef = useRef<HTMLDivElement>(null);
+  const productDropdownRef = useRef<HTMLDivElement>(null);
+  const [sortColumn, setSortColumn] = useState<string>("name");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   // Helper to add status to a product
   const addStatus = (product: any) => {
@@ -135,6 +143,7 @@ const InventoryManagement: React.FC = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
+        setIsLoading(true);
         // Always fetch all products
         const response = await fetch(`${BASE_URL}/inventory`);
         if (!response.ok) throw new Error("Failed to fetch products");
@@ -155,6 +164,8 @@ const InventoryManagement: React.FC = () => {
         }
       } catch (err) {
         alert("Error fetching products: " + (err as Error).message);
+      } finally {
+        setIsLoading(false);
       }
     };
     
@@ -162,11 +173,14 @@ const InventoryManagement: React.FC = () => {
     fetchSuppliers();
   }, [BASE_URL, user?.branchId]);
 
-  // Handle clicking outside supplier dropdown
+  // Handle clicking outside dropdowns
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (supplierDropdownRef.current && !supplierDropdownRef.current.contains(event.target as Node)) {
         setShowSupplierDropdown(false);
+      }
+      if (productDropdownRef.current && !productDropdownRef.current.contains(event.target as Node)) {
+        setShowProductDropdown(false);
       }
     };
 
@@ -214,6 +228,59 @@ const InventoryManagement: React.FC = () => {
       }
     }
   };
+
+  // Filter products based on search for dropdown
+  const filteredProductsForDropdown = products.filter(product =>
+    product.name.toLowerCase().includes(productSearch.toLowerCase())
+  ).slice(0, 10); // Limit to 10 results for better performance
+
+  // Handle product selection from dropdown
+  const handleProductSelect = (product: Product) => {
+    setFormData({
+      ...formData,
+      name: product.name,
+      manufacturer: product.manufacturer || '',
+      composition: product.composition || '',
+      series: product.series || '',
+      supplier: product.supplier,
+      supplierId: product.supplierId || '',
+      price: product.price,
+      purchasePriceExclVAT: product.purchasePriceExclVAT || 0,
+      retailPriceVATIncluded: product.retailPriceVATIncluded || product.price || 0,
+      vat: product.vat || 0,
+    });
+    setShowProductDropdown(false);
+    setProductSearch(product.name);
+  };
+
+  // Handle product input change
+  const handleProductInputChange = (value: string) => {
+    setFormData({ ...formData, name: value });
+    setProductSearch(value);
+    if (value.trim() === '') {
+      setShowProductDropdown(false);
+    } else {
+      setShowProductDropdown(true);
+    }
+  };
+
+  // Handle product input focus
+  const handleProductFocus = () => {
+    setShowProductDropdown(true);
+  };
+
+  // Handle product input key down
+  const handleProductKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      setShowProductDropdown(false);
+      // If there's a search term and no exact match, use it as the product name
+      if (productSearch.trim() && !products.some(p => p.name.toLowerCase() === productSearch.toLowerCase())) {
+        setFormData({ ...formData, name: productSearch.trim() });
+      }
+    }
+  };
+
+
 
   // Import handler for Excel/PDF - Updated to use backend processing
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -312,6 +379,7 @@ const InventoryManagement: React.FC = () => {
         });
         
         // Refresh products after import
+        setIsLoading(true);
         const productsResponse = await fetch(`${BASE_URL}/inventory`);
         if (productsResponse.ok) {
           const productsData = await productsResponse.json();
@@ -329,6 +397,7 @@ const InventoryManagement: React.FC = () => {
             }
           }
         }
+        setIsLoading(false);
         
       } catch (err) {
         Swal.fire({
@@ -350,7 +419,84 @@ const InventoryManagement: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     try {
+      // Check if product already exists (same name, composition, and supplier)
+      const existingProduct = products.find(p => 
+        p.name.toLowerCase() === formData.name.toLowerCase() &&
+        p.composition?.toLowerCase() === formData.composition?.toLowerCase() &&
+        p.supplier.toLowerCase() === formData.supplier.toLowerCase()
+      );
+
+      if (existingProduct && !editingProduct) {
+        // Product exists, ask user if they want to update stock or create new
+        const result = await Swal.fire({
+          title: 'Product Already Exists',
+          text: `A product with name "${formData.name}" already exists. Would you like to add stock to the existing product or create a new one?`,
+          icon: 'question',
+          showCancelButton: true,
+          showDenyButton: true,
+          confirmButtonText: 'Add Stock to Existing',
+          denyButtonText: 'Create New Product',
+          cancelButtonText: 'Cancel',
+          confirmButtonColor: '#3085d6',
+          denyButtonColor: '#28a745',
+          cancelButtonColor: '#d33'
+        });
+
+        if (result.isDenied) {
+          // User wants to create new product, continue with normal flow
+        } else if (result.isConfirmed) {
+          // User wants to add stock to existing product
+          const newStock = existingProduct.stock + formData.stock;
+          const updateData = {
+            stock: newStock,
+            price: formData.price, // Update price if different
+            purchasePriceExclVAT: formData.purchasePriceExclVAT,
+            retailPriceVATIncluded: formData.retailPriceVATIncluded,
+            vat: formData.vat,
+            expiryDate: formData.expiryDate,
+            minStock: formData.minStock,
+          };
+
+          const response = await fetch(`${BASE_URL}/inventory/${existingProduct.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(updateData),
+          });
+
+          if (!response.ok) throw new Error("Failed to update existing product");
+
+          Swal.fire({
+            title: 'Stock Updated!',
+            text: `Added ${formData.stock} units to existing product. New total: ${newStock}`,
+            icon: 'success',
+            confirmButtonText: 'Great!'
+          });
+
+          setShowModal(false);
+          setEditingProduct(null);
+          setFormData(initialFormState);
+          setShowSupplierDropdown(false);
+          setSupplierSearch("");
+          setShowProductDropdown(false);
+          setProductSearch("");
+
+          // Refresh products
+          const productsResponse = await fetch(`${BASE_URL}/inventory`);
+          if (productsResponse.ok) {
+            const data = await productsResponse.json();
+            setProducts(data.map(addStatus));
+          }
+          setIsSubmitting(false);
+          return;
+        } else {
+          // User cancelled
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
       // First, check if supplier exists or create it
       let supplierId = formData.supplierId;
       
@@ -393,21 +539,22 @@ const InventoryManagement: React.FC = () => {
         }
       }
 
-      // Prepare the data to send, including all new fields
-      const submitData = {
-        ...formData,
-        branchId: user?.branchId,
-        supplierId: supplierId, // Include supplier ID
-        // Ensure all new fields are included
-        store: formData.store || '',
-        manufacturer: formData.manufacturer || '',
-        composition: formData.composition || '',
-        series: formData.series || '',
-        reservedQuantity: formData.reservedQuantity || 0,
-        purchasePriceExclVAT: formData.purchasePriceExclVAT || 0,
-        vat: formData.vat || 0,
-        retailPriceVATIncluded: formData.retailPriceVATIncluded || formData.price || 0,
-      };
+             // Prepare the data to send, including all new fields
+       const submitData = {
+         ...formData,
+         branchId: user?.branchId,
+         supplierId: supplierId, // Include supplier ID
+         category: '', // Send empty category to maintain compatibility
+         // Ensure all new fields are included
+         store: formData.store || '',
+         manufacturer: formData.manufacturer || '',
+         composition: formData.composition || '',
+         series: formData.series || '',
+         reservedQuantity: formData.reservedQuantity || 0,
+         purchasePriceExclVAT: formData.purchasePriceExclVAT || 0,
+         vat: formData.vat || 0,
+         retailPriceVATIncluded: formData.retailPriceVATIncluded || formData.price || 0,
+       };
 
       if (editingProduct) {
         // Update product in backend
@@ -434,6 +581,8 @@ const InventoryManagement: React.FC = () => {
       setFormData(initialFormState);
       setShowSupplierDropdown(false);
       setSupplierSearch("");
+      setShowProductDropdown(false);
+      setProductSearch("");
       // Refresh products after add/edit (fetch all products)
       const response = await fetch(`${BASE_URL}/inventory`);
       if (response.ok) {
@@ -454,6 +603,8 @@ const InventoryManagement: React.FC = () => {
       }
     } catch (err) {
       alert("Error: " + (err as Error).message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -464,30 +615,32 @@ const InventoryManagement: React.FC = () => {
       expiryDate = new Date(expiryDate).toISOString().slice(0, 10);
     }
     
-    // Populate form with all available fields
-    setFormData({
-      id: product.id,
-      name: product.name,
-      category: product.category,
-      stock: product.stock,
-      minStock: product.minStock,
-      price: product.price,
-      supplier: product.supplier,
-      supplierId: product.supplierId || '', // Ensure supplierId is populated
-      expiryDate: expiryDate,
-      // New fields
-      store: product.store || '',
-      manufacturer: product.manufacturer || '',
-      composition: product.composition || '',
-      series: product.series || '',
-      reservedQuantity: product.reservedQuantity || 0,
-      purchasePriceExclVAT: product.purchasePriceExclVAT || 0,
-      vat: product.vat || 0,
-      retailPriceVATIncluded: product.retailPriceVATIncluded || product.price || 0,
-    });
+         // Populate form with all available fields
+     setFormData({
+       id: product.id,
+       name: product.name,
+       category: '', // Set empty category since we removed it from UI
+       stock: product.stock,
+       minStock: product.minStock,
+       price: product.price,
+       supplier: product.supplier,
+       supplierId: product.supplierId || '', // Ensure supplierId is populated
+       expiryDate: expiryDate,
+       // New fields
+       store: product.store || '',
+       manufacturer: product.manufacturer || '',
+       composition: product.composition || '',
+       series: product.series || '',
+       reservedQuantity: product.reservedQuantity || 0,
+       purchasePriceExclVAT: product.purchasePriceExclVAT || 0,
+       vat: product.vat || 0,
+       retailPriceVATIncluded: product.retailPriceVATIncluded || product.price || 0,
+     });
     
     setSupplierSearch(product.supplier);
+    setProductSearch(product.name);
     setShowSupplierDropdown(false);
+    setShowProductDropdown(false);
     setShowModal(true);
   };
 
@@ -503,6 +656,7 @@ const InventoryManagement: React.FC = () => {
     });
     if (result.isConfirmed) {
       try {
+        setIsLoading(true);
         const response = await fetch(`${BASE_URL}/inventory/${id}`, {
           method: "DELETE",
         });
@@ -517,6 +671,8 @@ const InventoryManagement: React.FC = () => {
           "Error deleting product: " + (err as Error).message,
           "error"
         );
+      } finally {
+        setIsLoading(false);
       }
     }
   };
@@ -574,13 +730,7 @@ const InventoryManagement: React.FC = () => {
   //   XLSX.writeFile(wb, "inventory_template.xlsx");
   // };
 
-  // Get unique categories for dropdown - updated to include composition
-  const categories = Array.from(
-    new Set([
-      ...products.map((p) => p.category).filter(Boolean),
-      ...products.map((p) => p.composition).filter(Boolean)
-    ])
-  );
+
 
   // Get unique branches for dropdown
   const branches = Array.from(
@@ -600,15 +750,10 @@ const InventoryManagement: React.FC = () => {
     const searchLower = search.toLowerCase();
     const matchesSearch =
       product.name.toLowerCase().includes(searchLower) ||
-      product.category.toLowerCase().includes(searchLower) ||
       product.supplier.toLowerCase().includes(searchLower) ||
       (product.manufacturer && product.manufacturer.toLowerCase().includes(searchLower)) ||
       (product.composition && product.composition.toLowerCase().includes(searchLower)) ||
       (product.series && product.series.toLowerCase().includes(searchLower));
-    const matchesCategory =
-      categoryFilter.toLowerCase() === "all" || 
-      product.category.toLowerCase() === categoryFilter.toLowerCase() ||
-      (product.composition && product.composition.toLowerCase() === categoryFilter.toLowerCase());
     const expiryStatus = getExpiryStatus(product.expiryDate);
     const matchesExpiry =
       expiryFilter.toLowerCase() === "all" || expiryStatus.toLowerCase() === expiryFilter.toLowerCase();
@@ -618,8 +763,66 @@ const InventoryManagement: React.FC = () => {
         : "N/A";
     const matchesBranch =
       branchFilter.toLowerCase() === "all" || productBranchName.toLowerCase() === branchFilter.toLowerCase();
-    return matchesSearch && matchesCategory && matchesExpiry && matchesBranch;
+    return matchesSearch && matchesExpiry && matchesBranch;
   });
+
+  // Sort filtered products
+  const sortedProducts = React.useMemo(() => {
+    const sorted = [...filteredProducts];
+    sorted.sort((a, b) => {
+      let valA: any, valB: any;
+      
+      switch (sortColumn) {
+        case "name":
+          // Sort by name first, then by manufacturer if names are equal
+          const nameComparison = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+          if (nameComparison !== 0) {
+            valA = a.name.toLowerCase();
+            valB = b.name.toLowerCase();
+          } else {
+            valA = (a.manufacturer || "").toLowerCase();
+            valB = (b.manufacturer || "").toLowerCase();
+          }
+          break;
+        case "stock":
+          valA = a.stock;
+          valB = b.stock;
+          break;
+        case "minStock":
+          valA = a.minStock;
+          valB = b.minStock;
+          break;
+        case "price":
+          valA = a.price;
+          valB = b.price;
+          break;
+        case "supplier":
+          valA = a.supplier.toLowerCase();
+          valB = b.supplier.toLowerCase();
+          break;
+        case "branch":
+          valA = typeof a.branchId === "object" && a.branchId?.name ? a.branchId.name.toLowerCase() : "";
+          valB = typeof b.branchId === "object" && b.branchId?.name ? b.branchId.name.toLowerCase() : "";
+          break;
+        case "expiryDate":
+          valA = new Date(a.expiryDate || "").getTime();
+          valB = new Date(b.expiryDate || "").getTime();
+          break;
+        case "status":
+          valA = a.status;
+          valB = b.status;
+          break;
+        default:
+          valA = a.name.toLowerCase();
+          valB = b.name.toLowerCase();
+      }
+      
+      if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+      if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [filteredProducts, sortColumn, sortDirection]);
 
   // Status color helper
   const getStatusColor = (status: string) => {
@@ -638,32 +841,21 @@ const InventoryManagement: React.FC = () => {
   const badgeClass =
     "inline-flex flex-col items-center justify-center px-3 py-1 rounded-full text-xs font-bold w-fit min-w-[80px] text-center break-words";
 
-  // Modal field array - updated to include new fields
+  // Modal field array - arranged in specified order
   const modalFields = [
     { key: "name", label: "Product Name", inputType: "text", isRequired: true },
-    { key: "category", label: "Category", inputType: "text", isRequired: true },
     { key: "manufacturer", label: "Manufacturer", inputType: "text", isRequired: false },
+    { key: "supplier", label: "Supplier", inputType: "text", isRequired: true },
     { key: "composition", label: "Composition", inputType: "text", isRequired: false },
     { key: "stock", label: "Stock", inputType: "number", isRequired: true },
-    {
-      key: "minStock",
-      label: "Min Stock",
-      inputType: "number",
-      isRequired: true,
-    },
-    { key: "price", label: "Price ($)", inputType: "number", isRequired: true },
-    {
-      key: "expiryDate",
-      label: "Expiry Date",
-      inputType: "date",
-      isRequired: true,
-    },
+    { key: "minStock", label: "Min Stock", inputType: "number", isRequired: true },
+    { key: "price", label: "Selling Price ($)", inputType: "number", isRequired: true },
+    { key: "purchasePriceExclVAT", label: "Cost Price", inputType: "number", isRequired: false },
+    { key: "retailPriceVATIncluded", label: "Retail Price (incl. VAT)", inputType: "number", isRequired: false },
+    { key: "expiryDate", label: "Expiry Date", inputType: "date", isRequired: true },
     { key: "series", label: "Series", inputType: "text", isRequired: false },
     { key: "reservedQuantity", label: "Reserved Quantity", inputType: "number", isRequired: false },
-    { key: "purchasePriceExclVAT", label: "Purchase Price (excl. VAT)", inputType: "number", isRequired: false },
     { key: "vat", label: "VAT (%)", inputType: "number", isRequired: false },
-    { key: "retailPriceVATIncluded", label: "Retail Price (incl. VAT)", inputType: "number", isRequired: false },
-    // ...add other fields as needed...
   ];
 
   // Summary stats
@@ -671,6 +863,16 @@ const InventoryManagement: React.FC = () => {
   const inStock = products.filter((p) => p.status === "In Stock").length;
   const lowStock = products.filter((p) => p.status === "Low Stock").length;
   const outOfStock = products.filter((p) => p.status === "Out of Stock").length;
+
+  // Sorting handler
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -684,6 +886,13 @@ const InventoryManagement: React.FC = () => {
           track stock levels.
         </p>
       </div>
+
+      {/* Loading Spinner */}
+      {isLoading && <Spinner />}
+
+      {/* Content - only show when not loading */}
+      {!isLoading && (
+        <>
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-2">
         <div className="bg-white rounded-lg shadow p-4 flex flex-col items-center">
@@ -771,6 +980,8 @@ const InventoryManagement: React.FC = () => {
               setShowModal(true);
               setShowSupplierDropdown(false);
               setSupplierSearch("");
+              setShowProductDropdown(false);
+              setProductSearch("");
             }}
           >
             Add Product
@@ -783,32 +994,75 @@ const InventoryManagement: React.FC = () => {
         <table className="min-w-full bg-white">
           <thead className="bg-blue-50">
             <tr>
-              <th className="px-4 py-2 text-left max-w-[180px] w-1/6">Name</th>
-              <th className="px-4 py-2 text-left">Manufacturer</th>
-              <th className="px-4 py-2 text-left">Stock</th>
-              <th className="px-4 py-2 text-left">Min Stock</th>
-              <th className="px-4 py-2 text-left">Price</th>
-              <th className="px-4 py-2 text-left">Supplier</th>
-              <th className="px-4 py-2 text-left">Branch</th>
-              <th className="px-4 py-2 text-left">Expiry Date</th>
-              <th className="px-4 py-2 text-center">Status</th>
+              <th 
+                className="px-4 py-2 text-left max-w-[250px] w-1/4 cursor-pointer select-none hover:bg-blue-100 transition-colors"
+                onClick={() => handleSort("name")}
+              >
+                Product | Manufacturer {sortColumn === "name" && (sortDirection === "asc" ? "▲" : "▼")}
+              </th>
+              <th 
+                className="px-4 py-2 text-left cursor-pointer select-none hover:bg-blue-100 transition-colors"
+                onClick={() => handleSort("stock")}
+              >
+                Stock {sortColumn === "stock" && (sortDirection === "asc" ? "▲" : "▼")}
+              </th>
+              <th 
+                className="px-4 py-2 text-left cursor-pointer select-none hover:bg-blue-100 transition-colors"
+                onClick={() => handleSort("minStock")}
+              >
+                Min Stock {sortColumn === "minStock" && (sortDirection === "asc" ? "▲" : "▼")}
+              </th>
+              <th 
+                className="px-4 py-2 text-left cursor-pointer select-none hover:bg-blue-100 transition-colors"
+                onClick={() => handleSort("price")}
+              >
+                Price {sortColumn === "price" && (sortDirection === "asc" ? "▲" : "▼")}
+              </th>
+              <th 
+                className="px-4 py-2 text-left cursor-pointer select-none hover:bg-blue-100 transition-colors"
+                onClick={() => handleSort("supplier")}
+              >
+                Supplier {sortColumn === "supplier" && (sortDirection === "asc" ? "▲" : "▼")}
+              </th>
+              <th 
+                className="px-4 py-2 text-left cursor-pointer select-none hover:bg-blue-100 transition-colors"
+                onClick={() => handleSort("branch")}
+              >
+                Branch {sortColumn === "branch" && (sortDirection === "asc" ? "▲" : "▼")}
+              </th>
+              <th 
+                className="px-4 py-2 text-left cursor-pointer select-none hover:bg-blue-100 transition-colors"
+                onClick={() => handleSort("expiryDate")}
+              >
+                Expiry Date {sortColumn === "expiryDate" && (sortDirection === "asc" ? "▲" : "▼")}
+              </th>
+              <th 
+                className="px-4 py-2 text-center cursor-pointer select-none hover:bg-blue-100 transition-colors"
+                onClick={() => handleSort("status")}
+              >
+                Status {sortColumn === "status" && (sortDirection === "asc" ? "▲" : "▼")}
+              </th>
               <th className="px-4 py-2 text-center w-[110px]">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filteredProducts.length === 0 ? (
+            {sortedProducts.length === 0 ? (
               <tr>
-                <td colSpan={11} className="text-center py-4">
+                <td colSpan={10} className="text-center py-4">
                   No products found.
                 </td>
               </tr>
             ) : (
-              filteredProducts.map((product) => (
+              sortedProducts.map((product) => (
                 <tr key={product.id} className="hover:bg-blue-50 transition">
-                  <td className="px-4 py-2 font-semibold text-left break-words whitespace-normal max-w-[180px] w-1/6">
-                    {product.name}
+                  <td className="px-4 py-2 font-semibold text-left break-words whitespace-normal max-w-[250px] w-1/4">
+                    <div className="font-semibold">{product.name}</div>
+                    {product.manufacturer && (
+                      <div className="text-sm text-gray-600 font-normal">
+                        {product.manufacturer}
+                      </div>
+                    )}
                   </td>
-                  <td className="px-4 py-2 text-left text-sm">{product.manufacturer || 'N/A'}</td>
                   <td className="px-4 py-2 text-left">{product.stock}</td>
                   <td className="px-4 py-2 text-left">{product.minStock}</td>
                   <td className="px-4 py-2 text-left">${product.price}</td>
@@ -858,136 +1112,246 @@ const InventoryManagement: React.FC = () => {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 max-h-screen overflow-y-auto shadow-2xl">
+        <div 
+          className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50"
+          onClick={() => {
+            // Close modal when clicking outside
+            setShowModal(false);
+            setEditingProduct(null);
+            setFormData(initialFormState);
+            setShowSupplierDropdown(false);
+            setSupplierSearch("");
+            setShowProductDropdown(false);
+            setProductSearch("");
+          }}
+        >
+          <div 
+            className="bg-white rounded-lg p-6 w-full max-w-md mx-4 max-h-screen overflow-y-auto shadow-2xl"
+            onClick={(e) => {
+              // Prevent clicks inside the modal from closing it
+              e.stopPropagation();
+            }}
+          >
             <h3 className="text-xl font-bold text-blue-700 mb-4">
               {editingProduct ? "Edit Product" : "Add New Product"}
             </h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {modalFields.map((field) => (
+                         <form onSubmit={handleSubmit} className="space-y-4">
+               {/* All Fields */}
+               {modalFields.map((field) => (
                 <div key={field.key}>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     {field.label}
                   </label>
-                  <input
-                    type={field.inputType}
-                    required={field.isRequired}
-                    value={formData[field.key as keyof FormProduct] ?? ""}
-                    onChange={(e) => {
-                      const value =
-                        field.inputType === "number"
-                          ? Number(e.target.value)
-                          : e.target.value;
-                      setFormData({
-                        ...formData,
-                        [field.key]: value,
-                      });
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              ))}
-              
-              {/* Custom Supplier Field */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Supplier *
-                </label>
-                <div className="relative" ref={supplierDropdownRef}>
-                  <input
-                    type="text"
-                    required
-                    value={formData.supplier}
-                    onChange={(e) => handleSupplierInputChange(e.target.value)}
-                    onFocus={handleSupplierFocus}
-                    onKeyDown={handleSupplierKeyDown}
-                    placeholder="Search or enter supplier name..."
-                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowSupplierDropdown(!showSupplierDropdown);
-                      if (!showSupplierDropdown) {
-                        if (formData.supplier.trim() === '') {
-                          setSupplierSearch("");
-                        } else {
-                          setSupplierSearch(formData.supplier);
-                        }
-                      } else {
-                        setSupplierSearch("");
-                      }
-                    }}
-                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    title="Toggle supplier dropdown"
-                  >
-                    <ChevronDown className={`w-4 h-4 transition-transform ${showSupplierDropdown ? 'rotate-180' : ''}`} />
-                  </button>
-                  
-                  {/* Supplier Dropdown */}
-                  {showSupplierDropdown && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-                      {filteredSuppliers.length > 0 ? (
-                        filteredSuppliers.map((supplier) => (
-                          <div
-                            key={supplier.id}
-                            className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
-                            onClick={() => handleSupplierSelect(supplier)}
-                          >
-                            <div className="font-medium">{supplier.name}</div>
-                            {supplier.company && (
-                              <div className="text-sm text-gray-500">{supplier.company}</div>
-                            )}
-                          </div>
-                        ))
-                      ) : (
-                        <div className="px-3 py-2 text-gray-500">
-                          {supplierSearch ? "No suppliers found" : "Type to search suppliers"}
-                        </div>
-                      )}
-                      {supplierSearch && supplierSearch.trim() !== formData.supplier && (
-                        <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
-                          Press Enter to add "{supplierSearch}" as new supplier
-                        </div>
-                      )}
-                      {!supplierSearch && suppliers.length > 0 && (
-                        <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
-                          {suppliers.length} suppliers available
-                        </div>
-                      )}
-                      {suppliers.length === 0 && (
-                        <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
-                          No suppliers in system. Type to add new supplier.
+                  {field.key === "name" ? (
+                    <div className="relative" ref={productDropdownRef}>
+                      <input
+                        type="text"
+                        required={field.isRequired}
+                        value={formData[field.key as keyof FormProduct] ?? ""}
+                        onChange={(e) => handleProductInputChange(e.target.value)}
+                        onFocus={handleProductFocus}
+                        onKeyDown={handleProductKeyDown}
+                        placeholder="Search or enter product name..."
+                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowProductDropdown(!showProductDropdown);
+                          if (!showProductDropdown) {
+                            if (formData.name.trim() === '') {
+                              setProductSearch("");
+                            } else {
+                              setProductSearch(formData.name);
+                            }
+                          } else {
+                            setProductSearch("");
+                          }
+                        }}
+                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        title="Toggle product dropdown"
+                      >
+                        <ChevronDown className={`w-4 h-4 transition-transform ${showProductDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+                      
+                      {/* Product Dropdown */}
+                      {showProductDropdown && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                          {filteredProductsForDropdown.length > 0 ? (
+                            filteredProductsForDropdown.map((product) => (
+                              <div
+                                key={product.id}
+                                className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                onClick={() => handleProductSelect(product)}
+                              >
+                                <div className="font-medium">{product.name}</div>
+                                {product.manufacturer && (
+                                  <div className="text-sm text-gray-500">{product.manufacturer}</div>
+                                )}
+                                {product.composition && (
+                                  <div className="text-sm text-gray-500">{product.composition}</div>
+                                )}
+                              </div>
+                            ))
+                          ) : (
+                            <div className="px-3 py-2 text-gray-500">
+                              {productSearch ? "No products found" : "Type to search products"}
+                            </div>
+                          )}
+                          {productSearch && productSearch.trim() !== formData.name && (
+                            <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                              Press Enter to add "{productSearch}" as new product
+                            </div>
+                          )}
+                          {!productSearch && products.length > 0 && (
+                            <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                              {products.length} products available
+                            </div>
+                          )}
+                          {products.length === 0 && (
+                            <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                              No products in system. Type to add new product.
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
+                  ) : field.key === "supplier" ? (
+                    <div className="relative" ref={supplierDropdownRef}>
+                      <input
+                        type="text"
+                        required={field.isRequired}
+                        value={formData[field.key as keyof FormProduct] ?? ""}
+                        onChange={(e) => handleSupplierInputChange(e.target.value)}
+                        onFocus={handleSupplierFocus}
+                        onKeyDown={handleSupplierKeyDown}
+                        placeholder="Search or enter supplier name..."
+                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowSupplierDropdown(!showSupplierDropdown);
+                          if (!showSupplierDropdown) {
+                            if (formData.supplier.trim() === '') {
+                              setSupplierSearch("");
+                            } else {
+                              setSupplierSearch(formData.supplier);
+                            }
+                          } else {
+                            setSupplierSearch("");
+                          }
+                        }}
+                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        title="Toggle supplier dropdown"
+                      >
+                        <ChevronDown className={`w-4 h-4 transition-transform ${showSupplierDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+                      
+                      {/* Supplier Dropdown */}
+                      {showSupplierDropdown && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                          {filteredSuppliers.length > 0 ? (
+                            filteredSuppliers.map((supplier) => (
+                              <div
+                                key={supplier.id}
+                                className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                onClick={() => handleSupplierSelect(supplier)}
+                              >
+                                <div className="font-medium">{supplier.name}</div>
+                                {supplier.company && (
+                                  <div className="text-sm text-gray-500">{supplier.company}</div>
+                                )}
+                              </div>
+                            ))
+                          ) : (
+                            <div className="px-3 py-2 text-gray-500">
+                              {supplierSearch ? "No suppliers found" : "Type to search suppliers"}
+                            </div>
+                          )}
+                          {supplierSearch && supplierSearch.trim() !== formData.supplier && (
+                            <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                              Press Enter to add "{supplierSearch}" as new supplier
+                            </div>
+                          )}
+                          {!supplierSearch && suppliers.length > 0 && (
+                            <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                              {suppliers.length} suppliers available
+                            </div>
+                          )}
+                          {suppliers.length === 0 && (
+                            <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                              No suppliers in system. Type to add new supplier.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <input
+                      type={field.inputType}
+                      required={field.isRequired}
+                      value={formData[field.key as keyof FormProduct] ?? ""}
+                      onChange={(e) => {
+                        const value =
+                          field.inputType === "number"
+                            ? Number(e.target.value)
+                            : e.target.value;
+                        setFormData({
+                          ...formData,
+                          [field.key]: value,
+                        });
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
                   )}
                 </div>
-              </div>
+              ))}
               <div className="flex justify-end space-x-2 pt-2">
                 <button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={() => {
                     setShowModal(false);
                     setEditingProduct(null);
                     setFormData(initialFormState);
                     setShowSupplierDropdown(false);
                     setSupplierSearch("");
+                    setShowProductDropdown(false);
+                    setProductSearch("");
                   }}
-                  className="px-4 py-2 bg-gray-300 rounded"
+                  className={`px-4 py-2 rounded ${
+                    isSubmitting 
+                      ? 'bg-gray-200 cursor-not-allowed' 
+                      : 'bg-gray-300 hover:bg-gray-400'
+                  }`}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded"
+                  disabled={isSubmitting}
+                  className={`px-4 py-2 text-white rounded ${
+                    isSubmitting 
+                      ? 'bg-blue-400 cursor-not-allowed' 
+                      : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
                 >
-                  {editingProduct ? "Update" : "Add"}
+                  {isSubmitting ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      {editingProduct ? "Updating..." : "Adding..."}
+                    </div>
+                  ) : (
+                    editingProduct ? "Update" : "Add"
+                  )}
                 </button>
               </div>
             </form>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

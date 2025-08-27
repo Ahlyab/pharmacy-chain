@@ -27,6 +27,11 @@ const TransactionSchema = new mongoose.Schema({
     required: true,
   },
   date: { type: Date, default: Date.now },
+  status: { 
+    type: String, 
+    enum: ["Completed", "Pending", "Cancelled", "Returned"], 
+    default: "Completed" 
+  },
 });
 
 export default mongoose.model("Transaction", TransactionSchema);

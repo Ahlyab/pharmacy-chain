@@ -20,6 +20,7 @@ interface Product {
   price: number;
   stock: number;
   category: string;
+  manufacturer?: string;
   minStock?: number;
   status?: "In Stock" | "Low Stock" | "Out of Stock";
   expiryDate?: string;
@@ -86,7 +87,9 @@ const POS: React.FC = () => {
   }, [fetchProducts]);
 
   const filteredProducts = products.filter((product) =>
-    product.name.toLowerCase().includes(searchTerm.toLowerCase())
+    product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (product.manufacturer && product.manufacturer.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    product.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const addToCart = (product: Product) => {
@@ -417,6 +420,11 @@ const POS: React.FC = () => {
                         <h3 className="font-medium text-gray-900 text-sm mb-1">
                           {product.name}
                         </h3>
+                        {product.manufacturer && (
+                          <p className="text-xs text-gray-600 mb-1">
+                            {product.manufacturer}
+                          </p>
+                        )}
                         <p className="text-xs text-gray-500 mb-2">
                           {product.category}
                         </p>
