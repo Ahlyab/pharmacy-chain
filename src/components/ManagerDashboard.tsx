@@ -8,17 +8,56 @@ import Billing from './manager/Billing';
 import POS from './manager/POS';
 import Transactions from './manager/Transactions';
 import Dashboard from './manager/Dashboard';
+import { useAuth } from '../contexts/AuthContext';
 
 const ManagerDashboard: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { user } = useAuth();
 
-  const menuItems = [
-    { name: 'Dashboard', path: '/manager', icon: 'BarChart3' },
-    { name: 'Inventory', path: '/manager/inventory', icon: 'Package' },
-    { name: 'POS', path: '/manager/pos', icon: 'ShoppingCart' },
-    { name: 'Billing', path: '/manager/billing', icon: 'FileText' },
-    { name: 'Transactions', path: '/manager/transactions', icon: 'Receipt' },
-  ];
+  // Helper function to determine actual role for access control
+  const getActualRole = (user: any) => {
+    if (!user) return null;
+    
+    // Check if this is actually a Sale Assistant based on name or other criteria
+    if (user.role.toLowerCase() === 'manager' && 
+        user.name.toLowerCase().includes('sale assistant')) {
+      return 'sale assistant';
+    }
+    
+    return user.role.toLowerCase();
+  };
+
+  console.log('ManagerDashboard - user:', user, 'actual role:', getActualRole(user));
+
+  // Define menu items based on user role
+  const getMenuItems = () => {
+    const baseItems = [
+      { name: 'Dashboard', path: '/manager', icon: 'BarChart3' },
+      { name: 'POS', path: '/manager/pos', icon: 'ShoppingCart' },
+      { name: 'Billing', path: '/manager/billing', icon: 'FileText' },
+      { name: 'Transactions', path: '/manager/transactions', icon: 'Receipt' },
+    ];
+
+    // Show Inventory for both Managers and Sale Assistants (Sale Assistants get read-only access)
+    baseItems.splice(1, 0, { name: 'Inventory', path: '/manager/inventory', icon: 'Package' });
+
+    return baseItems;
+  };
+
+  // If user is not available, show loading or error
+  if (!user) {
+    console.log('ManagerDashboard - No user available, showing loading...');
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const menuItems = getMenuItems();
 
 
 
@@ -42,6 +81,7 @@ const ManagerDashboard: React.FC = () => {
           <GreenProgressBar loading={loading}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
+              {/* Both Managers and Sale Assistants can access inventory - Sale Assistants get read-only access */}
               <Route path="/inventory" element={<InventoryManagement />} />
               <Route path="/pos" element={<POS />} />
               <Route path="/billing" element={<Billing />} />

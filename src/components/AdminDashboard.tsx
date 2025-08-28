@@ -17,7 +17,7 @@ const AdminDashboard: React.FC = () => {
     const menuItems = [
       { name: 'Dashboard', path: '/admin', icon: 'BarChart3' },
       { name: 'Branches', path: '/admin/branches', icon: 'Building2' },
-      { name: 'Managers', path: '/admin/managers', icon: 'Users' },
+      { name: 'Users & Permissions', path: '/admin/managers', icon: 'Users' },
       { name: 'Inventory Overview', path: '/admin/inventory', icon: 'Package' },
       { name: 'Transactions', path: '/admin/transactions', icon: 'Receipt' },
       { name: 'Suppliers', path: '/admin/suppliers', icon: 'ShoppingCart' },

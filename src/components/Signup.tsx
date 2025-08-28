@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Swal from 'sweetalert2';
 
 const Signup: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -19,7 +20,12 @@ const Signup: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.password !== formData.confirmPassword) {
-      alert('Passwords do not match');
+      Swal.fire({
+        title: 'Password Mismatch',
+        text: 'Passwords do not match',
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
       return;
     }
     // Simulate successful signup

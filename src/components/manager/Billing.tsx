@@ -1,9 +1,26 @@
 import GreenProgressBar from "../GreenProgressBar";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import jsPDF from "jspdf";
 import { Search, FileText, Download, Eye, RotateCcw } from "lucide-react";
 import { VITE_BASE_URL } from "../../data";
 import { useAuth } from "../../contexts/AuthContext";
+import Swal from "sweetalert2";
+import {
+  Search as SearchIcon,
+  Filter,
+  Download as DownloadIcon,
+  Eye as EyeIcon,
+  RotateCcw as RotateCcwIcon,
+  Calendar,
+  DollarSign,
+  CreditCard,
+  User,
+  Package,
+  Clock,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+} from "lucide-react";
 
 interface Bill {
   id: string;
@@ -254,12 +271,22 @@ const Billing: React.FC = () => {
 
     const itemsToReturn = returnItems.filter(item => item.returnQuantity > 0);
     if (itemsToReturn.length === 0) {
-      alert("Please select items to return");
+      Swal.fire({
+        title: 'No Items Selected',
+        text: 'Please select items to return',
+        icon: 'warning',
+        confirmButtonText: 'OK'
+      });
       return;
     }
 
     if (!returnReason.trim()) {
-      alert("Please provide a return reason");
+      Swal.fire({
+        title: 'Return Reason Required',
+        text: 'Please provide a return reason',
+        icon: 'warning',
+        confirmButtonText: 'OK'
+      });
       return;
     }
 
@@ -304,9 +331,19 @@ const Billing: React.FC = () => {
       setReturnItems([]);
       setReturnReason("");
       
-      alert("Return processed successfully!");
+      Swal.fire({
+        title: 'Return Processed',
+        text: 'Return processed successfully!',
+        icon: 'success',
+        confirmButtonText: 'OK'
+      });
     } catch (error: any) {
-      alert(`Error processing return: ${error.message}`);
+      Swal.fire({
+        title: 'Return Failed',
+        text: `Error processing return: ${error.message}`,
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
     } finally {
       setReturnLoading(false);
     }

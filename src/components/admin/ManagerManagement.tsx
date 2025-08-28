@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { VITE_BASE_URL } from "../../data";
-import { Plus, Edit, Trash2, Mail, Phone, Building2 } from "lucide-react";
+import Swal from "sweetalert2";
+import { Plus, Edit, Trash2, Mail, Phone, Building2, Shield, UserCheck } from "lucide-react";
 
 interface Manager {
   id: string;
@@ -9,6 +10,7 @@ interface Manager {
   phone: string;
   branch: string; // display name
   status: "Active" | "Inactive";
+  role: "Manager" | "Sale Assistant";
 }
 
 const ManagerManagement: React.FC = () => {
@@ -27,6 +29,7 @@ const ManagerManagement: React.FC = () => {
     phone: "",
     branch: "",
     status: "Active" as "Active" | "Inactive",
+    role: "Manager" as "Manager" | "Sale Assistant",
   });
   const [managerSearch, setManagerSearch] = useState("");
   const [sortColumn, setSortColumn] = useState<string>("name");
@@ -162,6 +165,7 @@ const ManagerManagement: React.FC = () => {
       phone: "",
       branch: "",
       status: "Active",
+      role: "Manager",
     });
   };
 
@@ -195,6 +199,7 @@ const ManagerManagement: React.FC = () => {
           phone: m.phone || "No phone",
           branch: m.branch?.name || m.branch || "No branch",
           status: m.status || "Active",
+          role: m.role || "Manager",
         }));
         
         console.log("Mapped managers:", mappedManagers);
@@ -303,6 +308,7 @@ const ManagerManagement: React.FC = () => {
           phone: formData.phone,
           branchId: selectedBranch.id,
           status: formData.status,
+          role: formData.role,
         };
 
         // Show confirmation dialog with changes summary
@@ -319,13 +325,15 @@ const ManagerManagement: React.FC = () => {
           );
         if (formData.status !== editingManager.status)
           changes.push(`Status: ${editingManager.status} → ${formData.status}`);
+        if (formData.role !== editingManager.role)
+          changes.push(`Role: ${editingManager.role} → ${formData.role}`);
         if (formData.password) changes.push("Password: Will be updated");
 
         const result = await Swal.fire({
           title: "Confirm Changes",
           html: `
             <div class="text-left">
-              <p class="mb-3"><strong>Are you sure you want to update this manager?</strong></p>
+              <p class="mb-3"><strong>Are you sure you want to update this user?</strong></p>
               ${
                 changes.length > 0
                   ? `
@@ -344,7 +352,7 @@ const ManagerManagement: React.FC = () => {
           showCancelButton: true,
           confirmButtonColor: "#3085d6",
           cancelButtonColor: "#d33",
-          confirmButtonText: "Yes, update manager!",
+          confirmButtonText: "Yes, update user!",
           cancelButtonText: "Cancel",
         });
 
@@ -357,7 +365,7 @@ const ManagerManagement: React.FC = () => {
           // Ask for confirmation before updating password
           const passwordResult = await Swal.fire({
             title: "Update Password?",
-            text: "Are you sure you want to update the manager's password?",
+            text: "Are you sure you want to update the user's password?",
             icon: "question",
             showCancelButton: true,
             confirmButtonColor: "#3085d6",
@@ -382,20 +390,21 @@ const ManagerManagement: React.FC = () => {
 
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.error || "Failed to update manager");
+          throw new Error(errorData.error || "Failed to update user");
         }
 
         const updatedManager = await response.json();
         setManagers(
           managers.map((m) =>
             m.id === editingManager.id
-              ? {
+                              ? {
                   id: updatedManager._id,
                   name: updatedManager.name,
                   email: updatedManager.email,
                   phone: updatedManager.phone,
                   branch: updatedManager.branch?.name || updatedManager.branch,
                   status: updatedManager.status,
+                  role: updatedManager.role || formData.role,
                 }
               : m
           )
@@ -405,10 +414,10 @@ const ManagerManagement: React.FC = () => {
         if (formData.password) {
           // Show new credentials if password was updated
           await Swal.fire({
-            title: "Manager Updated!",
+            title: "User Updated!",
             html: `
               <div class="text-left">
-                <p class="mb-3"><strong>Manager and password updated successfully!</strong></p>
+                <p class="mb-3"><strong>User and password updated successfully!</strong></p>
                 <p class="mb-2"><strong>New login credentials:</strong></p>
                 <div class="bg-gray-100 p-3 rounded mb-3">
                   <div class="flex items-center justify-between mb-2">
@@ -420,7 +429,7 @@ const ManagerManagement: React.FC = () => {
                     <button id="copyPassword" class="ml-2 px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600">Copy</button>
                   </div>
                 </div>
-                <p class="text-sm text-gray-600">Please provide the new password to the manager.</p>
+                <p class="text-sm text-gray-600">Please provide the new password to the user.</p>
               </div>
             `,
             icon: "success",
@@ -462,8 +471,8 @@ const ManagerManagement: React.FC = () => {
         } else {
           // Show simple success message if no password change
           await Swal.fire({
-            title: "Manager Updated!",
-            text: "Manager updated successfully!",
+            title: "User Updated!",
+            text: "User updated successfully!",
             icon: "success",
             confirmButtonText: "OK",
           });
@@ -480,6 +489,7 @@ const ManagerManagement: React.FC = () => {
           phone: formData.phone,
           branchId: selectedBranch.id,
           status: formData.status,
+          role: formData.role,
         };
         // Add manager to /manager endpoint
         const response = await fetch(`${VITE_BASE_URL}/manager`, {
@@ -501,6 +511,7 @@ const ManagerManagement: React.FC = () => {
             phone: newManager.phone,
             branch: newManager.branch?.name || newManager.branch,
             status: newManager.status,
+            role: newManager.role || formData.role,
           },
         ]);
 
@@ -526,10 +537,10 @@ const ManagerManagement: React.FC = () => {
 
         // Show SweetAlert with credentials
         await Swal.fire({
-          title: "Manager Added Successfully!",
+          title: "User Added Successfully!",
           html: `
             <div class="text-left">
-              <p class="mb-3"><strong>Manager has been created and can now login with:</strong></p>
+              <p class="mb-3"><strong>User has been created and can now login with:</strong></p>
               <div class="bg-gray-100 p-3 rounded mb-3">
                 <div class="flex items-center justify-between mb-2">
                   <span><strong>Email:</strong> ${formData.email}</span>
@@ -540,7 +551,7 @@ const ManagerManagement: React.FC = () => {
                   <button id="copyPassword" class="ml-2 px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600">Copy</button>
                 </div>
               </div>
-              <p class="text-sm text-gray-600">Please provide these credentials to the manager.</p>
+                <p class="text-sm text-gray-600">Please provide these credentials to the user.</p>
             </div>
           `,
           icon: "success",
@@ -590,14 +601,15 @@ const ManagerManagement: React.FC = () => {
         phone: "",
         branch: "",
         status: "Active",
+        role: "Manager",
       });
 
       // Show success toast
       Swal.fire({
         title: "Success!",
         text: editingManager
-          ? "Manager updated successfully!"
-          : "Manager created successfully!",
+          ? "User updated successfully!"
+          : "User created successfully!",
         icon: "success",
         toast: true,
         position: "top-end",
@@ -607,7 +619,12 @@ const ManagerManagement: React.FC = () => {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      alert("Error adding/updating manager: " + message);
+      Swal.fire({
+        title: 'Error',
+        text: 'Error adding/updating user: ' + message,
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -623,6 +640,7 @@ const ManagerManagement: React.FC = () => {
       // set branch to the matching branch id so select shows correct option
       branch: branches.find((b) => b.name === manager.branch)?.id || "",
       status: manager.status,
+      role: manager.role,
     });
     setShowModal(true);
   };
@@ -631,7 +649,7 @@ const ManagerManagement: React.FC = () => {
     const Swal = (await import("sweetalert2")).default;
     const result = await Swal.fire({
       title: "Are you sure?",
-      text: "Do you want to delete this manager?",
+      text: "Do you want to delete this user?",
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#3085d6",
@@ -643,11 +661,11 @@ const ManagerManagement: React.FC = () => {
         const response = await fetch(`${VITE_BASE_URL}/manager/${id}`, {
           method: "DELETE",
         });
-        if (!response.ok) throw new Error("Failed to delete manager");
+        if (!response.ok) throw new Error("Failed to delete user");
         setManagers(managers.filter((manager) => manager.id !== id));
-        Swal.fire("Deleted!", "Manager has been deleted.", "success");
+        Swal.fire("Deleted!", "User has been deleted.", "success");
       } catch (err) {
-        Swal.fire("Error", "Could not delete manager.", "error");
+        Swal.fire("Error", "Could not delete user.", "error");
       }
     }
   };
@@ -657,16 +675,16 @@ const ManagerManagement: React.FC = () => {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">
-            Manager Management
+            User Management & Permissions
           </h2>
-          <p className="text-gray-600">Manage branch managers</p>
+          <p className="text-gray-600">Manage users and their permissions</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
           className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center"
         >
           <Plus className="h-4 w-4 mr-2" />
-          Add Manager
+          Add User
         </button>
       </div>
 
@@ -674,7 +692,7 @@ const ManagerManagement: React.FC = () => {
       {isLoading && (
         <div className="text-center py-8">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <p className="mt-2 text-gray-600">Loading managers and branches...</p>
+          <p className="mt-2 text-gray-600">Loading users and permissions...</p>
         </div>
       )}
 
@@ -710,7 +728,7 @@ const ManagerManagement: React.FC = () => {
           <div className="mb-4">
             <input
               type="text"
-              placeholder="Search manager by name, email, branch..."
+              placeholder="Search user by name, email, branch..."
               value={managerSearch}
               onChange={(e) => setManagerSearch(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -727,7 +745,7 @@ const ManagerManagement: React.FC = () => {
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
                   onClick={() => handleSort("name")}
                 >
-                  Manager {sortColumn === "name" && (sortDirection === "asc" ? "▲" : "▼")}
+                  User {sortColumn === "name" && (sortDirection === "asc" ? "▲" : "▼")}
                 </th>
                 <th 
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
@@ -747,6 +765,12 @@ const ManagerManagement: React.FC = () => {
                 >
                   Status {sortColumn === "status" && (sortDirection === "asc" ? "▲" : "▼")}
                 </th>
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                  onClick={() => handleSort("role")}
+                >
+                  Role {sortColumn === "role" && (sortDirection === "asc" ? "▲" : "▼")}
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
@@ -759,7 +783,8 @@ const ManagerManagement: React.FC = () => {
                   return (
                     manager.name.toLowerCase().includes(q) ||
                     manager.email.toLowerCase().includes(q) ||
-                    manager.branch.toLowerCase().includes(q)
+                    manager.branch.toLowerCase().includes(q) ||
+                    manager.role.toLowerCase().includes(q)
                   );
                 })
                 .sort((a, b) => {
@@ -781,6 +806,10 @@ const ManagerManagement: React.FC = () => {
                     case "status":
                       valA = a.status;
                       valB = b.status;
+                      break;
+                    case "role":
+                      valA = a.role;
+                      valB = b.role;
                       break;
                     default:
                       valA = a.name.toLowerCase();
@@ -825,6 +854,22 @@ const ManagerManagement: React.FC = () => {
                         {manager.status}
                       </span>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span
+                        className={`px-2 py-1 text-xs font-medium rounded-full ${
+                          manager.role === "Manager"
+                            ? "bg-blue-100 text-blue-800"
+                            : "bg-purple-100 text-purple-800"
+                        }`}
+                      >
+                        {manager.role === "Manager" ? (
+                          <Shield className="inline h-3 w-3 mr-1" />
+                        ) : (
+                          <UserCheck className="inline h-3 w-3 mr-1" />
+                        )}
+                        {manager.role}
+                      </span>
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
                         <button
@@ -847,29 +892,30 @@ const ManagerManagement: React.FC = () => {
           </table>
           
           {/* No managers message */}
-          {managers.filter((manager) => {
-            const q = managerSearch.toLowerCase();
-            return (
-              manager.name.toLowerCase().includes(q) ||
-              manager.email.toLowerCase().includes(q) ||
-              manager.branch.toLowerCase().includes(q)
-            );
-          }).length === 0 && (
+                        {managers.filter((manager) => {
+                const q = managerSearch.toLowerCase();
+                return (
+                  manager.name.toLowerCase().includes(q) ||
+                  manager.email.toLowerCase().includes(q) ||
+                  manager.branch.toLowerCase().includes(q) ||
+                  manager.role.toLowerCase().includes(q)
+                );
+              }).length === 0 && (
             <div className="text-center py-8">
               {managers.length === 0 ? (
                 <div>
                   <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
                   </svg>
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">No managers found</h3>
-                  <p className="mt-1 text-sm text-gray-500">Get started by creating a new manager.</p>
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">No users found</h3>
+                  <p className="mt-1 text-sm text-gray-500">Get started by creating a new user.</p>
                 </div>
               ) : (
                 <div>
                   <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">No managers match your search</h3>
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">No users match your search</h3>
                   <p className="mt-1 text-sm text-gray-500">Try adjusting your search terms.</p>
                 </div>
               )}
@@ -880,12 +926,12 @@ const ManagerManagement: React.FC = () => {
         </>
       )}
 
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+             {/* Modal */}
+       {showModal && (
+         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
+           <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-medium text-gray-900 mb-4">
-              {editingManager ? "Edit Manager" : "Add New Manager"}
+              {editingManager ? "Edit User" : "Add New User"}
             </h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -1051,6 +1097,32 @@ const ManagerManagement: React.FC = () => {
                   <option value="Active">Active</option>
                   <option value="Inactive">Inactive</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Role
+                </label>
+                <select
+                  required
+                  value={formData.role}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      role: e.target.value as "Manager" | "Sale Assistant",
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="Manager">Manager</option>
+                  <option value="Sale Assistant">Sale Assistant</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  <Shield className="inline h-3 w-3 mr-1" />
+                  Manager: Full access to all features
+                  <br />
+                  <UserCheck className="inline h-3 w-3 mr-1" />
+                  Sale Assistant: Access to all features except inventory management
+                </p>
               </div>
               <div className="flex space-x-3 pt-4">
                 <button
