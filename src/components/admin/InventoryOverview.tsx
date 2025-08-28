@@ -12,6 +12,7 @@ interface InventoryItem {
   id: string;
   name: string;
   category: string;
+  manufacturer?: string;
   branch: Branch;
   stock: number;
   minStock: number;
@@ -23,10 +24,22 @@ const InventoryOverview: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedBranch, setSelectedBranch] = useState("All");
   const [selectedStatus, setSelectedStatus] = useState("All");
+  const [sortColumn, setSortColumn] = useState<string>("name");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Sorting handler
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  };
 
   useEffect(() => {
     const fetchInventory = async () => {
@@ -41,6 +54,7 @@ const InventoryOverview: React.FC = () => {
           (item: any) => ({
             ...item,
             branch: item.branchId,
+            manufacturer: item.manufacturer,
             status:
               item.stock === 0
                 ? "Out of Stock"
@@ -79,7 +93,8 @@ const InventoryOverview: React.FC = () => {
   const filteredInventory = inventory.filter((item) => {
     const matchesSearch =
       item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.category.toLowerCase().includes(searchTerm.toLowerCase());
+      item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.manufacturer && item.manufacturer.toLowerCase().includes(searchTerm.toLowerCase()));
     const branchName = item.branch && typeof item.branch === "object" && item.branch.name
       ? item.branch.name
       : typeof item.branch === "string"
@@ -91,6 +106,45 @@ const InventoryOverview: React.FC = () => {
 
     return matchesSearch && matchesBranch && matchesStatus;
   });
+
+  // Sort filtered inventory
+  const sortedInventory = React.useMemo(() => {
+    const sorted = [...filteredInventory];
+    sorted.sort((a, b) => {
+      let valA: any, valB: any;
+      
+      switch (sortColumn) {
+        case "name":
+          valA = a.name.toLowerCase();
+          valB = b.name.toLowerCase();
+          break;
+        case "branch":
+          valA = (a.branch && typeof a.branch === "object" && a.branch.name ? a.branch.name : "").toLowerCase();
+          valB = (b.branch && typeof b.branch === "object" && b.branch.name ? b.branch.name : "").toLowerCase();
+          break;
+        case "stock":
+          valA = a.stock;
+          valB = b.stock;
+          break;
+        case "price":
+          valA = a.price;
+          valB = b.price;
+          break;
+        case "status":
+          valA = a.status;
+          valB = b.status;
+          break;
+        default:
+          valA = a.name.toLowerCase();
+          valB = b.name.toLowerCase();
+      }
+      
+      if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+      if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [filteredInventory, sortColumn, sortDirection]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -214,31 +268,51 @@ const InventoryOverview: React.FC = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Product
+                  <th 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                    onClick={() => handleSort("name")}
+                  >
+                    Product | Manufacturer {sortColumn === "name" && (sortDirection === "asc" ? "▲" : "▼")}
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Branch
+                  <th 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                    onClick={() => handleSort("branch")}
+                  >
+                    Branch {sortColumn === "branch" && (sortDirection === "asc" ? "▲" : "▼")}
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Stock
+                  <th 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                    onClick={() => handleSort("stock")}
+                  >
+                    Stock {sortColumn === "stock" && (sortDirection === "asc" ? "▲" : "▼")}
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Price
+                  <th 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                    onClick={() => handleSort("price")}
+                  >
+                    Price {sortColumn === "price" && (sortDirection === "asc" ? "▲" : "▼")}
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
+                  <th 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                    onClick={() => handleSort("status")}
+                  >
+                    Status {sortColumn === "status" && (sortDirection === "asc" ? "▲" : "▼")}
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredInventory.map((item) => (
+                {sortedInventory.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
                         <div className="text-sm font-medium text-gray-900">
                           {item.name}
                         </div>
+                        {item.manufacturer && (
+                          <div className="text-sm text-gray-600">
+                            {item.manufacturer}
+                          </div>
+                        )}
                         <div className="text-sm text-gray-500">
                           {item.category}
                         </div>

@@ -28,6 +28,8 @@ const WarehouseManagement: React.FC = () => {
   const [stockFilter, setStockFilter] = useState("");
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [sortColumn, setSortColumn] = useState<string>("productName");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const initialProductState = {
     name: '',
     category: '',
@@ -44,6 +46,16 @@ const WarehouseManagement: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTransferring, setIsTransferring] = useState(false);
     // Removed supplier dialog state
+
+  // Sorting handler
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  };
 
   useEffect(() => {
     fetchStock();
@@ -860,9 +872,15 @@ const WarehouseManagement: React.FC = () => {
         <table className="w-full border">
           <thead>
             <tr className="bg-gray-100">
-              <th className="border px-2 py-1">Product</th>
-              <th className="border px-2 py-1">Quantity</th>
-              <th className="border px-2 py-1">Supplier</th>
+              <th className="border px-2 py-1 cursor-pointer" onClick={() => handleSort("productName")}>
+                Product {sortColumn === "productName" && (sortDirection === "asc" ? "↑" : "↓")}
+              </th>
+              <th className="border px-2 py-1 cursor-pointer" onClick={() => handleSort("quantity")}>
+                Quantity {sortColumn === "quantity" && (sortDirection === "asc" ? "↑" : "↓")}
+              </th>
+              <th className="border px-2 py-1 cursor-pointer" onClick={() => handleSort("supplier.name")}>
+                Supplier {sortColumn === "supplier.name" && (sortDirection === "asc" ? "↑" : "↓")}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -871,6 +889,17 @@ const WarehouseManagement: React.FC = () => {
                 .filter(item =>
                   item.productName.toLowerCase().includes(stockFilter.toLowerCase())
                 )
+                .sort((a, b) => {
+                  let comparison = 0;
+                  if (sortColumn === "productName") {
+                    comparison = a.productName.localeCompare(b.productName);
+                  } else if (sortColumn === "quantity") {
+                    comparison = a.quantity - b.quantity;
+                  } else if (sortColumn === "supplier.name") {
+                    comparison = a.supplier.name.localeCompare(b.supplier.name);
+                  }
+                  return sortDirection === "asc" ? comparison : -comparison;
+                })
                 .map(item => (
                   <tr key={item._id}>
                     <td className="border px-2 py-1">{item.productName}</td>

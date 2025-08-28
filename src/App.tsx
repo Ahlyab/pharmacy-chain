@@ -27,6 +27,19 @@ function AppRoutes() {
 
   return (
     <Routes>
+      {/* Root path redirect based on user role */}
+      <Route
+        path="/"
+        element={
+          user.role === "admin" ? (
+            <Navigate to="/admin" replace />
+          ) : user.role === "manager" ? (
+            <Navigate to="/manager" replace />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
       <Route
         path="/admin/*"
         element={
@@ -43,26 +56,27 @@ function AppRoutes() {
           )
         }
       />
-      {/* Remove catch-all redirect to prevent infinite loop */}
+      {/* Catch-all route for authenticated users */}
+      <Route
+        path="*"
+        element={
+          user.role === "admin" ? (
+            <Navigate to="/admin" replace />
+          ) : user.role === "manager" ? (
+            <Navigate to="/manager" replace />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
     </Routes>
   );
 }
 
 function AppContent() {
   const { user } = useAuth();
-  const [isInitializing, setIsInitializing] = useState(true);
 
-  useEffect(() => {
-    // Wait for auth context to finish loading
-    if (user !== undefined) {
-      setIsInitializing(false);
-    }
-  }, [user]);
-
-  if (isInitializing) {
-    return <Spinner />;
-  }
-
+  // No need for local loading state since AuthContext handles it
   return <AppRoutes />;
 }
 

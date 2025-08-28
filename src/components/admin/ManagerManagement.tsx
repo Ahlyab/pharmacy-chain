@@ -18,6 +18,8 @@ const ManagerManagement: React.FC = () => {
   const [editingManager, setEditingManager] = useState<Manager | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -27,6 +29,18 @@ const ManagerManagement: React.FC = () => {
     status: "Active" as "Active" | "Inactive",
   });
   const [managerSearch, setManagerSearch] = useState("");
+  const [sortColumn, setSortColumn] = useState<string>("name");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+
+  // Sorting handler
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  };
 
   // Function to generate a random password
   const generatePassword = () => {
@@ -155,35 +169,90 @@ const ManagerManagement: React.FC = () => {
   useEffect(() => {
     const fetchManagers = async () => {
       try {
+        console.log("Fetching managers from:", `${VITE_BASE_URL}/manager`);
         const response = await fetch(`${VITE_BASE_URL}/manager`);
-        if (!response.ok) throw new Error("Failed to fetch managers");
+        console.log("Manager response status:", response.status);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("Failed to fetch managers:", response.status, errorText);
+          throw new Error(`Failed to fetch managers: ${response.status} ${errorText}`);
+        }
+        
         const data = await response.json();
-        setManagers(
-          data.map((m: any) => ({
-            id: m._id,
-            name: m.name,
-            email: m.email,
-            phone: m.phone,
-            branch: m.branch?.name || m.branch, // handle populated or legacy
-            status: m.status,
-          }))
-        );
+        console.log("Raw manager data:", data);
+        
+        if (!Array.isArray(data)) {
+          console.error("Manager data is not an array:", typeof data, data);
+          setError("Manager data is not in expected format");
+          return;
+        }
+        
+        const mappedManagers = data.map((m: any) => ({
+          id: m._id || m.id,
+          name: m.name || "Unknown",
+          email: m.email || "No email",
+          phone: m.phone || "No phone",
+          branch: m.branch?.name || m.branch || "No branch",
+          status: m.status || "Active",
+        }));
+        
+        console.log("Mapped managers:", mappedManagers);
+        setManagers(mappedManagers);
+        setError(null);
       } catch (err) {
-        // Optionally show error
+        console.error("Error fetching managers:", err);
+        const errorMessage = err instanceof Error ? err.message : "Failed to fetch managers";
+        setError(errorMessage);
       }
     };
+    
     const fetchBranches = async () => {
       try {
+        console.log("Fetching branches from:", `${VITE_BASE_URL}/branch`);
         const response = await fetch(`${VITE_BASE_URL}/branch`);
-        if (!response.ok) throw new Error("Failed to fetch branches");
+        console.log("Branch response status:", response.status);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("Failed to fetch branches:", response.status, errorText);
+          throw new Error(`Failed to fetch branches: ${response.status} ${errorText}`);
+        }
+        
         const data = await response.json();
-        setBranches(data.map((b: any) => ({ id: b._id, name: b.name })));
+        console.log("Raw branch data:", data);
+        
+        if (!Array.isArray(data)) {
+          console.error("Branch data is not an array:", typeof data, data);
+          setError("Branch data is not in expected format");
+          return;
+        }
+        
+        const mappedBranches = data.map((b: any) => ({ 
+          id: b._id || b.id, 
+          name: b.name || "Unknown" 
+        }));
+        
+        console.log("Mapped branches:", mappedBranches);
+        setBranches(mappedBranches);
       } catch (err) {
-        // Optionally show error
+        console.error("Error fetching branches:", err);
+        const errorMessage = err instanceof Error ? err.message : "Failed to fetch branches";
+        setError(errorMessage);
       }
     };
-    fetchManagers();
-    fetchBranches();
+    
+    const loadData = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        await Promise.all([fetchManagers(), fetchBranches()]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadData();
   }, []);
 
   // Handle Escape key to close modal
@@ -601,34 +670,82 @@ const ManagerManagement: React.FC = () => {
         </button>
       </div>
 
-      {/* Manager Search Filter */}
-      <div className="mb-4">
-        <input
-          type="text"
-          placeholder="Search manager by name, email, branch..."
-          value={managerSearch}
-          onChange={(e) => setManagerSearch(e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
+      {/* Loading and Error States */}
+      {isLoading && (
+        <div className="text-center py-8">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <p className="mt-2 text-gray-600">Loading managers and branches...</p>
+        </div>
+      )}
 
-      {/* Managers Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      {error && !isLoading && (
+        <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-red-800">Error loading data</h3>
+              <div className="mt-2 text-sm text-red-700">
+                <p>{error}</p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="mt-2 text-red-800 underline hover:text-red-900"
+                >
+                  Click here to retry
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      
+
+      {/* Manager Search Filter */}
+      {!isLoading && !error && (
+        <>
+          <div className="mb-4">
+            <input
+              type="text"
+              placeholder="Search manager by name, email, branch..."
+              value={managerSearch}
+              onChange={(e) => setManagerSearch(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* Managers Table */}
+          <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Manager
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                  onClick={() => handleSort("name")}
+                >
+                  Manager {sortColumn === "name" && (sortDirection === "asc" ? "▲" : "▼")}
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Contact
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                  onClick={() => handleSort("email")}
+                >
+                  Contact {sortColumn === "email" && (sortDirection === "asc" ? "▲" : "▼")}
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Branch
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                  onClick={() => handleSort("branch")}
+                >
+                  Branch {sortColumn === "branch" && (sortDirection === "asc" ? "▲" : "▼")}
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                  onClick={() => handleSort("status")}
+                >
+                  Status {sortColumn === "status" && (sortDirection === "asc" ? "▲" : "▼")}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
@@ -644,6 +761,35 @@ const ManagerManagement: React.FC = () => {
                     manager.email.toLowerCase().includes(q) ||
                     manager.branch.toLowerCase().includes(q)
                   );
+                })
+                .sort((a, b) => {
+                  let valA: any, valB: any;
+                  
+                  switch (sortColumn) {
+                    case "name":
+                      valA = a.name.toLowerCase();
+                      valB = b.name.toLowerCase();
+                      break;
+                    case "email":
+                      valA = a.email.toLowerCase();
+                      valB = b.email.toLowerCase();
+                      break;
+                    case "branch":
+                      valA = a.branch.toLowerCase();
+                      valB = b.branch.toLowerCase();
+                      break;
+                    case "status":
+                      valA = a.status;
+                      valB = b.status;
+                      break;
+                    default:
+                      valA = a.name.toLowerCase();
+                      valB = b.name.toLowerCase();
+                  }
+                  
+                  if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+                  if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+                  return 0;
                 })
                 .map((manager) => (
                   <tr key={manager.id} className="hover:bg-gray-50">
@@ -699,8 +845,40 @@ const ManagerManagement: React.FC = () => {
                 ))}
             </tbody>
           </table>
+          
+          {/* No managers message */}
+          {managers.filter((manager) => {
+            const q = managerSearch.toLowerCase();
+            return (
+              manager.name.toLowerCase().includes(q) ||
+              manager.email.toLowerCase().includes(q) ||
+              manager.branch.toLowerCase().includes(q)
+            );
+          }).length === 0 && (
+            <div className="text-center py-8">
+              {managers.length === 0 ? (
+                <div>
+                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                  </svg>
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">No managers found</h3>
+                  <p className="mt-1 text-sm text-gray-500">Get started by creating a new manager.</p>
+                </div>
+              ) : (
+                <div>
+                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">No managers match your search</h3>
+                  <p className="mt-1 text-sm text-gray-500">Try adjusting your search terms.</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
+        </>
+      )}
 
       {/* Modal */}
       {showModal && (
