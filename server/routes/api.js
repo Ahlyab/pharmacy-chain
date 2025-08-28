@@ -166,7 +166,7 @@ router.delete("/supplier/:id/delivery/:deliveryId", async (req, res) => {
 // Manager Routes
 router.post("/manager", async (req, res) => {
   try {
-    const { name, email, phone, branchId, status, password } = req.body;
+    const { name, email, phone, branchId, status, password, role } = req.body;
     if (!name || !email || !phone || !branchId || !password) {
       return res.status(400).json({ error: "Missing required fields" });
     }
@@ -191,10 +191,11 @@ router.post("/manager", async (req, res) => {
       phone,
       branch: branchId,
       status,
+      role: role || "Manager", // Use the role from request or default to "Manager"
     });
     await manager.save();
     // Create user document for login (branchId is id)
-    const user = new User({ name, email, password, role: "manager", branchId });
+    const user = new User({ name, email, password, role: role || "Manager", branchId });
     await user.save();
     // Return manager info (populate branch name for convenience)
     const populated = await Manager.findById(manager._id).populate(
