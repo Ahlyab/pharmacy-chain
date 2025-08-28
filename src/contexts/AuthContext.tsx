@@ -11,12 +11,13 @@ interface User {
   id: string;
   name: string;
   email: string;
-  role: "admin" | "manager";
+  role: "admin" | "manager" | "sale assistant" | "Manager" | "Sale Assistant";
   branchId?: string;
 }
 
 interface AuthContextType {
   user: User | null;
+  loading: boolean;
   login: (
     email: string,
     password: string,
@@ -46,9 +47,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Restore user from token on mount
   useEffect(() => {
     const restoreUser = async () => {
+      console.log('Restoring user from token...');
       const token = localStorage.getItem("token");
       if (token) {
         try {
+          console.log('Token found, making API call to:', `${config.apiUrl}/api/me`);
           const response = await fetch(`${config.apiUrl}/api/me`, {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -57,6 +60,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           });
           if (response.ok) {
             const data = await response.json();
+            console.log('User restored successfully:', data);
+            console.log('User restoration - Original role:', data.role);
             setUser({
               id: data.id,
               name: data.name,
@@ -65,13 +70,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               branchId: data.branchId,
             });
           } else {
+            console.log('Token validation failed, clearing user');
             setUser(null);
             localStorage.removeItem("token");
           }
         } catch (err) {
+          console.error('Error restoring user:', err);
+          // Check if it's a network error (server not running)
+          if (err instanceof TypeError && err.message.includes('fetch')) {
+            console.error('Server connection failed. Make sure the backend server is running on port 5000');
+          }
           setUser(null);
           localStorage.removeItem("token");
         }
+      } else {
+        console.log('No token found');
       }
       setLoading(false);
     };
@@ -105,11 +118,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         branchId: data.branchId,
       });
 
-      // Redirect based on role (case-insensitive comparison)
-      const role = data.role.toLowerCase();
-      if (role === "admin") {
+      // Normalize role to lowercase for consistent comparison
+      const normalizedRole = data.role.toLowerCase();
+      console.log('Login - Normalized role:', normalizedRole, 'Original role:', data.role);
+      
+      if (normalizedRole === "admin") {
         navigate("/admin");
-      } else if (role === "manager") {
+      } else if (normalizedRole === "manager" || normalizedRole === "sale assistant") {
         navigate("/manager");
       }
 
@@ -129,7 +144,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

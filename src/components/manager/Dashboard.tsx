@@ -12,6 +12,19 @@ import GreenProgressBar from "../GreenProgressBar";
 
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
+  
+  // Helper function to determine actual role for access control
+  const getActualRole = (user: any) => {
+    if (!user) return null;
+    
+    // Check if this is actually a Sale Assistant based on name or other criteria
+    if (user.role.toLowerCase() === 'manager' && 
+        user.name.toLowerCase().includes('sale assistant')) {
+      return 'sale assistant';
+    }
+    
+    return user.role.toLowerCase();
+  };
   const [products, setProducts] = useState<any[]>([]);
   const [sales, setSales] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,13 +33,23 @@ const Dashboard: React.FC = () => {
   const BASE_URL = VITE_BASE_URL;
 
   useEffect(() => {
+    // Only fetch data if user is authenticated
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
     const fetchData = async () => {
       try {
+        console.log('Fetching data for user:', user);
+        console.log('API URL:', BASE_URL);
+        
         // Fetch products
         const productsUrl = user?.branchId
           ? `${BASE_URL}/inventory?branchId=${user.branchId}`
           : `${BASE_URL}/inventory`;
 
+        console.log('Fetching products from:', productsUrl);
         const productsResponse = await fetch(productsUrl);
         if (!productsResponse.ok) throw new Error("Failed to fetch inventory");
         const productsData = await productsResponse.json();
@@ -37,6 +60,7 @@ const Dashboard: React.FC = () => {
           ? `${BASE_URL}/sales/recent?branchId=${user.branchId}`
           : `${BASE_URL}/sales/recent`;
 
+        console.log('Fetching sales from:', salesUrl);
         const salesResponse = await fetch(salesUrl);
         if (salesResponse.ok) {
           const salesData = await salesResponse.json();
@@ -45,13 +69,14 @@ const Dashboard: React.FC = () => {
           setSales([]);
         }
       } catch (err: any) {
+        console.error('Error fetching data:', err);
         setError(err.message);
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, [user?.branchId]);
+  }, [user, user?.branchId]);
 
   // Calculate stats
   const criticalProducts = products.filter((p) => p.stock === 0);
@@ -79,11 +104,15 @@ const Dashboard: React.FC = () => {
     .slice(0, 10);
 
   if (loading) {
+    console.log('Dashboard - Loading state, showing progress bar');
     return <GreenProgressBar loading={true}>{null}</GreenProgressBar>;
   }
   if (error) {
+    console.log('Dashboard - Error state:', error);
     return <div className="p-8 text-center text-red-500">{error}</div>;
   }
+
+  console.log('Dashboard - Rendering dashboard with data:', { products: products.length, sales: sales.length });
 
   // Dynamic stats for products in stock and low stock
   const stats = [
@@ -120,8 +149,15 @@ const Dashboard: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Manager Dashboard</h2>
-        <p className="text-gray-600">Downtown Branch Overview</p>
+        <h2 className="text-2xl font-bold text-gray-900">
+          {getActualRole(user) === 'sale assistant' ? 'Sale Assistant Dashboard' : 'Manager Dashboard'}
+        </h2>
+        <p className="text-gray-600">
+          {getActualRole(user) === 'sale assistant' 
+            ? 'Welcome to your sales dashboard. You can process sales, manage billing, and view transactions.'
+            : 'Downtown Branch Overview'
+          }
+        </p>
       </div>
 
       {/* Stats Grid */}
@@ -294,22 +330,24 @@ const Dashboard: React.FC = () => {
             <ShoppingCart className="h-8 w-8 mx-auto mb-2 text-blue-600" />
             <span className="text-sm font-medium text-gray-900">New Sale</span>
           </button>
-          <button className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-center">
-            <Package className="h-8 w-8 mx-auto mb-2 text-green-600" />
-            <span className="text-sm font-medium text-gray-900">Add Stock</span>
-          </button>
+                     <button className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-center">
+             <Package className="h-8 w-8 mx-auto mb-2 text-green-600" />
+             <span className="text-sm font-medium text-gray-900">
+               {getActualRole(user) === 'manager' ? 'Add Stock' : 'View Stock'}
+             </span>
+           </button>
           <button className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-center">
             <TrendingUp className="h-8 w-8 mx-auto mb-2 text-purple-600" />
             <span className="text-sm font-medium text-gray-900">
               View Reports
             </span>
           </button>
-          <button className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-center">
-            <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-orange-600" />
-            <span className="text-sm font-medium text-gray-900">
-              Stock Alerts
-            </span>
-          </button>
+                     <button className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-center">
+             <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-orange-600" />
+             <span className="text-sm font-medium text-gray-900">
+               Stock Alerts
+             </span>
+           </button>
         </div>
       </div>
     </div>

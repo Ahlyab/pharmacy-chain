@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { config } from '../../config/env';
 import SupplierDetails from './SupplierDetails';
+import Swal from 'sweetalert2';
 
 interface Delivery {
   id: string;
@@ -156,7 +157,12 @@ const SupplierManagement: React.FC = () => {
         setShowAddDialog(false);
       }
     } catch (err) {
-      alert("Error adding/updating supplier");
+      Swal.fire({
+        title: 'Error',
+        text: 'Error adding/updating supplier',
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
     }
   };
 
@@ -256,7 +262,12 @@ const SupplierManagement: React.FC = () => {
                       if (!response.ok) throw new Error('Failed to delete supplier');
                       setSuppliers(suppliers.filter(s => s.id !== supplier.id));
                     } catch (err) {
-                      alert('Error deleting supplier');
+                      Swal.fire({
+                        title: 'Error',
+                        text: 'Error deleting supplier',
+                        icon: 'error',
+                        confirmButtonText: 'OK'
+                      });
                     }
                   }
                 }}>Delete</button>

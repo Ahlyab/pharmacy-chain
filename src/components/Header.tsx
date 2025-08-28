@@ -8,6 +8,19 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const { user, logout } = useAuth();
+  
+  // Helper function to determine actual role for access control
+  const getActualRole = (user: any) => {
+    if (!user) return null;
+    
+    // Check if this is actually a Sale Assistant based on name or other criteria
+    if (user.role.toLowerCase() === 'manager' && 
+        user.name.toLowerCase().includes('sale assistant')) {
+      return 'sale assistant';
+    }
+    
+    return user.role.toLowerCase();
+  };
 
   return (
     <header className="bg-white shadow-sm border-b border-gray-200">
@@ -20,7 +33,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
             <Menu className="h-6 w-6" />
           </button>
           <h1 className="ml-4 text-xl font-semibold text-gray-900 capitalize">
-            {user?.role} Dashboard
+            {getActualRole(user) === 'sale assistant' ? 'Sales Dashboard' : `${user?.role} Dashboard`}
           </h1>
         </div>
 

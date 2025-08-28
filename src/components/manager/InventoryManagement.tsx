@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Pencil, Trash2, ChevronDown } from "lucide-react";
+import { Pencil, Trash2, ChevronDown, Shield } from "lucide-react";
 import { VITE_BASE_URL } from "../../data";
 import Swal from "sweetalert2";
 import { useAuth } from "../../contexts/AuthContext";
@@ -86,6 +86,19 @@ const initialFormState: FormProduct = {
 
 const InventoryManagement: React.FC = () => {
   const { user } = useAuth();
+  
+  // Helper function to determine actual role for access control
+  const getActualRole = (user: any) => {
+    if (!user) return null;
+    
+    // Check if this is actually a Sale Assistant based on name or other criteria
+    if (user.role.toLowerCase() === 'manager' && 
+        user.name.toLowerCase().includes('sale assistant')) {
+      return 'sale assistant';
+    }
+    
+    return user.role.toLowerCase();
+  };
   const BASE_URL = VITE_BASE_URL;
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -163,7 +176,12 @@ const InventoryManagement: React.FC = () => {
           }
         }
       } catch (err) {
-        alert("Error fetching products: " + (err as Error).message);
+        Swal.fire({
+          title: 'Error',
+          text: 'Error fetching products: ' + (err as Error).message,
+          icon: 'error',
+          confirmButtonText: 'OK'
+        });
       } finally {
         setIsLoading(false);
       }
@@ -408,11 +426,19 @@ const InventoryManagement: React.FC = () => {
         });
       }
     } else if (fileType === "pdf") {
-      alert("PDF import is not supported. Please use Excel file.");
+      Swal.fire({
+        title: 'Unsupported File Type',
+        text: 'PDF import is not supported. Please use Excel file.',
+        icon: 'warning',
+        confirmButtonText: 'OK'
+      });
     } else {
-      alert(
-        "Unsupported file type. Please upload an Excel (.xlsx/.xls) file."
-      );
+      Swal.fire({
+        title: 'Unsupported File Type',
+        text: 'Unsupported file type. Please upload an Excel (.xlsx/.xls) file.',
+        icon: 'warning',
+        confirmButtonText: 'OK'
+      });
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -602,7 +628,12 @@ const InventoryManagement: React.FC = () => {
         }
       }
     } catch (err) {
-      alert("Error: " + (err as Error).message);
+      Swal.fire({
+        title: 'Error',
+        text: 'Error: ' + (err as Error).message,
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -882,8 +913,10 @@ const InventoryManagement: React.FC = () => {
           Inventory Management
         </h1>
         <p className="text-lg text-gray-600">
-          View, filter, and manage pharmacy inventory. Add or edit products and
-          track stock levels.
+          {getActualRole(user) === "sale assistant" 
+            ? "View pharmacy inventory with full access to all data. You can search, filter, and monitor stock levels."
+            : "View, filter, and manage pharmacy inventory. Add or edit products and track stock levels."
+          }
         </p>
       </div>
 
@@ -961,31 +994,41 @@ const InventoryManagement: React.FC = () => {
           </select>
         </div>
         <div className="flex gap-2 ml-auto items-center">
-          <input
-            type="file"
-            accept=".xlsx,.xls"
-            ref={fileInputRef}
-            style={{ display: "none" }}
-            onChange={handleImportFile}
-          />
-          <button
-            className="px-4 py-2 bg-green-600 text-white rounded shadow hover:bg-green-700 flex items-center gap-2"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            Import Products
-          </button>
-          <button
-            className="px-4 py-2 bg-blue-600 text-white rounded shadow hover:bg-blue-700 flex items-center gap-2"
-            onClick={() => {
-              setShowModal(true);
-              setShowSupplierDropdown(false);
-              setSupplierSearch("");
-              setShowProductDropdown(false);
-              setProductSearch("");
-            }}
-          >
-            Add Product
-          </button>
+          {getActualRole(user) !== "sale assistant" && (
+            <>
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                ref={fileInputRef}
+                style={{ display: "none" }}
+                onChange={handleImportFile}
+              />
+              <button
+                className="px-4 py-2 bg-green-600 text-white rounded shadow hover:bg-green-700 flex items-center gap-2"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Import Products
+              </button>
+              <button
+                className="px-4 py-2 bg-blue-600 text-white rounded shadow hover:bg-blue-700 flex items-center gap-2"
+                onClick={() => {
+                  setShowModal(true);
+                  setShowSupplierDropdown(false);
+                  setSupplierSearch("");
+                  setShowProductDropdown(false);
+                  setProductSearch("");
+                }}
+              >
+                Add Product
+              </button>
+            </>
+          )}
+                     {getActualRole(user) === "sale assistant" && (
+             <div className="text-sm text-gray-600 bg-blue-50 border border-blue-200 px-3 py-2 rounded-md">
+               <Shield className="inline h-4 w-4 mr-2 text-blue-600" />
+               <span className="font-medium">Sale Assistant Access:</span> Full inventory visibility with search, filtering, and monitoring capabilities
+             </div>
+           )}
         </div>
       </div>
 
@@ -1088,20 +1131,26 @@ const InventoryManagement: React.FC = () => {
                     </span>
                   </td>
                   <td className="px-4 py-2 text-center flex gap-1 justify-center w-[110px] shrink-0">
-                    <button
-                      className="p-1 rounded-full hover:bg-blue-100"
-                      title="Edit"
-                      onClick={() => handleEdit(product)}
-                    >
-                      <Pencil className="w-4 h-4 text-blue-600" />
-                    </button>
-                    <button
-                      className="p-1 rounded-full hover:bg-green-100"
-                      title="Delete"
-                      onClick={() => handleDelete(product.id)}
-                    >
-                      <Trash2 className="w-4 h-4 text-green-600" />
-                    </button>
+                    {getActualRole(user) !== "sale assistant" ? (
+                      <>
+                        <button
+                          className="p-1 rounded-full hover:bg-blue-100"
+                          title="Edit"
+                          onClick={() => handleEdit(product)}
+                        >
+                          <Pencil className="w-4 h-4 text-blue-600" />
+                        </button>
+                        <button
+                          className="p-1 rounded-full hover:bg-green-100"
+                          title="Delete"
+                          onClick={() => handleDelete(product.id)}
+                        >
+                          <Trash2 className="w-4 h-4 text-green-600" />
+                        </button>
+                      </>
+                                         ) : (
+                       <span className="text-xs text-blue-600 font-medium">View Only</span>
+                     )}
                   </td>
                 </tr>
               ))
@@ -1110,8 +1159,8 @@ const InventoryManagement: React.FC = () => {
         </table>
       </div>
 
-      {/* Modal */}
-      {showModal && (
+      {/* Modal - Only Managers can add/edit products */}
+      {showModal && getActualRole(user) !== "sale assistant" && (
         <div 
           className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50"
           onClick={() => {

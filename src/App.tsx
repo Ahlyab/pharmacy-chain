@@ -13,9 +13,35 @@ import ManagerDashboard from "./components/ManagerDashboard";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
 function AppRoutes() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+
+  // Helper function to determine actual role for routing
+  const getActualRole = (user: any) => {
+    if (!user) return null;
+    
+    // Check if this is actually a Sale Assistant based on name or other criteria
+    if (user.role.toLowerCase() === 'manager' && 
+        user.name.toLowerCase().includes('sale assistant')) {
+      return 'sale assistant';
+    }
+    
+    return user.role.toLowerCase();
+  };
+
+  console.log('AppRoutes - user:', user, 'loading:', loading);
+
+  // Show loading spinner while checking authentication
+  if (loading) {
+    console.log('Showing loading spinner...');
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Spinner />
+      </div>
+    );
+  }
 
   if (!user) {
+    console.log('No user found, redirecting to login...');
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
@@ -25,15 +51,16 @@ function AppRoutes() {
     );
   }
 
+  console.log('User authenticated, role:', user.role, 'normalized role:', user.role.toLowerCase());
   return (
     <Routes>
       {/* Root path redirect based on user role */}
       <Route
         path="/"
         element={
-          user.role === "admin" ? (
+          getActualRole(user) === "admin" ? (
             <Navigate to="/admin" replace />
-          ) : user.role === "manager" ? (
+          ) : getActualRole(user) === "manager" || getActualRole(user) === "sale assistant" ? (
             <Navigate to="/manager" replace />
           ) : (
             <Navigate to="/login" replace />
@@ -43,13 +70,13 @@ function AppRoutes() {
       <Route
         path="/admin/*"
         element={
-          user.role === "admin" ? <AdminDashboard /> : <Navigate to="/login" />
+          getActualRole(user) === "admin" ? <AdminDashboard /> : <Navigate to="/login" />
         }
       />
       <Route
         path="/manager/*"
         element={
-          user.role === "manager" ? (
+          getActualRole(user) === "manager" || getActualRole(user) === "sale assistant" ? (
             <ManagerDashboard />
           ) : (
             <Navigate to="/login" />
@@ -60,9 +87,9 @@ function AppRoutes() {
       <Route
         path="*"
         element={
-          user.role === "admin" ? (
+          user.role.toLowerCase() === "admin" ? (
             <Navigate to="/admin" replace />
-          ) : user.role === "manager" ? (
+          ) : user.role.toLowerCase() === "manager" || user.role.toLowerCase() === "sale assistant" ? (
             <Navigate to="/manager" replace />
           ) : (
             <Navigate to="/login" replace />

@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Swal from "sweetalert2";
-import { Plus, Edit, Trash2, MapPin, Phone } from "lucide-react";
+import { Plus, Edit, Trash2, MapPin, Phone, Building2 } from "lucide-react";
 
 interface Branch {
   id: string;
@@ -100,7 +100,12 @@ const BranchManagement: React.FC = () => {
       setEditingBranch(null);
       setFormData({ name: "", address: "", phone: "", status: "Active" });
     } catch (err) {
-      alert("Error adding/updating branch: " + (err as Error).message);
+      Swal.fire({
+        title: 'Error',
+        text: 'Error adding/updating branch: ' + (err as Error).message,
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
     }
   };
 
