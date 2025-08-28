@@ -11,6 +11,7 @@ const managerSchema = new mongoose.Schema(
       required: true,
     },
     status: { type: String, enum: ["Active", "Inactive"], default: "Active" },
+    role: { type: String, enum: ["Manager", "Sale Assistant"], default: "Manager" },
   },
   { timestamps: true }
 );

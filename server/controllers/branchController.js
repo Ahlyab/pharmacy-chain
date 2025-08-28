@@ -5,8 +5,8 @@ import User from "../models/User.js";
 export const updateManager = async (req, res) => {
   try {
     const { id } = req.params;
-    const { password, branchId, ...rest } = req.body;
-    const updateData = { ...rest };
+    const { password, branchId, role, ...rest } = req.body;
+    const updateData = { ...rest, role };
     if (branchId) {
       updateData.branch = branchId;
     }
@@ -17,10 +17,9 @@ export const updateManager = async (req, res) => {
     });
     if (!manager) return res.status(404).json({ error: "Manager not found" });
 
-    // Update corresponding user document with password/branch if provided
+    // Update corresponding user document with password/branch/role if provided
     const user = await User.findOne({
       email: manager.email,
-      role: "manager",
     });
     if (user) {
       let needsSave = false;
@@ -30,6 +29,10 @@ export const updateManager = async (req, res) => {
       }
       if (branchId) {
         user.branchId = branchId;
+        needsSave = true;
+      }
+      if (role) {
+        user.role = role;
         needsSave = true;
       }
       if (needsSave) {
@@ -58,8 +61,8 @@ export const deleteManager = async (req, res) => {
     // Delete the manager
     await Manager.findByIdAndDelete(id);
 
-    // Delete the corresponding user
-    await User.findOneAndDelete({ email: manager.email, role: "manager" });
+    // Delete the corresponding user (remove role filter to handle both Manager and Sale Assistant)
+    await User.findOneAndDelete({ email: manager.email });
 
     res.status(200).json({ message: "Manager deleted successfully" });
   } catch (error) {
