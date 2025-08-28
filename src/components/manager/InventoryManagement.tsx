@@ -90,13 +90,6 @@ const InventoryManagement: React.FC = () => {
   // Helper function to determine actual role for access control
   const getActualRole = (user: any) => {
     if (!user) return null;
-    
-    // Check if this is actually a Sale Assistant based on name or other criteria
-    if (user.role.toLowerCase() === 'manager' && 
-        user.name.toLowerCase().includes('sale assistant')) {
-      return 'sale assistant';
-    }
-    
     return user.role.toLowerCase();
   };
   const BASE_URL = VITE_BASE_URL;
