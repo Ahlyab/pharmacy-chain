@@ -39,6 +39,8 @@ const TransactionHistory: React.FC = () => {
   const [selectedBranch, setSelectedBranch] = useState("All");
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [dateRange, setDateRange] = useState("7");
+  const [selectedDate, setSelectedDate] = useState<string>("");
+  const [showCalendar, setShowCalendar] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [branches, setBranches] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,6 +56,24 @@ const TransactionHistory: React.FC = () => {
       setSortColumn(column);
       setSortDirection("asc");
     }
+  };
+
+  // Date handling functions
+  const handleDateSelect = (date: string) => {
+    setSelectedDate(date);
+    setDateRange(""); // Clear date range when specific date is selected
+    setShowCalendar(false);
+  };
+
+  const handleDateRangeChange = (range: string) => {
+    setDateRange(range);
+    setSelectedDate(""); // Clear specific date when date range is selected
+  };
+
+  const clearDateFilters = () => {
+    setSelectedDate("");
+    setDateRange("7");
+    setShowCalendar(false);
   };
   useEffect(() => {
     const fetchTransactions = async () => {
@@ -108,10 +128,17 @@ const TransactionHistory: React.FC = () => {
         selectedBranch === "All" || transaction.branchName === selectedBranch;
       const matchesStatus =
         selectedStatus === "All" || transaction.status === selectedStatus;
-      // Date filter
+      // Date filter - prioritize specific date over date range
       const txnDate = new Date(transaction.date);
       let matchesDate = true;
-      if (dateRange === "today") {
+      
+      if (selectedDate) {
+        // Specific date filter
+        const selectedDateObj = new Date(selectedDate);
+        const selectedStart = new Date(selectedDateObj.getFullYear(), selectedDateObj.getMonth(), selectedDateObj.getDate());
+        const selectedEnd = new Date(selectedStart.getTime() + 24 * 60 * 60 * 1000);
+        matchesDate = txnDate >= selectedStart && txnDate < selectedEnd;
+      } else if (dateRange === "today") {
         const txnDateStr = txnDate.toISOString().slice(0, 10);
         const todayStr = now.toISOString().slice(0, 10);
         matchesDate = txnDateStr === todayStr;
@@ -288,8 +315,9 @@ const TransactionHistory: React.FC = () => {
 
       {/* Filters */}
       <div className="bg-white rounded-lg shadow p-6">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <div className="relative">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          {/* Search Input - Full width on small screens */}
+          <div className="relative sm:col-span-2 lg:col-span-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
               type="text"
@@ -299,39 +327,125 @@ const TransactionHistory: React.FC = () => {
               className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <select
-            value={selectedBranch}
-            onChange={(e) => setSelectedBranch(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+
+          {/* Branch Filter */}
+          <div className="w-full">
+            <select
+              value={selectedBranch}
+              onChange={(e) => setSelectedBranch(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {branchOptions.map((branch) => (
+                <option key={branch} value={branch}>
+                  {branch}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Status Filter */}
+          <div className="w-full">
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {statuses.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Date Filter with Calendar Option */}
+          <div className="relative w-full">
+            <div className="flex w-full">
+              <select
+                value={dateRange}
+                onChange={(e) => handleDateRangeChange(e.target.value)}
+                className={`flex-1 px-3 py-2 border rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  selectedDate ? 'border-gray-300 bg-gray-100' : 'border-gray-300'
+                }`}
+                disabled={!!selectedDate}
+              >
+                <option value="today">Today</option>
+                <option value="7">Last 7 days</option>
+                <option value="30">Last 30 days</option>
+                <option value="90">Last 3 months</option>
+                <option value="365">Last year</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowCalendar(!showCalendar)}
+                className={`px-3 py-2 border border-l-0 rounded-r-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  selectedDate 
+                    ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100' 
+                    : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
+                }`}
+                title="Select specific date"
+              >
+                📅
+              </button>
+            </div>
+            
+            {/* Active Filter Indicator */}
+            {(selectedDate || dateRange) && (
+              <div className="mt-1 text-xs">
+                {selectedDate ? (
+                  <span className="text-blue-600 font-medium">
+                    📅 Filtering by date: {new Date(selectedDate).toLocaleDateString()}
+                  </span>
+                ) : (
+                  <span className="text-gray-600">
+                    📅 Filtering by: {dateRange === "today" ? "Today" : `Last ${dateRange} days`}
+                  </span>
+                )}
+              </div>
+            )}
+            
+            {/* Calendar Dropdown */}
+            {showCalendar && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-10 p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">Select Date</span>
+                  <button
+                    onClick={() => setShowCalendar(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    ×
+                  </button>
+                </div>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => handleDateSelect(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {selectedDate && (
+                  <div className="mt-2 flex justify-between items-center">
+                    <span className="text-xs text-gray-500">
+                      Selected: {new Date(selectedDate).toLocaleDateString()}
+                    </span>
+                    <button
+                      onClick={clearDateFilters}
+                      className="text-xs text-red-600 hover:text-red-800"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Clear Filters Button */}
+          <button
+            onClick={clearDateFilters}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            {branchOptions.map((branch) => (
-              <option key={branch} value={branch}>
-                {branch}
-              </option>
-            ))}
-          </select>
-          <select
-            value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {statuses.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
-          </select>
-          <select
-            value={dateRange}
-            onChange={(e) => setDateRange(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="today">Today</option>
-            <option value="7">Last 7 days</option>
-            <option value="30">Last 30 days</option>
-            <option value="90">Last 3 months</option>
-            <option value="365">Last year</option>
-          </select>
+            Clear Filters
+          </button>
         </div>
       </div>
 
@@ -342,22 +456,24 @@ const TransactionHistory: React.FC = () => {
         ) : (
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+              <table className="min-w-full divide-y divide-gray-200 text-xs sm:text-sm">
                 <thead className="bg-gray-50">
                   <tr>
                     <th
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none"
+                      className="px-2 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none"
                       onClick={() => handleSort("id")}
                     >
-                      Transaction ID{" "}
+                      <span className="hidden sm:inline">Transaction ID</span>
+                      <span className="sm:hidden">ID</span>{" "}
                       {sortColumn === "id" &&
                         (sortDirection === "asc" ? "▲" : "▼")}
                     </th>
                     <th
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none"
+                      className="px-2 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none"
                       onClick={() => handleSort("date")}
                     >
-                      Date & Time{" "}
+                      <span className="hidden sm:inline">Date & Time</span>
+                      <span className="sm:hidden">Date</span>{" "}
                       {sortColumn === "date" &&
                         (sortDirection === "asc" ? "▲" : "▼")}
                     </th>
@@ -414,23 +530,27 @@ const TransactionHistory: React.FC = () => {
                                  <tbody className="bg-white divide-y divide-gray-200">
                    {sortedTransactions.map((transaction) => (
                     <tr key={transaction.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {transaction.id}
+                      <td className="px-2 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm font-medium text-gray-900">
+                        <span className="hidden sm:inline">{transaction.id}</span>
+                        <span className="sm:hidden">{transaction.id.substring(0, 8)}...</span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatDateTime(transaction.date)}
+                      <td className="px-2 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                        <span className="hidden sm:inline">{formatDateTime(transaction.date)}</span>
+                        <span className="sm:hidden">{new Date(transaction.date).toLocaleDateString()}</span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {transaction.branchName}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {transaction.customer}
+                      <td className="px-2 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                        <span className="hidden sm:inline">{transaction.customer}</span>
+                        <span className="sm:hidden">{transaction.customer.length > 15 ? transaction.customer.substring(0, 15) + '...' : transaction.customer}</span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {transaction.items?.length || 0} items
+                      <td className="px-2 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
+                        <div className="flex items-center space-x-2">
+                          <span className="hidden sm:inline">{transaction.items?.length || 0} items</span>
+                          <span className="sm:hidden">{transaction.items?.length || 0}</span>
                         </div>
-                        <div className="text-sm text-gray-500">
+                        <div className="hidden sm:block text-xs sm:text-sm text-gray-500">
                           {transaction.items
                             ?.map((item) => item.name)
                             .join(", ")
@@ -440,21 +560,22 @@ const TransactionHistory: React.FC = () => {
                             .join(", ").length > 50 && "..."}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      <td className="px-2 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm font-medium text-gray-900">
                         ${transaction.total.toFixed(2)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-2 sm:px-6 py-4 whitespace-nowrap">
                         <span
-                          className={`px-2 py-1 text-xs font-medium rounded-full ${getPaymentColor(
+                          className={`px-1 sm:px-2 py-1 text-xs font-medium rounded-full ${getPaymentColor(
                             transaction.paymentMethod
                           )}`}
                         >
-                          {transaction.paymentMethod}
+                          <span className="hidden sm:inline">{transaction.paymentMethod}</span>
+                          <span className="sm:hidden">{transaction.paymentMethod.charAt(0).toUpperCase()}</span>
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-2 sm:px-6 py-4 whitespace-nowrap">
                         <span
-                          className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(
+                          className={`px-1 sm:px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(
                             transaction.status
                           )}`}
                         >

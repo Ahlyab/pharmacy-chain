@@ -250,8 +250,8 @@ router.get("/health", async (req, res) => {
   }
 });
 
-// JWT secret key
-const JWT_SECRET = "your_jwt_secret_key";
+// JWT secret key - use environment variable or fallback to default
+const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret_key";
 
 // User Signup
 router.post("/signup", async (req, res) => {
@@ -273,7 +273,7 @@ router.post("/signup", async (req, res) => {
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).populate("branchId");
     if (!user || !(await user.comparePassword(password))) {
       return res.status(401).json({ error: "Invalid email or password" });
     }
@@ -286,7 +286,8 @@ router.post("/login", async (req, res) => {
       name: user.name,
       email: user.email,
       role: user.role,
-      branchId: user.branchId, // Include branchId if applicable
+      branchId: user.branchId?._id, // Include branchId if applicable
+      branchName: user.branchId?.name, // Include branchName if applicable
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -311,7 +312,9 @@ const authenticate = (req, res, next) => {
 // Get current user info from token
 router.get("/me", authenticate, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    //populate branchId from branch model
+    const user = await User.findById(req.user.id).populate("branchId");
+    console.log(user);
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
@@ -320,9 +323,11 @@ router.get("/me", authenticate, async (req, res) => {
       name: user.name,
       email: user.email,
       role: user.role,
-      branchId: user.branchId || null,
+      branchId: user?.branchId?._id || null,
+      branchName: user?.branchId?.name || null,
     });
   } catch (error) {
+    console.error("Error in /me endpoint:", error);
     res.status(500).json({ error: error.message });
   }
 });

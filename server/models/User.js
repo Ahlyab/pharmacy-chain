@@ -7,7 +7,7 @@ const UserSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     role: { type: String, enum: ["Admin", "Manager", "Sale Assistant"], required: true },
-    branchId: { type: String }, // Optional, for manager users
+    branchId: { type: mongoose.Schema.Types.ObjectId, ref: "Branch" }, // Optional, for manager users
   },
   { timestamps: true }
 );

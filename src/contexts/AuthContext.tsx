@@ -13,6 +13,7 @@ interface User {
   email: string;
   role: "admin" | "manager" | "sale assistant" | "Manager" | "Sale Assistant";
   branchId?: string;
+  branchName?: string;
 }
 
 interface AuthContextType {
@@ -116,6 +117,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         email: data.email,
         role: data.role,
         branchId: data.branchId,
+        branchName: data.branchName,
       });
 
       // Normalize role to lowercase for consistent comparison
