@@ -10,11 +10,17 @@ import TransactionHistory from './admin/TransactionHistory';
 import Dashboard from './admin/Dashboard';
 import SupplierManagement from './admin/SupplierManagement';
 import WarehouseManagement from './admin/WarehouseManagement';
+import { useAuth } from '../contexts/AuthContext';
 
 const AdminDashboard: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { user, loading: authLoading } = useAuth();
 
-    const menuItems = [
+  console.log('AdminDashboard - User:', user);
+  console.log('AdminDashboard - Loading:', authLoading);
+  console.log('AdminDashboard - Role:', user?.role);
+
+  const menuItems = [
       { name: 'Dashboard', path: '/admin', icon: 'BarChart3' },
       { name: 'Branches', path: '/admin/branches', icon: 'Building2' },
       { name: 'Users & Permissions', path: '/admin/managers', icon: 'Users' },
@@ -30,6 +36,28 @@ const AdminDashboard: React.FC = () => {
     const timer = setTimeout(() => setLoading(false), 1000);
     return () => clearTimeout(timer);
   }, []);
+
+  // If user is not available or not an admin, show loading or redirect
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user || user.role.toLowerCase() !== 'admin') {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <p className="text-red-600 text-lg">Access denied. Admin privileges required.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-gray-50">

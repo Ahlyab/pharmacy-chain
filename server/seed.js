@@ -1,5 +1,8 @@
 import mongoose from 'mongoose';
 import User from './models/User.js';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const seedUsers = async () => {
   try {
@@ -27,7 +30,7 @@ const seedUsers = async () => {
   }
 };
 
-mongoose.connect('mongodb://localhost:27017/pharmacy-chain', {
+mongoose.connect( process.env.MONGO_URI || 'mongodb://localhost:27017/pharmacy-chain', {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })

@@ -123,6 +123,12 @@ const InventoryManagement: React.FC = () => {
     return { ...product, status, id: product._id || product.id };
   };
 
+  // Helper to check if a string is a valid MongoDB ObjectId
+  const isValidObjectId = (id: string): boolean => {
+    if (!id || typeof id !== 'string') return false;
+    return /^[0-9a-fA-F]{24}$/.test(id);
+  };
+
   // Fetch suppliers from backend
   const fetchSuppliers = async () => {
     try {
@@ -561,8 +567,10 @@ const InventoryManagement: React.FC = () => {
              // Prepare the data to send, including all new fields
        const submitData = {
          ...formData,
-         branchId: user?.branchId,
-         supplierId: supplierId, // Include supplier ID
+         // Only include branchId if it's a valid MongoDB ObjectId
+         ...(user?.branchId && isValidObjectId(user.branchId) && { branchId: user.branchId }),
+         // Only include supplierId if it's a valid MongoDB ObjectId
+         ...(supplierId && isValidObjectId(supplierId) && { supplierId: supplierId }),
          category: '', // Send empty category to maintain compatibility
          // Ensure all new fields are included
          store: formData.store || '',
@@ -576,24 +584,263 @@ const InventoryManagement: React.FC = () => {
        };
 
       if (editingProduct) {
-        // Update product in backend
+        // Update product in backend - ensure all required fields are included
+        const updateData = {
+          ...submitData,
+          // Ensure these fields are explicitly included for updates
+          name: submitData.name,
+          stock: submitData.stock,
+          minStock: submitData.minStock,
+          price: submitData.price,
+          supplier: submitData.supplier,
+          // Only include supplierId if it's a valid MongoDB ObjectId
+          ...(submitData.supplierId && isValidObjectId(submitData.supplierId) && { supplierId: submitData.supplierId }),
+          // Only include branchId if it's a valid MongoDB ObjectId
+          ...(user?.branchId && isValidObjectId(user.branchId) && { branchId: user.branchId }),
+          expiryDate: submitData.expiryDate,
+          // Include all optional fields
+          store: submitData.store || '',
+          manufacturer: submitData.manufacturer || '',
+          composition: submitData.composition || '',
+          series: submitData.series || '',
+          reservedQuantity: submitData.reservedQuantity || 0,
+          purchasePriceExclVAT: submitData.purchasePriceExclVAT || 0,
+          vat: submitData.vat || 0,
+          retailPriceVATIncluded: submitData.retailPriceVATIncluded || submitData.price || 0,
+        };
+        
+        // Debug logging
+        console.log('Updating product with data:', updateData);
+        console.log('Product ID being updated:', editingProduct.id);
+        console.log('Form data before update:', formData);
+        
+        // Check for undefined/null values
+        Object.entries(updateData).forEach(([key, value]) => {
+          if (value === undefined || value === null) {
+            console.warn(`Field ${key} has value:`, value);
+          }
+        });
+        
+        // Validate required fields before sending
+        if (!updateData.name || !updateData.stock || !updateData.minStock || !updateData.price || !updateData.supplier || !updateData.expiryDate) {
+          throw new Error('Missing required fields: name, stock, minStock, price, supplier, and expiryDate are required');
+        }
+        
+        // Ensure user has a valid branch
+        if (!user?.branchId || !isValidObjectId(user.branchId)) {
+          throw new Error('User must be assigned to a valid branch');
+        }
+        
+        // Ensure expiryDate is in proper format
+        if (updateData.expiryDate) {
+          try {
+            new Date(updateData.expiryDate);
+          } catch (error) {
+            throw new Error('Invalid expiry date format');
+          }
+        }
+        
+        // Ensure numeric fields are numbers
+        if (typeof updateData.stock !== 'number' || typeof updateData.minStock !== 'number' || typeof updateData.price !== 'number') {
+          throw new Error('Stock, minStock, and price must be valid numbers');
+        }
+        
+        // Final validation - ensure no empty strings for required fields
+        if (!updateData.name.trim() || !updateData.supplier.trim()) {
+          throw new Error('Product name and supplier cannot be empty');
+        }
+        
+        // Clean up the data before sending - remove any undefined values and convert types
+        const cleanUpdateData = Object.fromEntries(
+          Object.entries(updateData)
+            .filter(([_, value]) => value !== undefined && value !== null && value !== '')
+            .map(([key, value]) => {
+              // Convert numeric fields to numbers
+              if (['stock', 'minStock', 'price', 'reservedQuantity', 'purchasePriceExclVAT', 'vat', 'retailPriceVATIncluded'].includes(key)) {
+                const numValue = Number(value);
+                if (isNaN(numValue)) {
+                  console.warn(`Invalid numeric value for ${key}:`, value, 'using 0 instead');
+                  return [key, 0];
+                }
+                return [key, numValue];
+              }
+              // Convert expiryDate to proper date format
+              if (key === 'expiryDate' && value) {
+                // Ensure expiryDate is in ISO string format
+                try {
+                  const date = new Date(value);
+                  if (!isNaN(date.getTime())) {
+                    return [key, date.toISOString()];
+                  }
+                } catch (error) {
+                  console.warn('Invalid date format for expiryDate:', value);
+                }
+                return [key, value];
+              }
+              // Only include supplierId if it's a valid ObjectId
+              if (key === 'supplierId' && (typeof value !== 'string' || !isValidObjectId(value) || value === '')) {
+                console.warn('Invalid supplierId, removing from update data:', value);
+                return null; // This will be filtered out
+              }
+              // Only include branchId if it's a valid ObjectId
+              if (key === 'branchId' && (typeof value !== 'string' || !isValidObjectId(value) || value === '')) {
+                console.warn('Invalid branchId, removing from update data:', value);
+                return null; // This will be filtered out
+              }
+              // Keep other fields as is
+              return [key, value];
+            })
+            .filter((entry): entry is [string, any] => entry !== null)
+        );
+        
+        console.log('Final clean update data:', cleanUpdateData);
+        
+        // Log data types for debugging
+        console.log('Data types being sent:');
+        Object.entries(cleanUpdateData).forEach(([key, value]) => {
+          console.log(`${key}: ${typeof value} = ${value}`);
+        });
+        
         const response = await fetch(
           `${BASE_URL}/inventory/${editingProduct.id}`,
           {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(submitData),
+            body: JSON.stringify(cleanUpdateData),
           }
         );
-        if (!response.ok) throw new Error("Failed to update product");
+        
+        if (!response.ok) {
+          let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+          console.error('Response status:', response.status);
+          console.error('Response status text:', response.statusText);
+          
+          try {
+            const errorData = await response.json();
+            console.error('Error response data:', errorData);
+            if (errorData.error) {
+              errorMessage = errorData.error;
+            }
+          } catch (jsonError) {
+            console.error('Error parsing error response:', jsonError);
+          }
+          throw new Error(errorMessage);
+        }
       } else {
         // Add product to backend
+        // Debug logging
+        console.log('Adding new product with data:', submitData);
+        console.log('Form data before submit:', formData);
+        
+        // Check for undefined/null values
+        Object.entries(submitData).forEach(([key, value]) => {
+          if (value === undefined || value === null) {
+            console.warn(`Field ${key} has value:`, value);
+          }
+        });
+        
+        // Validate required fields before sending
+        if (!submitData.name || !submitData.stock || !submitData.minStock || !submitData.price || !submitData.supplier || !submitData.expiryDate) {
+          throw new Error('Missing required fields: name, stock, minStock, price, supplier, and expiryDate are required');
+        }
+        
+        // Ensure user has a valid branch
+        if (!user?.branchId || !isValidObjectId(user.branchId)) {
+          throw new Error('User must be assigned to a valid branch');
+        }
+        
+        // Ensure expiryDate is in proper format
+        if (submitData.expiryDate) {
+          try {
+            new Date(submitData.expiryDate);
+          } catch (error) {
+            throw new Error('Invalid expiry date format');
+          }
+        }
+        
+        // Ensure numeric fields are numbers
+        if (typeof submitData.stock !== 'number' || typeof submitData.minStock !== 'number' || typeof submitData.price !== 'number') {
+          throw new Error('Stock, minStock, and price must be valid numbers');
+        }
+        
+        // Final validation - ensure no empty strings for required fields
+        if (!submitData.name.trim() || !submitData.supplier.trim()) {
+          throw new Error('Product name and supplier cannot be empty');
+        }
+        
+        // Clean up the data before sending - remove any undefined values and convert types
+        const cleanSubmitData = Object.fromEntries(
+          Object.entries(submitData)
+            .filter(([_, value]) => value !== undefined && value !== null && value !== '')
+            .map(([key, value]) => {
+              // Convert numeric fields to numbers
+              if (['stock', 'minStock', 'price', 'reservedQuantity', 'purchasePriceExclVAT', 'vat', 'retailPriceVATIncluded'].includes(key)) {
+                const numValue = Number(value);
+                if (isNaN(numValue)) {
+                  console.warn(`Invalid numeric value for ${key}:`, value, 'using 0 instead');
+                  return [key, 0];
+                }
+                return [key, numValue];
+              }
+              // Convert expiryDate to proper date format
+              if (key === 'expiryDate' && value) {
+                // Ensure expiryDate is in ISO string format
+                try {
+                  const date = new Date(value);
+                  if (!isNaN(date.getTime())) {
+                    return [key, date.toISOString()];
+                  }
+                } catch (error) {
+                  console.warn('Invalid date format for expiryDate:', value);
+                }
+                return [key, value];
+              }
+              // Only include supplierId if it's a valid ObjectId
+              if (key === 'supplierId' && (typeof value !== 'string' || !isValidObjectId(value) || value === '')) {
+                console.warn('Invalid supplierId, removing from submit data:', value);
+                return null; // This will be filtered out
+              }
+              // Only include branchId if it's a valid ObjectId
+              if (key === 'branchId' && (typeof value !== 'string' || !isValidObjectId(value) || value === '')) {
+                console.warn('Invalid branchId, removing from submit data:', value);
+                return null; // This will be filtered out
+              }
+              // Keep other fields as is
+              return [key, value];
+            })
+            .filter((entry): entry is [string, any] => entry !== null)
+        );
+        
+        console.log('Final clean submit data:', cleanSubmitData);
+        
+        // Log data types for debugging
+        console.log('Data types being sent:');
+        Object.entries(cleanSubmitData).forEach(([key, value]) => {
+          console.log(`${key}: ${typeof value} = ${value}`);
+        });
+        
         const response = await fetch(`${BASE_URL}/inventory`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(submitData),
+          body: JSON.stringify(cleanSubmitData),
         });
-        if (!response.ok) throw new Error("Failed to add product");
+        
+        if (!response.ok) {
+          let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+          console.error('Response status:', response.status);
+          console.error('Response status text:', response.statusText);
+          
+          try {
+            const errorData = await response.json();
+            console.error('Error response data:', errorData);
+            if (errorData.error) {
+              errorMessage = errorData.error;
+            }
+          } catch (jsonError) {
+            console.error('Error parsing error response:', jsonError);
+          }
+          throw new Error(errorMessage);
+        }
       }
       setShowModal(false);
       setEditingProduct(null);
