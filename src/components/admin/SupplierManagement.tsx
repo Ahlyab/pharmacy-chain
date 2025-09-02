@@ -4,7 +4,7 @@ import SupplierDetails from './SupplierDetails';
 import Swal from 'sweetalert2';
 
 interface Delivery {
-  id: string;
+  _id: string;
   date: string;
   deliveryTime: string;
   products: string;

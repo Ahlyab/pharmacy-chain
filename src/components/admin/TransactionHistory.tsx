@@ -3,6 +3,7 @@ import { Calendar, DollarSign, Receipt, Search } from "lucide-react";
 // ...existing code...
 import GreenProgressBar from "../GreenProgressBar";
 import config from "../../config/env";
+import { apiEndpoints } from "../../utils/api";
 
 interface Transaction {
   id: string;
@@ -80,9 +81,13 @@ const TransactionHistory: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${config.apiUrl}/api/transaction`);
-        if (!res.ok) throw new Error("Failed to fetch transactions");
-        const data = await res.json();
+        const branchId = user?.branchId;
+        const token = localStorage.getItem("token");
+        const headers = {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        };
+        const data = await apiEndpoints.getTransactions(branchId, headers);
         // Handle both array response and wrapped response
         const transactionsData = Array.isArray(data) ? data : (data.transactions || []);
         console.log('Fetched transactions:', transactionsData);
@@ -95,9 +100,12 @@ const TransactionHistory: React.FC = () => {
     };
     const fetchBranches = async () => {
       try {
-        const res = await fetch(`${config.apiUrl}/api/branch`);
-        if (!res.ok) throw new Error("Failed to fetch branches");
-        const data = await res.json();
+        const token = localStorage.getItem("token");
+        const headers = {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        };
+        const data = await apiEndpoints.getBranches(headers);
         // If data is an array of branch objects, extract names
         const branchNames = Array.isArray(data)
           ? data.map((b: any) => b.name || b.branchName || b._id || b.id)

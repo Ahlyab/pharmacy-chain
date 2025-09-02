@@ -3,6 +3,7 @@ import { Pencil, Trash2, ChevronDown, Shield } from "lucide-react";
 import { VITE_BASE_URL } from "../../data";
 import Swal from "sweetalert2";
 import { useAuth } from "../../contexts/AuthContext";
+import { apiEndpoints } from "../../utils/api";
 import Spinner from "../Spinner";
 
 interface Product {
@@ -132,9 +133,7 @@ const InventoryManagement: React.FC = () => {
   // Fetch suppliers from backend
   const fetchSuppliers = async () => {
     try {
-      const response = await fetch(`${BASE_URL}/supplier`);
-      if (!response.ok) throw new Error("Failed to fetch suppliers");
-      const data = await response.json();
+      const data = await apiEndpoints.getSuppliers();
       setSuppliers(data.map((s: any) => ({
         id: s._id,
         name: s.name ?? '',
@@ -156,10 +155,8 @@ const InventoryManagement: React.FC = () => {
     const fetchProducts = async () => {
       try {
         setIsLoading(true);
-        // Always fetch all products
-        const response = await fetch(`${BASE_URL}/inventory`);
-        if (!response.ok) throw new Error("Failed to fetch products");
-        const data = await response.json();
+        // Always fetch all products using authenticated API
+        const data = await apiEndpoints.getInventory();
         setProducts(data.map(addStatus));
 
         // Set branchFilter to user's branch name if available
@@ -819,28 +816,7 @@ const InventoryManagement: React.FC = () => {
           console.log(`${key}: ${typeof value} = ${value}`);
         });
         
-        const response = await fetch(`${BASE_URL}/inventory`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(cleanSubmitData),
-        });
-        
-        if (!response.ok) {
-          let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-          console.error('Response status:', response.status);
-          console.error('Response status text:', response.statusText);
-          
-          try {
-            const errorData = await response.json();
-            console.error('Error response data:', errorData);
-            if (errorData.error) {
-              errorMessage = errorData.error;
-            }
-          } catch (jsonError) {
-            console.error('Error parsing error response:', jsonError);
-          }
-          throw new Error(errorMessage);
-        }
+        await apiEndpoints.createInventory(cleanSubmitData);
       }
       setShowModal(false);
       setEditingProduct(null);
@@ -850,9 +826,7 @@ const InventoryManagement: React.FC = () => {
       setShowProductDropdown(false);
       setProductSearch("");
       // Refresh products after add/edit (fetch all products)
-      const response = await fetch(`${BASE_URL}/inventory`);
-      if (response.ok) {
-        const data = await response.json();
+      const data = await apiEndpoints.getInventory();
         setProducts(data.map(addStatus));
         // Reset branchFilter to manager's branch name if available
         if (user?.branchId && data.length > 0) {
@@ -864,7 +838,6 @@ const InventoryManagement: React.FC = () => {
           const branchName = branchProduct?.branchId?.name ?? null;
           if (branchName) {
             setBranchFilter(branchName);
-          }
         }
       }
     } catch (err) {
@@ -928,10 +901,7 @@ const InventoryManagement: React.FC = () => {
     if (result.isConfirmed) {
       try {
         setIsLoading(true);
-        const response = await fetch(`${BASE_URL}/inventory/${id}`, {
-          method: "DELETE",
-        });
-        if (!response.ok) throw new Error("Failed to delete product");
+        await apiEndpoints.deleteInventory(id);
         setProducts((prev) =>
           prev.filter((product) => product.id !== id).map(addStatus)
         );

@@ -6,6 +6,7 @@ import Header from './Header';
 import BranchManagement from './admin/BranchManagement';
 import ManagerManagement from './admin/ManagerManagement';
 import InventoryOverview from './admin/InventoryOverview';
+import AdminInventoryManagement from './admin/AdminInventoryManagement';
 import TransactionHistory from './admin/TransactionHistory';
 import Dashboard from './admin/Dashboard';
 import SupplierManagement from './admin/SupplierManagement';
@@ -25,6 +26,7 @@ const AdminDashboard: React.FC = () => {
       { name: 'Branches', path: '/admin/branches', icon: 'Building2' },
       { name: 'Users & Permissions', path: '/admin/managers', icon: 'Users' },
       { name: 'Inventory Overview', path: '/admin/inventory', icon: 'Package' },
+      { name: 'Branch Inventory', path: '/admin/branch-inventory', icon: 'Package' },
       { name: 'Transactions', path: '/admin/transactions', icon: 'Receipt' },
       { name: 'Suppliers', path: '/admin/suppliers', icon: 'ShoppingCart' },
       { name: 'Warehouse', path: '/admin/warehouse', icon: 'FileText' },
@@ -75,6 +77,7 @@ const AdminDashboard: React.FC = () => {
               <Route path="/branches" element={<BranchManagement />} />
               <Route path="/managers" element={<ManagerManagement />} />
               <Route path="/inventory" element={<InventoryOverview />} />
+              <Route path="/branch-inventory" element={<AdminInventoryManagement />} />
               <Route path="/transactions" element={<TransactionHistory />} />
               <Route path="/suppliers" element={<SupplierManagement />} />
               <Route path="/warehouse" element={<WarehouseManagement />} />

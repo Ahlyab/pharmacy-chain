@@ -35,11 +35,16 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     setLoading(true);
+    const token = localStorage.getItem("token");
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    };
     Promise.all([
-      fetch(`${config.apiUrl}/api/branch`).then((res) => res.json()),
-      fetch(`${config.apiUrl}/api/manager`).then((res) => res.json()),
-      fetch(`${config.apiUrl}/api/inventory`).then((res) => res.json()),
-      fetch(`${config.apiUrl}/api/transaction`).then((res) => res.json()),
+      fetch(`${config.apiUrl}/api/branch`, { headers }).then((res) => res.json()),
+      fetch(`${config.apiUrl}/api/manager`, { headers }).then((res) => res.json()),
+      fetch(`${config.apiUrl}/api/inventory`, { headers }).then((res) => res.json()),
+      fetch(`${config.apiUrl}/api/transaction`, { headers }).then((res) => res.json()),
     ]).then(([branchData, managerData, productData, transactionData]) => {
       setBranches(branchData || []);
       setManagers(managerData || []);

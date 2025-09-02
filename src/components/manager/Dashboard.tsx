@@ -1,6 +1,7 @@
   import React, { useState, useEffect } from "react";
   import { VITE_BASE_URL } from "../../data";
   import { useAuth } from "../../contexts/AuthContext";
+  import { apiEndpoints } from "../../utils/api";
   import {
     Package,
     ShoppingCart,
@@ -42,30 +43,19 @@
       const fetchData = async () => {
         try {
           console.log('Fetching data for user:', user);
-          console.log('API URL:', BASE_URL);
           
-          // Fetch products
-          const productsUrl = user?.branchId
-            ? `${BASE_URL}/inventory?branchId=${user.branchId}`
-            : `${BASE_URL}/inventory`;
-
-          console.log('Fetching products from:', productsUrl);
-          const productsResponse = await fetch(productsUrl);
-          if (!productsResponse.ok) throw new Error("Failed to fetch inventory");
-          const productsData = await productsResponse.json();
+          // Fetch products using authenticated API
+          console.log('Fetching products with authentication');
+          const productsData = await apiEndpoints.getInventory(user?.branchId);
           setProducts(productsData);
 
-          // Fetch sales data
-          const salesUrl = user?.branchId
-            ? `${BASE_URL}/sales/recent?branchId=${user.branchId}`
-            : `${BASE_URL}/sales/recent`;
-
-          console.log('Fetching sales from:', salesUrl);
-          const salesResponse = await fetch(salesUrl);
-          if (salesResponse.ok) {
-            const salesData = await salesResponse.json();
+          // Fetch sales data using authenticated API
+          console.log('Fetching sales with authentication');
+          try {
+            const salesData = await apiEndpoints.getRecentSales(user?.branchId);
             setSales(salesData);
-          } else {
+          } catch (salesError) {
+            console.warn('Failed to fetch sales data:', salesError);
             setSales([]);
           }
         } catch (err: any) {
