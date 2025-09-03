@@ -10,6 +10,7 @@ import {
 import Login from "./components/Login";
 import AdminDashboard from "./components/AdminDashboard";
 import ManagerDashboard from "./components/ManagerDashboard";
+import TokenDebugger from "./components/TokenDebugger";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
 function AppRoutes() {
@@ -82,6 +83,10 @@ function AppRoutes() {
             <Navigate to="/login" />
           )
         }
+      />
+      <Route
+        path="/debug-token"
+        element={<TokenDebugger />}
       />
       {/* Catch-all route for authenticated users */}
       <Route

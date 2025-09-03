@@ -6,10 +6,12 @@ import Header from './Header';
 import BranchManagement from './admin/BranchManagement';
 import ManagerManagement from './admin/ManagerManagement';
 import InventoryOverview from './admin/InventoryOverview';
+import AdminInventoryManagement from './admin/AdminInventoryManagement';
 import TransactionHistory from './admin/TransactionHistory';
 import Dashboard from './admin/Dashboard';
 import SupplierManagement from './admin/SupplierManagement';
 import WarehouseManagement from './admin/WarehouseManagement';
+import AuditManagement from './admin/AuditManagement';
 import { useAuth } from '../contexts/AuthContext';
 
 const AdminDashboard: React.FC = () => {
@@ -25,9 +27,11 @@ const AdminDashboard: React.FC = () => {
       { name: 'Branches', path: '/admin/branches', icon: 'Building2' },
       { name: 'Users & Permissions', path: '/admin/managers', icon: 'Users' },
       { name: 'Inventory Overview', path: '/admin/inventory', icon: 'Package' },
+      { name: 'Branch Inventory', path: '/admin/branch-inventory', icon: 'Package' },
       { name: 'Transactions', path: '/admin/transactions', icon: 'Receipt' },
       { name: 'Suppliers', path: '/admin/suppliers', icon: 'ShoppingCart' },
       { name: 'Warehouse', path: '/admin/warehouse', icon: 'FileText' },
+      { name: 'Audit Logs', path: '/admin/audit', icon: 'Shield' },
     ];
 
   const [loading, setLoading] = useState(true);
@@ -75,9 +79,11 @@ const AdminDashboard: React.FC = () => {
               <Route path="/branches" element={<BranchManagement />} />
               <Route path="/managers" element={<ManagerManagement />} />
               <Route path="/inventory" element={<InventoryOverview />} />
+              <Route path="/branch-inventory" element={<AdminInventoryManagement />} />
               <Route path="/transactions" element={<TransactionHistory />} />
               <Route path="/suppliers" element={<SupplierManagement />} />
               <Route path="/warehouse" element={<WarehouseManagement />} />
+              <Route path="/audit" element={<AuditManagement />} />
               <Route path="*" element={<Navigate to="/admin" />} />
             </Routes>
           </GreenProgressBar>

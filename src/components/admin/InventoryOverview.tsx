@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { VITE_BASE_URL } from "../../data";
-// ...existing code...
+import { apiEndpoints } from "../../utils/api";
 import { Package, AlertTriangle, TrendingUp, Search } from "lucide-react";
 
 interface Branch {
@@ -46,9 +45,7 @@ const InventoryOverview: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`${VITE_BASE_URL}/inventory`);
-        if (!response.ok) throw new Error("Failed to fetch inventory");
-        const data = await response.json();
+        const data = await apiEndpoints.getInventory();
         // Ensure each item has a status property
         const inventoryWithStatus = (data.inventory || data).map(
           (item: any) => ({

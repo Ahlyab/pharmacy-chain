@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import Swal from "sweetalert2";
-import { Plus, Edit, Trash2, MapPin, Phone, Building2 } from "lucide-react";
+import { Plus, Edit, Trash2, MapPin, Phone } from "lucide-react";
+import { apiEndpoints } from "../../utils/api";
 
 interface Branch {
   id: string;
@@ -10,8 +11,6 @@ interface Branch {
   status: "Active" | "Inactive";
 }
 
-import { VITE_BASE_URL } from "../../data";
-
 const BranchManagement: React.FC = () => {
   const [branches, setBranches] = useState<Branch[]>([]);
 
@@ -19,9 +18,7 @@ const BranchManagement: React.FC = () => {
   React.useEffect(() => {
     const fetchBranches = async () => {
       try {
-        const response = await fetch(`${VITE_BASE_URL}/branch`);
-        if (!response.ok) throw new Error("Failed to fetch branches");
-        const data = await response.json();
+        const data = await apiEndpoints.getBranches();
         setBranches(
           data.map((b: any) => ({
             id: b._id,
@@ -32,7 +29,13 @@ const BranchManagement: React.FC = () => {
           }))
         );
       } catch (err) {
-        // Optionally show error
+        console.error('Error fetching branches:', err);
+        Swal.fire({
+          title: 'Error',
+          text: 'Failed to fetch branches',
+          icon: 'error',
+          confirmButtonText: 'OK'
+        });
       }
     };
     fetchBranches();
@@ -53,16 +56,7 @@ const BranchManagement: React.FC = () => {
     try {
       if (editingBranch) {
         // Update branch in backend
-        const response = await fetch(
-          `${VITE_BASE_URL}/branch/${editingBranch.id}`,
-          {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(formData),
-          }
-        );
-        if (!response.ok) throw new Error("Failed to update branch");
-        const updatedBranch = await response.json();
+        const updatedBranch = await apiEndpoints.updateBranch(editingBranch.id, formData);
         setBranches(
           branches.map((branch) =>
             branch.id === editingBranch.id
@@ -78,13 +72,7 @@ const BranchManagement: React.FC = () => {
         );
       } else {
         // Add branch to backend
-        const response = await fetch(`${VITE_BASE_URL}/branch`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(formData),
-        });
-        if (!response.ok) throw new Error("Failed to add branch");
-        const newBranch = await response.json();
+        const newBranch = await apiEndpoints.createBranch(formData);
         setBranches([
           ...branches,
           {
@@ -132,10 +120,7 @@ const BranchManagement: React.FC = () => {
     });
     if (result.isConfirmed) {
       try {
-        const response = await fetch(`${VITE_BASE_URL}/branch/${id}`, {
-          method: "DELETE",
-        });
-        if (!response.ok) throw new Error("Failed to delete branch");
+        await apiEndpoints.deleteBranch(id);
         setBranches(branches.filter((branch) => branch.id !== id));
         Swal.fire("Deleted!", "Branch has been deleted.", "success");
       } catch (err) {

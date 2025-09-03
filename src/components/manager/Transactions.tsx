@@ -2,6 +2,7 @@ import GreenProgressBar from "../GreenProgressBar";
 import React, { useState, useEffect } from "react";
 import { VITE_BASE_URL } from "../../data";
 import { useAuth } from "../../contexts/AuthContext";
+import { apiEndpoints } from "../../utils/api";
 import {
   Search,
   Calendar,
@@ -52,13 +53,8 @@ const Transactions: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const url = user?.branchId
-          ? `${VITE_BASE_URL}/transaction?branchId=${user.branchId}`
-          : `${VITE_BASE_URL}/transaction`;
-
-        const res = await fetch(url);
-        if (!res.ok) throw new Error("Failed to fetch transactions");
-        const data = await res.json();
+        // Use authenticated API endpoint
+        const data = await apiEndpoints.getTransactions(user?.branchId);
         setTransactions(data.transactions || data); // adjust if API returns differently
       } catch (err: any) {
         setError(err.message || "Error fetching transactions");

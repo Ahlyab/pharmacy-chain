@@ -1,6 +1,7 @@
 import express from "express";
 const router = express.Router();
 import warehouseRoutes from "./warehouse.js";
+import auditRoutes from "./audit.js";
 import Supplier from "../models/Supplier.js";
 import jwt from "jsonwebtoken";
 import Billing from "../models/Billing.js";
@@ -21,6 +22,8 @@ import {
   updateManager,
   deleteManager,
 } from "../controllers/branchController.js";
+import { logSupplierAction, logFailedAction, logUserAction, logTransactionAction, logInventoryAction, logBulkOperation } from "../utils/auditLogger.js";
+import { authenticate, authorize, authorizeBranch } from "../middleware/auth.js";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -39,23 +42,56 @@ const upload = multer({
     }
   }
 });
-// Branch Routes
-router.post("/branch", createBranch);
-router.get("/branch", getBranches);
-router.patch("/branch/:id", updateBranch);
-router.delete("/branch/:id", deleteBranch);
+// Branch Routes (Admin only)
+router.post("/branch", authenticate, authorize('Admin'), createBranch);
+router.get("/branch", authenticate, getBranches);
+router.patch("/branch/:id", authenticate, authorize('Admin'), updateBranch);
+router.delete("/branch/:id", authenticate, authorize('Admin'), deleteBranch);
 // Supplier Routes
-router.post("/supplier", async (req, res) => {
+router.post("/supplier", authenticate, async (req, res) => {
   try {
     const supplier = new Supplier(req.body);
     await supplier.save();
+
+    // Log the action
+    await logSupplierAction(
+      req,
+      "SUPPLIER_CREATED",
+      supplier._id,
+      supplier.name,
+      {
+        company: supplier.company,
+        contact: supplier.contact,
+        email: supplier.email,
+        address: supplier.address,
+        gst: supplier.gst,
+        status: supplier.status
+      }
+    );
+
     res.status(201).json(supplier);
   } catch (error) {
+    // Log failed action
+    try {
+      await logFailedAction(
+        req,
+        "SUPPLIER_CREATED",
+        "Supplier",
+        null,
+        req.body.name || "Unknown Supplier",
+        "Failed to create supplier",
+        error,
+        req.body
+      );
+    } catch (logError) {
+      console.error("Failed to log failed action:", logError);
+    }
+
     res.status(400).json({ error: error.message });
   }
 });
 
-router.get("/supplier", async (req, res) => {
+router.get("/supplier", authenticate, async (req, res) => {
   try {
     const suppliers = await Supplier.find();
     res.status(200).json(suppliers);
@@ -64,28 +100,109 @@ router.get("/supplier", async (req, res) => {
   }
 });
 
-router.patch("/supplier/:id", async (req, res) => {
+router.patch("/supplier/:id", authenticate, async (req, res) => {
   try {
+    // Get the current supplier for audit logging
+    const currentSupplier = await Supplier.findById(req.params.id);
+    if (!currentSupplier) return res.status(404).json({ error: "Supplier not found" });
+
     const supplier = await Supplier.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!supplier) return res.status(404).json({ error: "Supplier not found" });
+
+    // Log the action
+    await logSupplierAction(
+      req,
+      "SUPPLIER_UPDATED",
+      supplier._id,
+      supplier.name,
+      {
+        previousName: currentSupplier.name,
+        newName: supplier.name,
+        previousCompany: currentSupplier.company,
+        newCompany: supplier.company,
+        previousContact: currentSupplier.contact,
+        newContact: supplier.contact,
+        previousEmail: currentSupplier.email,
+        newEmail: supplier.email,
+        previousAddress: currentSupplier.address,
+        newAddress: supplier.address,
+        previousGst: currentSupplier.gst,
+        newGst: supplier.gst,
+        previousStatus: currentSupplier.status,
+        newStatus: supplier.status,
+        changes: Object.keys(req.body)
+      }
+    );
+
     res.status(200).json(supplier);
   } catch (error) {
+    // Log failed action
+    try {
+      await logFailedAction(
+        req,
+        "SUPPLIER_UPDATED",
+        "Supplier",
+        req.params.id,
+        "Unknown Supplier",
+        "Failed to update supplier",
+        error,
+        req.body
+      );
+    } catch (logError) {
+      console.error("Failed to log failed action:", logError);
+    }
+
     res.status(400).json({ error: error.message });
   }
 });
 
-router.delete("/supplier/:id", async (req, res) => {
+router.delete("/supplier/:id", authenticate, async (req, res) => {
   try {
-    const supplier = await Supplier.findByIdAndDelete(req.params.id);
+    // Get the supplier before deletion for audit logging
+    const supplier = await Supplier.findById(req.params.id);
     if (!supplier) return res.status(404).json({ error: "Supplier not found" });
+
+    await Supplier.findByIdAndDelete(req.params.id);
+
+    // Log the action
+    await logSupplierAction(
+      req,
+      "SUPPLIER_DELETED",
+      req.params.id,
+      supplier.name,
+      {
+        company: supplier.company,
+        contact: supplier.contact,
+        email: supplier.email,
+        address: supplier.address,
+        gst: supplier.gst,
+        status: supplier.status
+      }
+    );
+
     res.status(200).json({ message: "Supplier deleted" });
   } catch (error) {
+    // Log failed action
+    try {
+      await logFailedAction(
+        req,
+        "SUPPLIER_DELETED",
+        "Supplier",
+        req.params.id,
+        "Unknown Supplier",
+        "Failed to delete supplier",
+        error,
+        {}
+      );
+    } catch (logError) {
+      console.error("Failed to log failed action:", logError);
+    }
+
     res.status(400).json({ error: error.message });
   }
 });
 
 // Supplier Delivery Routes
-router.post("/supplier/:id/delivery", async (req, res) => {
+router.post("/supplier/:id/delivery", authenticate, async (req, res) => {
   try {
     const { date, deliveryTime, products, quantity, notes } = req.body;
     if (!date || !deliveryTime || !products || !quantity) {
@@ -114,7 +231,7 @@ router.post("/supplier/:id/delivery", async (req, res) => {
   }
 });
 
-router.get("/supplier/:id/deliveries", async (req, res) => {
+router.get("/supplier/:id/deliveries", authenticate, async (req, res) => {
   try {
     const supplier = await Supplier.findById(req.params.id);
     if (!supplier) {
@@ -127,7 +244,7 @@ router.get("/supplier/:id/deliveries", async (req, res) => {
   }
 });
 
-router.patch("/supplier/:id/delivery/:deliveryId", async (req, res) => {
+router.patch("/supplier/:id/delivery/:deliveryId", authenticate, async (req, res) => {
   try {
     const supplier = await Supplier.findById(req.params.id);
     if (!supplier) {
@@ -148,7 +265,7 @@ router.patch("/supplier/:id/delivery/:deliveryId", async (req, res) => {
   }
 });
 
-router.delete("/supplier/:id/delivery/:deliveryId", async (req, res) => {
+router.delete("/supplier/:id/delivery/:deliveryId", authenticate, async (req, res) => {
   try {
     const supplier = await Supplier.findById(req.params.id);
     if (!supplier) {
@@ -163,8 +280,8 @@ router.delete("/supplier/:id/delivery/:deliveryId", async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
-// Manager Routes
-router.post("/manager", async (req, res) => {
+// Manager Routes (Admin only)
+router.post("/manager", authenticate, authorize('Admin'), async (req, res) => {
   try {
     const { name, email, phone, branchId, status, password, role } = req.body;
     if (!name || !email || !phone || !branchId || !password) {
@@ -197,6 +314,35 @@ router.post("/manager", async (req, res) => {
     // Create user document for login (branchId is id)
     const user = new User({ name, email, password, role: role || "Manager", branchId });
     await user.save();
+
+    // Log the manager creation
+    await logUserAction(
+      req,
+      "USER_CREATED",
+      manager._id,
+      manager.name,
+      {
+        email: manager.email,
+        phone: manager.phone,
+        branchId: manager.branch,
+        role: manager.role,
+        status: manager.status
+      }
+    );
+
+    // Log the user creation
+    await logUserAction(
+      req,
+      "USER_CREATED",
+      user._id,
+      user.name,
+      {
+        email: user.email,
+        role: user.role,
+        branchId: user.branchId
+      }
+    );
+
     // Return manager info (populate branch name for convenience)
     const populated = await Manager.findById(manager._id).populate(
       "branch",
@@ -204,11 +350,27 @@ router.post("/manager", async (req, res) => {
     );
     res.status(201).json(populated);
   } catch (error) {
+    // Log failed action
+    try {
+      await logFailedAction(
+        req,
+        "USER_CREATED",
+        "Manager",
+        null,
+        req.body.name || "Unknown Manager",
+        "Failed to create manager",
+        error,
+        req.body
+      );
+    } catch (logError) {
+      console.error("Failed to log failed action:", logError);
+    }
+
     res.status(500).json({ error: error.message });
   }
 });
 
-router.get("/manager", async (req, res) => {
+router.get("/manager", authenticate, async (req, res) => {
   try {
     const managers = await Manager.find().populate("branch", "name");
     res.status(200).json(managers);
@@ -217,8 +379,8 @@ router.get("/manager", async (req, res) => {
   }
 });
 
-router.patch("/manager/:id", updateManager);
-router.delete("/manager/:id", deleteManager);
+router.patch("/manager/:id", authenticate, authorize('Admin'), updateManager);
+router.delete("/manager/:id", authenticate, authorize('Admin'), deleteManager);
 
 // Health check endpoint
 router.get("/health", async (req, res) => {
@@ -275,11 +437,47 @@ router.post("/login", async (req, res) => {
     const { email, password } = req.body;
     const user = await User.findOne({ email }).populate("branchId");
     if (!user || !(await user.comparePassword(password))) {
+      // Log failed login attempt
+      // try {
+      //   await logFailedAction(
+      //     req,
+      //     "USER_LOGIN",
+      //     "User",
+      //     null,
+      //     email,
+      //     "Failed login attempt - invalid credentials",
+      //     new Error("Invalid email or password"),
+      //     { email }
+      //   );
+      // } catch (logError) {
+      //   console.error("Failed to log failed login:", logError);
+      // }
+
       return res.status(401).json({ error: "Invalid email or password" });
     }
+    
     const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, {
       expiresIn: "1h",
     });
+
+    // Log successful login
+    // try {
+    //   await logUserAction(
+    //     req,
+    //     "USER_LOGIN",
+    //     user._id,
+    //     user.name,
+    //     {
+    //       email: user.email,
+    //       role: user.role,
+    //       branchId: user.branchId?._id,
+    //       branchName: user.branchId?.name
+    //     }
+    //   );
+    // } catch (logError) {
+    //   console.error("Failed to log successful login:", logError);
+    // }
+
     res.status(200).json({
       token,
       id: user._id,
@@ -290,24 +488,27 @@ router.post("/login", async (req, res) => {
       branchName: user.branchId?.name, // Include branchName if applicable
     });
   } catch (error) {
+    // Log failed login due to system error
+    // try {
+    //   await logFailedAction(
+    //     req,
+    //     "USER_LOGIN",
+    //     "User",
+    //     null,
+    //     req.body.email || "Unknown",
+    //     "Failed login attempt - system error",
+    //     error,
+    //     { email: req.body.email }
+    //   );
+    // } catch (logError) {
+    //   console.error("Failed to log failed login:", logError);
+    // }
+
     res.status(500).json({ error: error.message });
   }
 });
 
-// Middleware to verify JWT
-const authenticate = (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    res.status(401).json({ error: "Invalid token" });
-  }
-};
+// Authentication middleware is now imported from ../middleware/auth.js
 
 // Get current user info from token
 router.get("/me", authenticate, async (req, res) => {
@@ -333,17 +534,49 @@ router.get("/me", authenticate, async (req, res) => {
 });
 
 // Billing Routes
-router.post("/billing", async (req, res) => {
+router.post("/billing", authenticate, async (req, res) => {
   try {
     const billing = new Billing(req.body);
     await billing.save();
+
+    // Log the billing creation
+    await logTransactionAction(
+      req,
+      "INVOICE_CREATED",
+      billing._id,
+      `Invoice #${billing.invoiceNumber || billing._id}`,
+      {
+        invoiceNumber: billing.invoiceNumber,
+        totalAmount: billing.totalAmount,
+        customerName: billing.customerName,
+        itemsCount: billing.items?.length || 0,
+        branchId: billing.branchId
+      }
+    );
+
     res.status(201).json(billing);
   } catch (error) {
+    // Log failed action
+    try {
+      await logFailedAction(
+        req,
+        "INVOICE_CREATED",
+        "Billing",
+        null,
+        "Unknown Invoice",
+        "Failed to create billing",
+        error,
+        req.body
+      );
+    } catch (logError) {
+      console.error("Failed to log failed action:", logError);
+    }
+
     res.status(400).json({ error: error.message });
   }
 });
 
-router.get("/billing", async (req, res) => {
+router.get("/billing", authenticate, async (req, res) => {
   try {
     const { branchId } = req.query;
     let query = {};
@@ -361,7 +594,7 @@ router.get("/billing", async (req, res) => {
 });
 
 // Inventory Routes
-router.post("/inventory", async (req, res) => {
+router.post("/inventory", authenticate, async (req, res) => {
   console.log("POST /inventory body:", req.body);
   try {
     const requiredFields = [
@@ -422,6 +655,27 @@ router.post("/inventory", async (req, res) => {
     const inventory = new Inventory(inventoryData);
     await inventory.save();
     
+    // Log the action
+    await logInventoryAction(
+      req,
+      "PRODUCT_CREATED",
+      inventory._id,
+      inventory.name,
+      {
+        category: inventory.category,
+        stock: inventory.stock,
+        minStock: inventory.minStock,
+        price: inventory.price,
+        supplier: inventory.supplier,
+        expiryDate: inventory.expiryDate,
+        branchId: inventory.branchId,
+        store: inventory.store,
+        manufacturer: inventory.manufacturer,
+        composition: inventory.composition,
+        series: inventory.series
+      }
+    );
+    
     // Populate supplier information before sending response
     const populatedInventory = await Inventory.findById(inventory._id)
       .populate("supplierId", "name company contact email address gst status")
@@ -430,16 +684,40 @@ router.post("/inventory", async (req, res) => {
     res.status(201).json(populatedInventory);
   } catch (error) {
     console.error("Error in POST /inventory:", error);
+    
+    // Log failed action
+    try {
+      await logFailedAction(
+        req,
+        "PRODUCT_CREATED",
+        "Inventory",
+        null,
+        req.body.name || "Unknown Product",
+        "Failed to create inventory item",
+        error,
+        req.body
+      );
+    } catch (logError) {
+      console.error("Failed to log failed action:", logError);
+    }
+
     res.status(500).json({ error: error.message });
   }
 });
 // Update Inventory Item
 
 // Update Inventory Item (moved below router initialization)
-router.patch("/inventory/:id", async (req, res) => {
+router.patch("/inventory/:id", authenticate, async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = { ...req.body };
+    
+    // Get the current inventory item for audit logging
+    const currentInventory = await Inventory.findById(id);
+    if (!currentInventory) {
+      return res.status(404).json({ error: "Inventory item not found" });
+    }
+    
     if (updateData.expiryDate) {
       updateData.expiryDate = new Date(updateData.expiryDate);
     }
@@ -454,9 +732,25 @@ router.patch("/inventory/:id", async (req, res) => {
       new: true,
     });
     
-    if (!updated) {
-      return res.status(404).json({ error: "Inventory item not found" });
-    }
+    // Log the action with detailed change information
+    await logInventoryAction(
+      req,
+      "PRODUCT_UPDATED",
+      updated._id,
+      updated.name,
+      {
+        previousStock: currentInventory.stock,
+        newStock: updated.stock,
+        quantityChanged: updated.stock - currentInventory.stock,
+        previousPrice: currentInventory.price,
+        newPrice: updated.price,
+        previousExpiry: currentInventory.expiryDate,
+        newExpiry: updated.expiryDate,
+        previousMinStock: currentInventory.minStock,
+        newMinStock: updated.minStock,
+        changes: Object.keys(updateData)
+      }
+    );
     
     // Populate supplier information before sending response
     const populatedInventory = await Inventory.findById(id)
@@ -465,25 +759,78 @@ router.patch("/inventory/:id", async (req, res) => {
       
     res.status(200).json(populatedInventory);
   } catch (error) {
+    // Log failed action
+    try {
+      await logFailedAction(
+        req,
+        "PRODUCT_UPDATED",
+        "Inventory",
+        req.params.id,
+        "Unknown Product",
+        "Failed to update inventory item",
+        error,
+        req.body
+      );
+    } catch (logError) {
+      console.error("Failed to log failed action:", logError);
+    }
+
     res.status(400).json({ error: error.message });
   }
 });
 
 // Delete Inventory Item
-router.delete("/inventory/:id", async (req, res) => {
+router.delete("/inventory/:id", authenticate, async (req, res) => {
   try {
     const { id } = req.params;
-    const deleted = await Inventory.findByIdAndDelete(id);
-    if (!deleted) {
+    
+    // Get the inventory item before deletion for audit logging
+    const inventoryToDelete = await Inventory.findById(id);
+    if (!inventoryToDelete) {
       return res.status(404).json({ error: "Inventory item not found" });
     }
+    
+    await Inventory.findByIdAndDelete(id);
+    
+    // Log the action
+    await logInventoryAction(
+      req,
+      "PRODUCT_DELETED",
+      id,
+      inventoryToDelete.name,
+      {
+        category: inventoryToDelete.category,
+        stock: inventoryToDelete.stock,
+        price: inventoryToDelete.price,
+        supplier: inventoryToDelete.supplier,
+        expiryDate: inventoryToDelete.expiryDate,
+        branchId: inventoryToDelete.branchId
+      }
+    );
+    
     res.status(200).json({ message: "Inventory item deleted successfully" });
   } catch (error) {
+    // Log failed action
+    try {
+      await logFailedAction(
+        req,
+        "PRODUCT_DELETED",
+        "Inventory",
+        req.params.id,
+        "Unknown Product",
+        "Failed to delete inventory item",
+        error,
+        {}
+      );
+    } catch (logError) {
+      console.error("Failed to log failed action:", logError);
+    }
+
     res.status(400).json({ error: error.message });
   }
 });
 
-router.get("/inventory", async (req, res) => {
+router.get("/inventory", authenticate, async (req, res) => {
   try {
     const { branchId } = req.query;
     let query = {};
@@ -503,7 +850,7 @@ router.get("/inventory", async (req, res) => {
 });
 
 // Import inventory from Excel
-router.post("/inventory/import", async (req, res) => {
+router.post("/inventory/import", authenticate, async (req, res) => {
   try {
     const { branchId, products } = req.body;
 
@@ -555,7 +902,7 @@ router.post("/inventory/import", async (req, res) => {
 });
 
 // Excel File Upload and Import Endpoint
-router.post("/inventory/import-excel", upload.single('file'), async (req, res) => {
+router.post("/inventory/import-excel", authenticate, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: "No file uploaded" });
@@ -841,6 +1188,17 @@ router.post("/inventory/import-excel", upload.single('file'), async (req, res) =
       }, 0);
     }
 
+    // Log the bulk operation
+    await logBulkOperation(
+      req,
+      "BULK_UPLOAD",
+      `Inventory Import - ${req.file?.originalname || 'Unknown File'}`,
+      jsonData.length,
+      updatedCount + insertedCount,
+      0, // No errors in this case
+      []
+    );
+
     res.status(200).json({
       success: true,
       message: `Successfully imported ${jsonData.length} products`,
@@ -862,6 +1220,22 @@ router.post("/inventory/import-excel", upload.single('file'), async (req, res) =
 
   } catch (error) {
     console.error('Excel import error:', error);
+    
+    // Log the failed operation
+    try {
+      await logBulkOperation(
+        req,
+        "BULK_UPLOAD",
+        `Failed Inventory Import - ${req.file?.originalname || 'Unknown File'}`,
+        0,
+        0,
+        1,
+        [error.message]
+      );
+    } catch (logError) {
+      console.error("Failed to log failed bulk operation:", logError);
+    }
+
     res.status(500).json({ 
       error: "Error processing Excel file", 
       details: error.message 
@@ -870,7 +1244,7 @@ router.post("/inventory/import-excel", upload.single('file'), async (req, res) =
 });
 
 // Transaction Routes
-router.post("/transaction", async (req, res) => {
+router.post("/transaction", authenticate, async (req, res) => {
   try {
     const { branchId, paymentMethod, ...transactionData } = req.body;
 
@@ -894,13 +1268,46 @@ router.post("/transaction", async (req, res) => {
     });
 
     await transaction.save();
+
+    // Log the transaction creation
+    await logTransactionAction(
+      req,
+      "SALE_CREATED",
+      transaction._id,
+      `Sale #${transaction.transactionId}`,
+      {
+        transactionId: transaction.transactionId,
+        totalAmount: transaction.totalAmount,
+        paymentMethod: transaction.paymentMethod,
+        customerName: transaction.customerName,
+        itemsCount: transaction.items?.length || 0,
+        branchId: transaction.branchId
+      }
+    );
+
     res.status(201).json(transaction);
   } catch (error) {
+    // Log failed action
+    try {
+      await logFailedAction(
+        req,
+        "SALE_CREATED",
+        "Transaction",
+        null,
+        "Unknown Sale",
+        "Failed to create transaction",
+        error,
+        req.body
+      );
+    } catch (logError) {
+      console.error("Failed to log failed action:", logError);
+    }
+
     res.status(400).json({ error: error.message });
   }
 });
 
-router.get("/transaction", async (req, res) => {
+router.get("/transaction", authenticate, async (req, res) => {
   try {
     const { branchId } = req.query;
     let query = {};
@@ -937,7 +1344,7 @@ router.get("/transaction", async (req, res) => {
 });
 
 // Return Transaction Route
-router.post("/transaction/return", async (req, res) => {
+router.post("/transaction/return", authenticate, async (req, res) => {
   try {
     const { transactionId, branchId, returnItems, returnReason, returnAmount, originalTotal, processedBy } = req.body;
 
@@ -1063,7 +1470,7 @@ router.post("/transaction/return", async (req, res) => {
 });
 
 // Get Return History Route
-router.get("/returns", async (req, res) => {
+router.get("/returns", authenticate, async (req, res) => {
   try {
     const { branchId } = req.query;
     let query = {};
@@ -1084,7 +1491,7 @@ router.get("/returns", async (req, res) => {
 });
 
 // POS Routes
-router.post("/pos", async (req, res) => {
+router.post("/pos", authenticate, async (req, res) => {
   try {
     const pos = new POS(req.body);
     await pos.save();
@@ -1094,7 +1501,7 @@ router.post("/pos", async (req, res) => {
   }
 });
 
-router.get("/pos", async (req, res) => {
+router.get("/pos", authenticate, async (req, res) => {
   try {
     const posRecords = await POS.find();
     res.status(200).json(posRecords);
@@ -1104,7 +1511,7 @@ router.get("/pos", async (req, res) => {
 });
 
 // get recent sales
-router.get("/sales/recent", async (req, res) => {
+router.get("/sales/recent", authenticate, async (req, res) => {
   try {
     const { branchId } = req.query;
     let query = {};
@@ -1133,8 +1540,8 @@ router.get("/sales/recent", async (req, res) => {
   }
 });
 
-// User Routes
-router.post("/user", async (req, res) => {
+// User Routes (Admin only)
+router.post("/user", authenticate, authorize('Admin'), async (req, res) => {
   try {
     const { name, email, password, role, branchId } = req.body;
     if (!name || !email || !password || !role) {
@@ -1152,15 +1559,44 @@ router.post("/user", async (req, res) => {
     const user = new User({ name, email, password, role, branchId });
     await user.save();
 
+    // Log the user creation
+    await logUserAction(
+      req,
+      "USER_CREATED",
+      user._id,
+      user.name,
+      {
+        email: user.email,
+        role: user.role,
+        branchId: user.branchId
+      }
+    );
+
     // Return user info without password
     const { password: _, ...userInfo } = user.toObject();
     res.status(201).json(userInfo);
   } catch (error) {
+    // Log failed action
+    try {
+      await logFailedAction(
+        req,
+        "USER_CREATED",
+        "User",
+        null,
+        req.body.name || "Unknown User",
+        "Failed to create user",
+        error,
+        req.body
+      );
+    } catch (logError) {
+      console.error("Failed to log failed action:", logError);
+    }
+
     res.status(500).json({ error: error.message });
   }
 });
 
-router.get("/user", async (req, res) => {
+router.get("/user", authenticate, async (req, res) => {
   try {
     const users = await User.find({}, { password: 0 }); // Exclude password field
     res.status(200).json(users);
@@ -1169,7 +1605,7 @@ router.get("/user", async (req, res) => {
   }
 });
 
-router.get("/user/:id", async (req, res) => {
+router.get("/user/:id", authenticate, async (req, res) => {
   try {
     const { id } = req.params;
     const user = await User.findById(id, { password: 0 }); // Exclude password field
@@ -1182,10 +1618,16 @@ router.get("/user/:id", async (req, res) => {
   }
 });
 
-router.patch("/user/:id", async (req, res) => {
+router.patch("/user/:id", authenticate, authorize('Admin'), async (req, res) => {
   try {
     const { id } = req.params;
     const { password, ...updateData } = req.body;
+
+    // Get the current user for audit logging
+    const currentUser = await User.findById(id);
+    if (!currentUser) {
+      return res.status(404).json({ error: "User not found" });
+    }
 
     const updateFields = { ...updateData };
 
@@ -1196,32 +1638,97 @@ router.patch("/user/:id", async (req, res) => {
     }
 
     const user = await User.findByIdAndUpdate(id, updateFields, { new: true });
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
+
+    // Log the action
+    await logUserAction(
+      req,
+      "USER_UPDATED",
+      user._id,
+      user.name,
+      {
+        previousRole: currentUser.role,
+        newRole: user.role,
+        previousBranchId: currentUser.branchId,
+        newBranchId: user.branchId,
+        changes: Object.keys(updateData)
+      }
+    );
 
     // Return user info without password
     const { password: _, ...userInfo } = user.toObject();
     res.status(200).json(userInfo);
   } catch (error) {
+    // Log failed action
+    try {
+      await logFailedAction(
+        req,
+        "USER_UPDATED",
+        "User",
+        req.params.id,
+        "Unknown User",
+        "Failed to update user",
+        error,
+        req.body
+      );
+    } catch (logError) {
+      console.error("Failed to log failed action:", logError);
+    }
+
     res.status(500).json({ error: error.message });
   }
 });
 
-router.delete("/user/:id", async (req, res) => {
+router.delete("/user/:id", authenticate, authorize('Admin'), async (req, res) => {
   try {
     const { id } = req.params;
-    const user = await User.findByIdAndDelete(id);
-    if (!user) {
+    
+    // Get the user before deletion for audit logging
+    const userToDelete = await User.findById(id);
+    if (!userToDelete) {
       return res.status(404).json({ error: "User not found" });
     }
+    
+    await User.findByIdAndDelete(id);
+    
+    // Log the action
+    await logUserAction(
+      req,
+      "USER_DELETED",
+      id,
+      userToDelete.name,
+      {
+        email: userToDelete.email,
+        role: userToDelete.role,
+        branchId: userToDelete.branchId
+      }
+    );
+    
     res.status(200).json({ message: "User deleted successfully" });
   } catch (error) {
+    // Log failed action
+    try {
+      await logFailedAction(
+        req,
+        "USER_DELETED",
+        "User",
+        req.params.id,
+        "Unknown User",
+        "Failed to delete user",
+        error,
+        {}
+      );
+    } catch (logError) {
+      console.error("Failed to log failed action:", logError);
+    }
+
     res.status(500).json({ error: error.message });
   }
 });
 
 // Warehouse routes
 router.use("/warehouse", warehouseRoutes);
+
+// Audit routes
+router.use("/audit", auditRoutes);
 
 export default router;

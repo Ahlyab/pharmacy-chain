@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import apiRoutes from "./routes/api.js";
 import cors from "cors";
 import dotenv from "dotenv";
+import auditRoutes from "./routes/audit.js";
 dotenv.config();
 
 const app = express();
@@ -17,6 +18,7 @@ app.get("/", (req, res) => {
   res.send("API is working");
 });
 app.use("/api", apiRoutes);
+app.use("/api/audit", auditRoutes);
 
 // Global error handler middleware
 app.use((error, req, res, next) => {

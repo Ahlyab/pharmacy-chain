@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { X, Pill, BarChart3, Building2, Users, Package, Receipt, FileText, ShoppingCart } from 'lucide-react';
+import { X, Pill, BarChart3, Building2, Users, Package, Receipt, FileText, ShoppingCart, Shield } from 'lucide-react';
 
 interface MenuItem {
   name: string;
@@ -22,6 +22,7 @@ const iconMap = {
   Receipt,
   FileText,
   ShoppingCart,
+  Shield,
 };
 
 const Sidebar: React.FC<SidebarProps> = ({ menuItems, isOpen, onClose }) => {

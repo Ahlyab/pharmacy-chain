@@ -2,6 +2,7 @@ import GreenProgressBar from "../GreenProgressBar";
 import React, { useState, useEffect, useCallback } from "react";
 import { VITE_BASE_URL } from "../../data";
 import { useAuth } from "../../contexts/AuthContext";
+import { apiEndpoints } from "../../utils/api";
 import Swal from "sweetalert2";
 import {
   Search,
@@ -93,13 +94,8 @@ const POS: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const url = user?.branchId
-        ? `${BASE_URL}/inventory?branchId=${user.branchId}`
-        : `${BASE_URL}/inventory`;
-
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("Failed to fetch products");
-      const data = await res.json();
+      // Use authenticated API endpoint
+      const data = await apiEndpoints.getInventory(user?.branchId);
 
       const productsWithStatus = data.map(addStatus);
       setProducts(productsWithStatus);
@@ -248,15 +244,8 @@ const POS: React.FC = () => {
     };
 
     try {
-      // Send transaction to backend
-      const response = await fetch(`${BASE_URL}/transaction`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(transaction),
-      });
-      if (!response.ok) {
-        throw new Error("Failed to save transaction");
-      }
+      // Send transaction to backend using authenticated API
+      await apiEndpoints.createTransaction(transaction);
 
       // Update stock quantities after successful transaction
       await updateStockQuantities();
@@ -298,16 +287,10 @@ const POS: React.FC = () => {
       for (const item of cart) {
         const newStock = item.stock - item.quantity;
         
-        const updateResponse = await fetch(`${BASE_URL}/inventory/${item._id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            stock: newStock
-          }),
-        });
-
-        if (!updateResponse.ok) {
-          console.error(`Failed to update stock for product ${item.name}`);
+        try {
+          await apiEndpoints.updateInventory(item._id, { stock: newStock });
+        } catch (error) {
+          console.error(`Failed to update stock for product ${item.name}:`, error);
           // Log the error but don't fail the entire transaction
           // The stock will be refreshed when fetchProducts() is called
         }

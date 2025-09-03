@@ -3,6 +3,7 @@ import { Pencil, Trash2, ChevronDown, Shield } from "lucide-react";
 import { VITE_BASE_URL } from "../../data";
 import Swal from "sweetalert2";
 import { useAuth } from "../../contexts/AuthContext";
+import { apiEndpoints } from "../../utils/api";
 import Spinner from "../Spinner";
 
 interface Product {
@@ -86,6 +87,8 @@ const initialFormState: FormProduct = {
 
 const InventoryManagement: React.FC = () => {
   const { user } = useAuth();
+
+  const token = localStorage.getItem('token');
   
   // Helper function to determine actual role for access control
   const getActualRole = (user: any) => {
@@ -132,9 +135,7 @@ const InventoryManagement: React.FC = () => {
   // Fetch suppliers from backend
   const fetchSuppliers = async () => {
     try {
-      const response = await fetch(`${BASE_URL}/supplier`);
-      if (!response.ok) throw new Error("Failed to fetch suppliers");
-      const data = await response.json();
+      const data = await apiEndpoints.getSuppliers();
       setSuppliers(data.map((s: any) => ({
         id: s._id,
         name: s.name ?? '',
@@ -156,10 +157,8 @@ const InventoryManagement: React.FC = () => {
     const fetchProducts = async () => {
       try {
         setIsLoading(true);
-        // Always fetch all products
-        const response = await fetch(`${BASE_URL}/inventory`);
-        if (!response.ok) throw new Error("Failed to fetch products");
-        const data = await response.json();
+        // Always fetch all products using authenticated API
+        const data = await apiEndpoints.getInventory();
         setProducts(data.map(addStatus));
 
         // Set branchFilter to user's branch name if available
@@ -362,6 +361,9 @@ const InventoryManagement: React.FC = () => {
         
         const response = await fetch(`${BASE_URL}/inventory/import-excel`, {
           method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
           body: formData,
         });
         
@@ -397,7 +399,11 @@ const InventoryManagement: React.FC = () => {
         
         // Refresh products after import
         setIsLoading(true);
-        const productsResponse = await fetch(`${BASE_URL}/inventory`);
+        const productsResponse = await fetch(`${BASE_URL}/inventory`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
         if (productsResponse.ok) {
           const productsData = await productsResponse.json();
           setProducts(productsData.map(addStatus));
@@ -486,7 +492,9 @@ const InventoryManagement: React.FC = () => {
 
           const response = await fetch(`${BASE_URL}/inventory/${existingProduct.id}`, {
             method: "PATCH",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json",
+              'Authorization': `Bearer ${token}`,
+            },
             body: JSON.stringify(updateData),
           });
 
@@ -508,7 +516,11 @@ const InventoryManagement: React.FC = () => {
           setProductSearch("");
 
           // Refresh products
-          const productsResponse = await fetch(`${BASE_URL}/inventory`);
+          const productsResponse = await fetch(`${BASE_URL}/inventory`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
           if (productsResponse.ok) {
             const data = await productsResponse.json();
             setProducts(data.map(addStatus));
@@ -527,7 +539,11 @@ const InventoryManagement: React.FC = () => {
       
       if (!supplierId && formData.supplier.trim()) {
         // Check if supplier exists
-        const supplierResponse = await fetch(`${BASE_URL}/supplier`);
+        const supplierResponse = await fetch(`${BASE_URL}/supplier`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
         if (supplierResponse.ok) {
           const existingSuppliers = await supplierResponse.json();
           const existingSupplier = existingSuppliers.find(
@@ -552,7 +568,9 @@ const InventoryManagement: React.FC = () => {
             
             const createSupplierResponse = await fetch(`${BASE_URL}/supplier`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+              },
               body: JSON.stringify(newSupplierData),
             });
             
@@ -705,7 +723,9 @@ const InventoryManagement: React.FC = () => {
           `${BASE_URL}/inventory/${editingProduct.id}`,
           {
             method: "PATCH",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json",
+              'Authorization': `Bearer ${token}`,
+            },
             body: JSON.stringify(cleanUpdateData),
           }
         );
@@ -819,28 +839,7 @@ const InventoryManagement: React.FC = () => {
           console.log(`${key}: ${typeof value} = ${value}`);
         });
         
-        const response = await fetch(`${BASE_URL}/inventory`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(cleanSubmitData),
-        });
-        
-        if (!response.ok) {
-          let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-          console.error('Response status:', response.status);
-          console.error('Response status text:', response.statusText);
-          
-          try {
-            const errorData = await response.json();
-            console.error('Error response data:', errorData);
-            if (errorData.error) {
-              errorMessage = errorData.error;
-            }
-          } catch (jsonError) {
-            console.error('Error parsing error response:', jsonError);
-          }
-          throw new Error(errorMessage);
-        }
+        await apiEndpoints.createInventory(cleanSubmitData);
       }
       setShowModal(false);
       setEditingProduct(null);
@@ -850,9 +849,7 @@ const InventoryManagement: React.FC = () => {
       setShowProductDropdown(false);
       setProductSearch("");
       // Refresh products after add/edit (fetch all products)
-      const response = await fetch(`${BASE_URL}/inventory`);
-      if (response.ok) {
-        const data = await response.json();
+      const data = await apiEndpoints.getInventory();
         setProducts(data.map(addStatus));
         // Reset branchFilter to manager's branch name if available
         if (user?.branchId && data.length > 0) {
@@ -864,7 +861,6 @@ const InventoryManagement: React.FC = () => {
           const branchName = branchProduct?.branchId?.name ?? null;
           if (branchName) {
             setBranchFilter(branchName);
-          }
         }
       }
     } catch (err) {
@@ -928,10 +924,7 @@ const InventoryManagement: React.FC = () => {
     if (result.isConfirmed) {
       try {
         setIsLoading(true);
-        const response = await fetch(`${BASE_URL}/inventory/${id}`, {
-          method: "DELETE",
-        });
-        if (!response.ok) throw new Error("Failed to delete product");
+        await apiEndpoints.deleteInventory(id);
         setProducts((prev) =>
           prev.filter((product) => product.id !== id).map(addStatus)
         );

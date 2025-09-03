@@ -6,6 +6,7 @@ import React, {
   ReactNode,
 } from "react";
 import config from "../config/env";
+import { apiEndpoints } from "../utils/api";
 
 interface User {
   id: string;
@@ -52,29 +53,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const token = localStorage.getItem("token");
       if (token) {
         try {
-          console.log('Token found, making API call to:', `${config.apiUrl}/api/me`);
-          const response = await fetch(`${config.apiUrl}/api/me`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
+          console.log('Token found, making API call to get current user');
+          const data = await apiEndpoints.getCurrentUser();
+          console.log('User restored successfully:', data);
+          console.log('User restoration - Original role:', data.role);
+          setUser({
+            id: data.id,
+            name: data.name,
+            email: data.email,
+            role: data.role,
+            branchId: data.branchId,
           });
-          if (response.ok) {
-            const data = await response.json();
-            console.log('User restored successfully:', data);
-            console.log('User restoration - Original role:', data.role);
-            setUser({
-              id: data.id,
-              name: data.name,
-              email: data.email,
-              role: data.role,
-              branchId: data.branchId,
-            });
-          } else {
-            console.log('Token validation failed, clearing user');
-            setUser(null);
-            localStorage.removeItem("token");
-          }
         } catch (err) {
           console.error('Error restoring user:', err);
           // Check if it's a network error (server not running)
@@ -98,6 +87,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     navigate: (path: string) => void
   ): Promise<boolean> => {
     try {
+      // Login is a public endpoint, so we use direct fetch
       const response = await fetch(`${config.apiUrl}/api/login`, {
         method: "POST",
         headers: {

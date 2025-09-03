@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { config } from '../../config/env';
+import { apiEndpoints } from '../../utils/api';
 import SupplierDetails from './SupplierDetails';
 import Swal from 'sweetalert2';
 
 interface Delivery {
-  id: string;
+  _id: string;
   date: string;
   deliveryTime: string;
   products: string;
@@ -52,9 +52,7 @@ const SupplierManagement: React.FC = () => {
     const fetchSuppliers = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`${config.apiUrl}/api/supplier`);
-        if (!response.ok) throw new Error("Failed to fetch suppliers");
-        const data = await response.json();
+        const data = await apiEndpoints.getSuppliers();
         setSuppliers(data.map((s: any) => ({
           id: s._id,
           name: s.name ?? '',
@@ -97,13 +95,7 @@ const SupplierManagement: React.FC = () => {
           status: editSupplier.status,
           notes: editSupplier.notes,
         };
-        const response = await fetch(`${config.apiUrl}/api/supplier/${editSupplier.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        if (!response.ok) throw new Error("Failed to update supplier");
-        const updatedSupplier = await response.json();
+        const updatedSupplier = await apiEndpoints.updateSupplier(editSupplier.id, payload);
         setSuppliers(suppliers.map(s => s.id === editSupplier.id ? {
           ...s,
           ...updatedSupplier,
@@ -124,19 +116,11 @@ const SupplierManagement: React.FC = () => {
           status: newSupplier.status ?? 'Active',
           notes: newSupplier.notes ?? '',
         };
-        const response = await fetch(`${config.apiUrl}/api/supplier`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        if (!response.ok) throw new Error("Failed to add supplier");
-  await response.json();
+        await apiEndpoints.createSupplier(payload);
         // Refetch suppliers from backend to ensure all details are shown
         const refetch = async () => {
           try {
-            const response = await fetch(`${config.apiUrl}/api/supplier`);
-            if (!response.ok) throw new Error("Failed to fetch suppliers");
-            const data = await response.json();
+            const data = await apiEndpoints.getSuppliers();
             setSuppliers(data.map((s: any) => ({
               id: s._id,
               name: s.name ?? '',
@@ -256,10 +240,7 @@ const SupplierManagement: React.FC = () => {
                   e.stopPropagation();
                   if (window.confirm('Are you sure you want to delete this supplier?')) {
                     try {
-                      const response = await fetch(`${config.apiUrl}/api/supplier/${supplier.id}`, {
-                        method: 'DELETE',
-                      });
-                      if (!response.ok) throw new Error('Failed to delete supplier');
+                      await apiEndpoints.deleteSupplier(supplier.id);
                       setSuppliers(suppliers.filter(s => s.id !== supplier.id));
                     } catch (err) {
                       Swal.fire({

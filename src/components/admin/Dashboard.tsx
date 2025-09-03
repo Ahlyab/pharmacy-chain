@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Building2, Users, Package, TrendingUp } from "lucide-react";
-import config from "../../config/env";
+import { apiEndpoints } from "../../utils/api";
 
 type Branch = {
   name: string;
@@ -36,15 +36,18 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      fetch(`${config.apiUrl}/api/branch`).then((res) => res.json()),
-      fetch(`${config.apiUrl}/api/manager`).then((res) => res.json()),
-      fetch(`${config.apiUrl}/api/inventory`).then((res) => res.json()),
-      fetch(`${config.apiUrl}/api/transaction`).then((res) => res.json()),
+      apiEndpoints.getBranches(),
+      apiEndpoints.getManagers(),
+      apiEndpoints.getInventory(),
+      apiEndpoints.getTransactions(),
     ]).then(([branchData, managerData, productData, transactionData]) => {
       setBranches(branchData || []);
       setManagers(managerData || []);
       setProducts(productData || []);
       setTransactions(transactionData || []);
+      setLoading(false);
+    }).catch((error) => {
+      console.error('Error fetching dashboard data:', error);
       setLoading(false);
     });
   }, []);

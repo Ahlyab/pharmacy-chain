@@ -4,6 +4,7 @@ import jsPDF from "jspdf";
 import { Search, FileText, Download, Eye, RotateCcw } from "lucide-react";
 import { VITE_BASE_URL } from "../../data";
 import { useAuth } from "../../contexts/AuthContext";
+import { apiEndpoints } from "../../utils/api";
 import Swal from "sweetalert2";
 import {
   Search as SearchIcon,
@@ -87,13 +88,8 @@ const Billing: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const url = user?.branchId
-          ? `${VITE_BASE_URL}/transaction?branchId=${user.branchId}`
-          : `${VITE_BASE_URL}/transaction`;
-
-        const res = await fetch(url);
-        if (!res.ok) throw new Error("Failed to fetch bills");
-        const data = await res.json();
+        // Use authenticated API endpoint
+        const data = await apiEndpoints.getTransactions(user?.branchId);
         // Map backend status to Bill status
         const mapped = (data.transactions || data).map((t: any) => ({
           id: t.id,
@@ -305,18 +301,7 @@ const Billing: React.FC = () => {
 
       console.log("Sending return data:", returnData);
 
-      const response = await fetch(`${VITE_BASE_URL}/transaction/return`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(returnData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to process return');
-      }
+      await apiEndpoints.processReturn(returnData);
 
       // Update local state
       const updatedBills = bills.map(bill => 
@@ -352,13 +337,8 @@ const Billing: React.FC = () => {
   const fetchReturnHistory = async () => {
     setReturnHistoryLoading(true);
     try {
-      const url = user?.branchId
-        ? `${VITE_BASE_URL}/returns?branchId=${user.branchId}`
-        : `${VITE_BASE_URL}/returns`;
-
-      const response = await fetch(url);
-      if (!response.ok) throw new Error("Failed to fetch return history");
-      const data = await response.json();
+      // Use authenticated API endpoint
+      const data = await apiEndpoints.getReturnHistory(user?.branchId);
       setReturnHistory(data);
     } catch (error: any) {
       console.error("Error fetching return history:", error);
