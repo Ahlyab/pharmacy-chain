@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Building2, Plus, Search, Upload } from "lucide-react";
-import { VITE_BASE_URL } from "../../data";
+import { apiEndpoints, api } from "../../utils/api";
 import Swal from "sweetalert2";
-import { useAuth } from "../../contexts/AuthContext";
+
 import Spinner from "../Spinner";
 
 interface Branch {
@@ -42,8 +42,6 @@ interface Product {
 }
 
 const AdminInventoryManagement: React.FC = () => {
-  const { user } = useAuth();
-  const BASE_URL = VITE_BASE_URL;
   
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
@@ -53,7 +51,7 @@ const AdminInventoryManagement: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState("All");
   const [showAddProductModal, setShowAddProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [isImporting, setIsImporting] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [sortField, setSortField] = useState<keyof Product>("name");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
@@ -76,40 +74,29 @@ const AdminInventoryManagement: React.FC = () => {
   // Fetch branches with inventory statistics
   const fetchBranches = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const headers = {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      };
-      const response = await fetch(`${BASE_URL}/branch`, { headers });
-      if (!response.ok) throw new Error("Failed to fetch branches");
-      const branchesData = await response.json();
+      const branchesData = await apiEndpoints.getBranches();
       
       // Fetch inventory statistics for each branch
       const branchesWithStats = await Promise.all(
         branchesData.map(async (branch: Branch) => {
           try {
-            const inventoryResponse = await fetch(`${BASE_URL}/inventory?branchId=${branch._id}`, { headers });
-            if (inventoryResponse.ok) {
-              const inventoryData = await inventoryResponse.json();
-              const branchProducts = inventoryData.filter((p: Product) => 
-                p.branchId === branch._id || 
-                (typeof p.branchId === 'object' && p.branchId?._id === branch._id)
-              );
-              
-              const totalStock = branchProducts.reduce((sum: number, p: Product) => sum + p.stock, 0);
-              const lowStockCount = branchProducts.filter((p: Product) => p.stock <= p.minStock && p.stock > 0).length;
-              const outOfStockCount = branchProducts.filter((p: Product) => p.stock === 0).length;
-              
-              return {
-                ...branch,
-                inventoryCount: branchProducts.length,
-                totalStock,
-                lowStockCount,
-                outOfStockCount,
-              };
-            }
-            return { ...branch, inventoryCount: 0, totalStock: 0, lowStockCount: 0, outOfStockCount: 0 };
+            const inventoryData = await apiEndpoints.getInventory(branch._id);
+            const branchProducts = inventoryData.filter((p: Product) => 
+              p.branchId === branch._id || 
+              (typeof p.branchId === 'object' && p.branchId?._id === branch._id)
+            );
+            
+            const totalStock = branchProducts.reduce((sum: number, p: Product) => sum + p.stock, 0);
+            const lowStockCount = branchProducts.filter((p: Product) => p.stock <= p.minStock && p.stock > 0).length;
+            const outOfStockCount = branchProducts.filter((p: Product) => p.stock === 0).length;
+            
+            return {
+              ...branch,
+              inventoryCount: branchProducts.length,
+              totalStock,
+              lowStockCount,
+              outOfStockCount,
+            };
           } catch (error) {
             console.error(`Error fetching inventory for branch ${branch.name}:`, error);
             return { ...branch, inventoryCount: 0, totalStock: 0, lowStockCount: 0, outOfStockCount: 0 };
@@ -133,14 +120,7 @@ const AdminInventoryManagement: React.FC = () => {
   const fetchBranchProducts = async (branchId: string) => {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem("token");
-      const headers = {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      };
-      const response = await fetch(`${BASE_URL}/inventory?branchId=${branchId}`, { headers });
-      if (!response.ok) throw new Error("Failed to fetch products");
-      const data = await response.json();
+      const data = await apiEndpoints.getInventory(branchId);
       
       // Filter products for the specific branch and add status
       const branchProducts = data.filter((p: Product) => 
@@ -170,7 +150,7 @@ const AdminInventoryManagement: React.FC = () => {
 
   useEffect(() => {
     fetchBranches();
-  }, [BASE_URL]);
+  }, []);
 
   // Handle branch selection
   const handleBranchSelect = (branch: Branch) => {
@@ -261,30 +241,10 @@ const AdminInventoryManagement: React.FC = () => {
 
       if (editingProduct) {
         // Update existing product
-        const token = localStorage.getItem("token");
-        const headers = {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        };
-        const response = await fetch(`${BASE_URL}/inventory/${editingProduct.id}`, {
-          method: "PATCH",
-          headers,
-          body: JSON.stringify(submitData),
-        });
-        if (!response.ok) throw new Error("Failed to update product");
+        await apiEndpoints.updateInventory(editingProduct.id, submitData);
       } else {
-        const token = localStorage.getItem("token");
-        const headers = {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        };
         // Add new product
-        const response = await fetch(`${BASE_URL}/inventory`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify(submitData),
-        });
-        if (!response.ok) throw new Error("Failed to add product");
+        await apiEndpoints.createInventory(submitData);
       }
 
       Swal.fire({
@@ -409,17 +369,7 @@ const AdminInventoryManagement: React.FC = () => {
         formData.append('file', file);
         formData.append('branchId', selectedBranch._id);
         
-        const response = await fetch(`${BASE_URL}/inventory/import-excel`, {
-          method: 'POST',
-          body: formData,
-        });
-        
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const result = await response.json();
+        const result = await api.upload('/api/inventory/import-excel', formData);
         
         // Show success message with summary
         const { summary } = result;
@@ -490,16 +440,7 @@ const AdminInventoryManagement: React.FC = () => {
 
     if (result.isConfirmed) {
       try {
-        const token = localStorage.getItem("token");
-        const headers = {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        };
-        const response = await fetch(`${BASE_URL}/inventory/${productId}`, {
-          method: "DELETE",
-          headers,
-        });
-        if (!response.ok) throw new Error("Failed to delete product");
+        await apiEndpoints.deleteInventory(productId);
 
         Swal.fire("Deleted!", "Product has been deleted.", "success");
         

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { VITE_BASE_URL } from "../../data";
+import { apiEndpoints } from "../../utils/api";
 import Swal from "sweetalert2";
 import { Plus, Edit, Trash2, Mail, Phone, Building2, Shield, UserCheck } from "lucide-react";
 
@@ -173,22 +173,8 @@ const ManagerManagement: React.FC = () => {
   useEffect(() => {
     const fetchManagers = async () => {
       try {
-        console.log("Fetching managers from:", `${VITE_BASE_URL}/manager`);
-        const token = localStorage.getItem("token");
-        const headers = {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        };
-        const response = await fetch(`${VITE_BASE_URL}/manager`, { headers });
-        console.log("Manager response status:", response.status);
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error("Failed to fetch managers:", response.status, errorText);
-          throw new Error(`Failed to fetch managers: ${response.status} ${errorText}`);
-        }
-        
-        const data = await response.json();
+        console.log("Fetching managers using apiEndpoints");
+        const data = await apiEndpoints.getManagers();
         console.log("Raw manager data:", data);
         
         if (!Array.isArray(data)) {
@@ -219,22 +205,8 @@ const ManagerManagement: React.FC = () => {
     
     const fetchBranches = async () => {
       try {
-        console.log("Fetching branches from:", `${VITE_BASE_URL}/branch`);
-        const token = localStorage.getItem("token");
-        const headers = {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        };
-        const response = await fetch(`${VITE_BASE_URL}/branch`, { headers });
-        console.log("Branch response status:", response.status);
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error("Failed to fetch branches:", response.status, errorText);
-          throw new Error(`Failed to fetch branches: ${response.status} ${errorText}`);
-        }
-        
-        const data = await response.json();
+        console.log("Fetching branches using apiEndpoints");
+        const data = await apiEndpoints.getBranches();
         console.log("Raw branch data:", data);
         
         if (!Array.isArray(data)) {
@@ -389,27 +361,7 @@ const ManagerManagement: React.FC = () => {
           }
         }
 
-        const token = localStorage.getItem("token");
-        const headers = {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        };
-
-        const response = await fetch(
-          `${VITE_BASE_URL}/manager/${editingManager.id}`,
-          {
-            method: "PATCH",
-            headers,
-            body: JSON.stringify(updatePayload),
-          }
-        );
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || "Failed to update user");
-        }
-
-        const updatedManager = await response.json();
+        const updatedManager = await apiEndpoints.updateManager(editingManager.id, updatePayload);
         setManagers(
           managers.map((m) =>
             m.id === editingManager.id
@@ -507,22 +459,8 @@ const ManagerManagement: React.FC = () => {
           status: formData.status,
           role: formData.role,
         };
-        const token = localStorage.getItem("token");
-        const headers = {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        };
         // Add manager to /manager endpoint
-        const response = await fetch(`${VITE_BASE_URL}/manager`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify(payload),
-        });
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || "Failed to add manager");
-        }
-        const newManager = await response.json();
+        const newManager = await apiEndpoints.createManager(payload);
         setManagers([
           ...managers,
           {
@@ -679,16 +617,7 @@ const ManagerManagement: React.FC = () => {
     });
     if (result.isConfirmed) {
       try {
-        const token = localStorage.getItem("token");
-        const headers = {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        };
-        const response = await fetch(`${VITE_BASE_URL}/manager/${id}`, {
-          method: "DELETE",
-          headers,
-        });
-        if (!response.ok) throw new Error("Failed to delete user");
+        await apiEndpoints.deleteManager(id);
         setManagers(managers.filter((manager) => manager.id !== id));
         Swal.fire("Deleted!", "User has been deleted.", "success");
       } catch (err) {

@@ -438,20 +438,20 @@ router.post("/login", async (req, res) => {
     const user = await User.findOne({ email }).populate("branchId");
     if (!user || !(await user.comparePassword(password))) {
       // Log failed login attempt
-      try {
-        await logFailedAction(
-          req,
-          "USER_LOGIN",
-          "User",
-          null,
-          email,
-          "Failed login attempt - invalid credentials",
-          new Error("Invalid email or password"),
-          { email }
-        );
-      } catch (logError) {
-        console.error("Failed to log failed login:", logError);
-      }
+      // try {
+      //   await logFailedAction(
+      //     req,
+      //     "USER_LOGIN",
+      //     "User",
+      //     null,
+      //     email,
+      //     "Failed login attempt - invalid credentials",
+      //     new Error("Invalid email or password"),
+      //     { email }
+      //   );
+      // } catch (logError) {
+      //   console.error("Failed to log failed login:", logError);
+      // }
 
       return res.status(401).json({ error: "Invalid email or password" });
     }
@@ -461,22 +461,22 @@ router.post("/login", async (req, res) => {
     });
 
     // Log successful login
-    try {
-      await logUserAction(
-        req,
-        "USER_LOGIN",
-        user._id,
-        user.name,
-        {
-          email: user.email,
-          role: user.role,
-          branchId: user.branchId?._id,
-          branchName: user.branchId?.name
-        }
-      );
-    } catch (logError) {
-      console.error("Failed to log successful login:", logError);
-    }
+    // try {
+    //   await logUserAction(
+    //     req,
+    //     "USER_LOGIN",
+    //     user._id,
+    //     user.name,
+    //     {
+    //       email: user.email,
+    //       role: user.role,
+    //       branchId: user.branchId?._id,
+    //       branchName: user.branchId?.name
+    //     }
+    //   );
+    // } catch (logError) {
+    //   console.error("Failed to log successful login:", logError);
+    // }
 
     res.status(200).json({
       token,
@@ -489,20 +489,20 @@ router.post("/login", async (req, res) => {
     });
   } catch (error) {
     // Log failed login due to system error
-    try {
-      await logFailedAction(
-        req,
-        "USER_LOGIN",
-        "User",
-        null,
-        req.body.email || "Unknown",
-        "Failed login attempt - system error",
-        error,
-        { email: req.body.email }
-      );
-    } catch (logError) {
-      console.error("Failed to log failed login:", logError);
-    }
+    // try {
+    //   await logFailedAction(
+    //     req,
+    //     "USER_LOGIN",
+    //     "User",
+    //     null,
+    //     req.body.email || "Unknown",
+    //     "Failed login attempt - system error",
+    //     error,
+    //     { email: req.body.email }
+    //   );
+    // } catch (logError) {
+    //   console.error("Failed to log failed login:", logError);
+    // }
 
     res.status(500).json({ error: error.message });
   }

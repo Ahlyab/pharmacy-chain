@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Calendar, DollarSign, Receipt, Search } from "lucide-react";
-// ...existing code...
 import GreenProgressBar from "../GreenProgressBar";
-import config from "../../config/env";
 import { apiEndpoints } from "../../utils/api";
+import { useAuth } from "../../contexts/AuthContext";
 
 interface Transaction {
   id: string;
@@ -22,6 +21,8 @@ interface Transaction {
 }
 
 const TransactionHistory: React.FC = () => {
+  const { user } = useAuth();
+  
   // Format date to 'YYYY-MM-DD h:mmAM/PM'
   const formatDateTime = (dateString: string) => {
     const date = new Date(dateString);
@@ -81,13 +82,7 @@ const TransactionHistory: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const branchId = user?.branchId;
-        const token = localStorage.getItem("token");
-        const headers = {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        };
-        const data = await apiEndpoints.getTransactions(branchId, headers);
+        const data = await apiEndpoints.getTransactions(user?.branchId);
         // Handle both array response and wrapped response
         const transactionsData = Array.isArray(data) ? data : (data.transactions || []);
         console.log('Fetched transactions:', transactionsData);
@@ -100,12 +95,7 @@ const TransactionHistory: React.FC = () => {
     };
     const fetchBranches = async () => {
       try {
-        const token = localStorage.getItem("token");
-        const headers = {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        };
-        const data = await apiEndpoints.getBranches(headers);
+        const data = await apiEndpoints.getBranches();
         // If data is an array of branch objects, extract names
         const branchNames = Array.isArray(data)
           ? data.map((b: any) => b.name || b.branchName || b._id || b.id)

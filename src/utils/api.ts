@@ -296,8 +296,15 @@ export const apiEndpoints = {
   getAuditStatistics: (additionalHeaders?: Record<string, string>) => 
     api.get('/api/audit/statistics', additionalHeaders),
 
+  // Returns
+  processReturn: (data: any, additionalHeaders?: Record<string, string>) => 
+    api.post('/api/transaction/return', data, additionalHeaders),
+  
+  getReturnHistory: (branchId?: string, additionalHeaders?: Record<string, string>) => 
+    api.get(branchId ? `/api/returns?branchId=${branchId}` : '/api/returns', additionalHeaders),
+
   // Health check (no auth required)
-  healthCheck: (additionalHeaders?: Record<string, string>) => 
+  healthCheck: () => 
     fetch(`${config.apiUrl}/api/health`).then(res => res.json()),
 };
 

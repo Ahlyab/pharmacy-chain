@@ -28,8 +28,19 @@ export const logInventoryAction = async (req, action, entityId, entityName, deta
   try {
     const user = req.user; // Assuming user is attached to req by auth middleware
     
+    // Debug logging
+    console.log('Audit logging - req.user:', user);
+    console.log('Audit logging - user.id:', user?.id);
+    console.log('Audit logging - user._id:', user?._id);
+    
+    // Safety check
+    if (!user || !user.id) {
+      console.error('Audit logging failed: No user or user.id found in request');
+      return;
+    }
+    
     await AuditLog.logAction({
-      userId: user._id,
+      userId: user.id,
       userName: user.name,
       userRole: user.role,
       branchId: user.branchId,
@@ -56,8 +67,14 @@ export const logTransactionAction = async (req, action, entityId, entityName, tr
   try {
     const user = req.user;
     
+    // Safety check
+    if (!user || !user.id) {
+      console.error('Audit logging failed: No user or user.id found in request');
+      return;
+    }
+    
     await AuditLog.logAction({
-      userId: user._id,
+      userId: user.id,
       userName: user.name,
       userRole: user.role,
       branchId: user.branchId,
@@ -84,8 +101,14 @@ export const logBulkOperation = async (req, action, fileName, totalRecords, succ
   try {
     const user = req.user;
     
+    // Safety check
+    if (!user || !user.id) {
+      console.error('Audit logging failed: No user or user.id found in request');
+      return;
+    }
+    
     await AuditLog.logAction({
-      userId: user._id,
+      userId: user.id,
       userName: user.name,
       userRole: user.role,
       branchId: user.branchId,
@@ -116,9 +139,16 @@ export const logBulkOperation = async (req, action, fileName, totalRecords, succ
 export const logUserAction = async (req, action, entityId, entityName, details = {}) => {
   try {
     const user = req.user;
+    console.log("[+] user", user);
+    
+    // Safety check
+    if (!user || !user.id) {
+      console.error('Audit logging failed: No user or user.id found in request');
+      return;
+    }
     
     await AuditLog.logAction({
-      userId: user._id,
+      userId: user.id,
       userName: user.name,
       userRole: user.role,
       branchId: user.branchId,
@@ -145,8 +175,14 @@ export const logBranchAction = async (req, action, entityId, entityName, details
   try {
     const user = req.user;
     
+    // Safety check
+    if (!user || !user.id) {
+      console.error('Audit logging failed: No user or user.id found in request');
+      return;
+    }
+    
     await AuditLog.logAction({
-      userId: user._id,
+      userId: user.id,
       userName: user.name,
       userRole: user.role,
       branchId: user.branchId,
@@ -173,8 +209,14 @@ export const logSupplierAction = async (req, action, entityId, entityName, detai
   try {
     const user = req.user;
     
+    // Safety check
+    if (!user || !user.id) {
+      console.error('Audit logging failed: No user or user.id found in request');
+      return;
+    }
+    
     await AuditLog.logAction({
-      userId: user._id,
+      userId: user.id,
       userName: user.name,
       userRole: user.role,
       branchId: user.branchId,
@@ -201,8 +243,14 @@ export const logSystemAction = async (req, action, description, details = {}) =>
   try {
     const user = req.user;
     
+    // Safety check
+    if (!user || !user.id) {
+      console.error('Audit logging failed: No user or user.id found in request');
+      return;
+    }
+    
     await AuditLog.logAction({
-      userId: user._id,
+      userId: user.id,
       userName: user.name,
       userRole: user.role,
       branchId: user.branchId,
@@ -227,8 +275,14 @@ export const logAuthAction = async (req, action, success = true, error = null) =
   try {
     const user = req.user;
     
+    // Safety check
+    if (!user || !user.id) {
+      console.error('Audit logging failed: No user or user.id found in request');
+      return;
+    }
+    
     await AuditLog.logAction({
-      userId: user._id,
+      userId: user.id,
       userName: user.name,
       userRole: user.role,
       branchId: user.branchId,
@@ -257,8 +311,14 @@ export const logCustomAction = async (req, action, entityType, entityId, entityN
   try {
     const user = req.user;
     
+    // Safety check
+    if (!user || !user.id) {
+      console.error('Audit logging failed: No user or user.id found in request');
+      return;
+    }
+    
     await AuditLog.logAction({
-      userId: user._id,
+      userId: user.id,
       userName: user.name,
       userRole: user.role,
       branchId: user.branchId,
@@ -285,8 +345,14 @@ export const logFailedAction = async (req, action, entityType, entityId, entityN
   try {
     const user = req.user;
     
+    // Safety check
+    if (!user || !user.id) {
+      console.error('Audit logging failed: No user or user.id found in request');
+      return;
+    }
+    
     await AuditLog.logAction({
-      userId: user._id,
+      userId: user.id,
       userName: user.name,
       userRole: user.role,
       branchId: user.branchId,

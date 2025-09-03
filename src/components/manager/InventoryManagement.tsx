@@ -87,6 +87,8 @@ const initialFormState: FormProduct = {
 
 const InventoryManagement: React.FC = () => {
   const { user } = useAuth();
+
+  const token = localStorage.getItem('token');
   
   // Helper function to determine actual role for access control
   const getActualRole = (user: any) => {
@@ -359,6 +361,9 @@ const InventoryManagement: React.FC = () => {
         
         const response = await fetch(`${BASE_URL}/inventory/import-excel`, {
           method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
           body: formData,
         });
         
@@ -394,7 +399,11 @@ const InventoryManagement: React.FC = () => {
         
         // Refresh products after import
         setIsLoading(true);
-        const productsResponse = await fetch(`${BASE_URL}/inventory`);
+        const productsResponse = await fetch(`${BASE_URL}/inventory`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
         if (productsResponse.ok) {
           const productsData = await productsResponse.json();
           setProducts(productsData.map(addStatus));
@@ -483,7 +492,9 @@ const InventoryManagement: React.FC = () => {
 
           const response = await fetch(`${BASE_URL}/inventory/${existingProduct.id}`, {
             method: "PATCH",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json",
+              'Authorization': `Bearer ${token}`,
+            },
             body: JSON.stringify(updateData),
           });
 
@@ -505,7 +516,11 @@ const InventoryManagement: React.FC = () => {
           setProductSearch("");
 
           // Refresh products
-          const productsResponse = await fetch(`${BASE_URL}/inventory`);
+          const productsResponse = await fetch(`${BASE_URL}/inventory`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
           if (productsResponse.ok) {
             const data = await productsResponse.json();
             setProducts(data.map(addStatus));
@@ -524,7 +539,11 @@ const InventoryManagement: React.FC = () => {
       
       if (!supplierId && formData.supplier.trim()) {
         // Check if supplier exists
-        const supplierResponse = await fetch(`${BASE_URL}/supplier`);
+        const supplierResponse = await fetch(`${BASE_URL}/supplier`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
         if (supplierResponse.ok) {
           const existingSuppliers = await supplierResponse.json();
           const existingSupplier = existingSuppliers.find(
@@ -549,7 +568,9 @@ const InventoryManagement: React.FC = () => {
             
             const createSupplierResponse = await fetch(`${BASE_URL}/supplier`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+              },
               body: JSON.stringify(newSupplierData),
             });
             
@@ -702,7 +723,9 @@ const InventoryManagement: React.FC = () => {
           `${BASE_URL}/inventory/${editingProduct.id}`,
           {
             method: "PATCH",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json",
+              'Authorization': `Bearer ${token}`,
+            },
             body: JSON.stringify(cleanUpdateData),
           }
         );
