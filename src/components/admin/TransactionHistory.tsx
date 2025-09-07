@@ -22,7 +22,7 @@ interface Transaction {
 
 const TransactionHistory: React.FC = () => {
   const { user } = useAuth();
-  
+
   // Format date to 'YYYY-MM-DD h:mmAM/PM'
   const formatDateTime = (dateString: string) => {
     const date = new Date(dateString);
@@ -37,11 +37,21 @@ const TransactionHistory: React.FC = () => {
     const minutesStr = minutes < 10 ? "0" + minutes : minutes;
     return `${year}-${month}-${day} ${hours}:${minutesStr}${ampm}`;
   };
+
+  // Helper function to format date for input (YYYY-MM-DD)
+  const formatDateForInput = (date: Date) => {
+    return date.toISOString().slice(0, 10);
+  };
+
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedBranch, setSelectedBranch] = useState("All");
-  const [selectedStatus, setSelectedStatus] = useState("All");
+  const [selectedStatus, setSelectedStatus] = useState("Completed");
   const [dateRange, setDateRange] = useState("7");
   const [selectedDate, setSelectedDate] = useState<string>("");
+  const [customDateRange, setCustomDateRange] = useState({
+    startDate: "",
+    endDate: "",
+  });
   const [showCalendar, setShowCalendar] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [branches, setBranches] = useState<string[]>([]);
@@ -49,6 +59,18 @@ const TransactionHistory: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [sortColumn, setSortColumn] = useState<string>("date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+
+  // Set default custom date range to last 7 days
+  useEffect(() => {
+    const today = new Date();
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(today.getDate() - 7);
+
+    setCustomDateRange({
+      startDate: formatDateForInput(sevenDaysAgo),
+      endDate: formatDateForInput(today),
+    });
+  }, []);
 
   // Sorting handler
   const handleSort = (column: string) => {
@@ -64,19 +86,25 @@ const TransactionHistory: React.FC = () => {
   const handleDateSelect = (date: string) => {
     setSelectedDate(date);
     setDateRange(""); // Clear date range when specific date is selected
+    setCustomDateRange({ startDate: "", endDate: "" }); // Clear custom range
     setShowCalendar(false);
   };
 
   const handleDateRangeChange = (range: string) => {
     setDateRange(range);
     setSelectedDate(""); // Clear specific date when date range is selected
+    if (range !== "custom") {
+      setCustomDateRange({ startDate: "", endDate: "" }); // Clear custom range
+    }
   };
 
   const clearDateFilters = () => {
     setSelectedDate("");
     setDateRange("7");
+    setCustomDateRange({ startDate: "", endDate: "" });
     setShowCalendar(false);
   };
+
   useEffect(() => {
     const fetchTransactions = async () => {
       setLoading(true);
@@ -84,8 +112,10 @@ const TransactionHistory: React.FC = () => {
       try {
         const data = await apiEndpoints.getTransactions(user?.branchId);
         // Handle both array response and wrapped response
-        const transactionsData = Array.isArray(data) ? data : (data.transactions || []);
-        console.log('Fetched transactions:', transactionsData);
+        const transactionsData = Array.isArray(data)
+          ? data
+          : data.transactions || [];
+        console.log("Fetched transactions:", transactionsData);
         setTransactions(transactionsData);
       } catch (err: any) {
         setError(err.message || "Error fetching transactions");
@@ -115,99 +145,118 @@ const TransactionHistory: React.FC = () => {
 
   // Filter by search, branch, status, and date range
   const now = new Date();
-  const filteredTransactions = transactions
-    .filter((transaction) => {
-      if (!transaction || !transaction.id)
-        return false;
-      const matchesSearch =
-        transaction.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (transaction.customer && transaction.customer.toLowerCase().includes(searchTerm.toLowerCase()));
-      const matchesBranch =
-        selectedBranch === "All" || transaction.branchName === selectedBranch;
-      const matchesStatus =
-        selectedStatus === "All" || transaction.status === selectedStatus;
-      // Date filter - prioritize specific date over date range
-      const txnDate = new Date(transaction.date);
-      let matchesDate = true;
-      
-      if (selectedDate) {
-        // Specific date filter
-        const selectedDateObj = new Date(selectedDate);
-        const selectedStart = new Date(selectedDateObj.getFullYear(), selectedDateObj.getMonth(), selectedDateObj.getDate());
-        const selectedEnd = new Date(selectedStart.getTime() + 24 * 60 * 60 * 1000);
-        matchesDate = txnDate >= selectedStart && txnDate < selectedEnd;
-      } else if (dateRange === "today") {
-        const txnDateStr = txnDate.toISOString().slice(0, 10);
-        const todayStr = now.toISOString().slice(0, 10);
-        matchesDate = txnDateStr === todayStr;
+  const filteredTransactions = transactions.filter((transaction) => {
+    if (!transaction || !transaction.id) return false;
+    const matchesSearch =
+      transaction.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (transaction.customer &&
+        transaction.customer.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesBranch =
+      selectedBranch === "All" || transaction.branchName === selectedBranch;
+    const matchesStatus =
+      selectedStatus === "All" || transaction.status === selectedStatus;
+
+    // Date filter - prioritize specific date over date range
+    const txnDate = new Date(transaction.date);
+    let matchesDate = true;
+
+    if (selectedDate) {
+      // Specific date filter
+      const selectedDateObj = new Date(selectedDate);
+      const selectedStart = new Date(
+        selectedDateObj.getFullYear(),
+        selectedDateObj.getMonth(),
+        selectedDateObj.getDate()
+      );
+      const selectedEnd = new Date(
+        selectedStart.getTime() + 24 * 60 * 60 * 1000
+      );
+      matchesDate = txnDate >= selectedStart && txnDate < selectedEnd;
+    } else if (dateRange === "custom") {
+      // Custom date range filtering
+      if (customDateRange.startDate && customDateRange.endDate) {
+        const startDate = new Date(customDateRange.startDate);
+        const endDate = new Date(customDateRange.endDate);
+        // Set end date to end of day
+        endDate.setHours(23, 59, 59, 999);
+        matchesDate = txnDate >= startDate && txnDate <= endDate;
       } else {
-        const days = parseInt(dateRange, 10);
-        const dateLimit = new Date(now);
-        dateLimit.setDate(now.getDate() - days);
-        matchesDate = txnDate >= dateLimit;
+        matchesDate = true; // If no custom dates set, show all
       }
-      const result = matchesSearch && matchesBranch && matchesStatus && matchesDate;
-      if (!result) {
-        console.log('Transaction filtered out:', {
-          id: transaction.id,
-          customer: transaction.customer,
-          branchName: transaction.branchName,
-          status: transaction.status,
-          date: transaction.date,
-          matchesSearch,
-          matchesBranch,
-          matchesStatus,
-          matchesDate
-        });
-      }
-      return result;
-    });
-  
-  console.log('Filtered transactions:', filteredTransactions);
-  
+    } else if (dateRange === "today") {
+      const txnDateStr = txnDate.toISOString().slice(0, 10);
+      const todayStr = now.toISOString().slice(0, 10);
+      matchesDate = txnDateStr === todayStr;
+    } else {
+      const days = parseInt(dateRange, 10);
+      const dateLimit = new Date(now);
+      dateLimit.setDate(now.getDate() - days);
+      matchesDate = txnDate >= dateLimit;
+    }
+
+    const result =
+      matchesSearch && matchesBranch && matchesStatus && matchesDate;
+    if (!result) {
+      console.log("Transaction filtered out:", {
+        id: transaction.id,
+        customer: transaction.customer,
+        branchName: transaction.branchName,
+        status: transaction.status,
+        date: transaction.date,
+        matchesSearch,
+        matchesBranch,
+        matchesStatus,
+        matchesDate,
+      });
+    }
+    return result;
+  });
+
+  console.log("Filtered transactions:", filteredTransactions);
+
   const sortedTransactions = filteredTransactions.sort((a, b) => {
-      let valA, valB;
-      switch (sortColumn) {
-        case "id":
-          valA = a.id;
-          valB = b.id;
-          break;
-        case "date":
-          valA = new Date(a.date).getTime();
-          valB = new Date(b.date).getTime();
-          break;
-        case "branch":
-          valA = a.branchName;
-          valB = b.branchName;
-          break;
-        case "customer":
-          valA = a.customer || "";
-          valB = b.customer || "";
-          break;
-        case "items":
-          valA = a.items?.length || 0;
-          valB = b.items?.length || 0;
-          break;
-        case "total":
-          valA = a.total;
-          valB = b.total;
-          break;
-        case "paymentMethod":
-          valA = a.paymentMethod;
-          valB = b.paymentMethod;
-          break;
-        case "status":
-          valA = a.status;
-          valB = b.status;
-          break;
-        default:
-          valA = a.date;
-          valB = b.date;
-      }
-      if (valA < valB) return sortDirection === "asc" ? -1 : 1;
-      if (valA > valB) return sortDirection === "asc" ? 1 : -1;
-      return 0;
-    });
+    let valA, valB;
+    switch (sortColumn) {
+      case "id":
+        valA = a.id;
+        valB = b.id;
+        break;
+      case "date":
+        valA = new Date(a.date).getTime();
+        valB = new Date(b.date).getTime();
+        break;
+      case "branch":
+        valA = a.branchName;
+        valB = b.branchName;
+        break;
+      case "customer":
+        valA = a.customer || "";
+        valB = b.customer || "";
+        break;
+      case "items":
+        valA = a.items?.length || 0;
+        valB = b.items?.length || 0;
+        break;
+      case "total":
+        valA = a.total;
+        valB = b.total;
+        break;
+      case "paymentMethod":
+        valA = a.paymentMethod;
+        valB = b.paymentMethod;
+        break;
+      case "status":
+        valA = a.status;
+        valB = b.status;
+        break;
+      default:
+        valA = a.date;
+        valB = b.date;
+    }
+    if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+    if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+    return 0;
+  });
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -316,7 +365,7 @@ const TransactionHistory: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           {/* Search Input - Full width on small screens */}
           <div className="relative sm:col-span-2 lg:col-span-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-5 h-5 w-5 text-gray-400 pointer-events-none" />
             <input
               type="text"
               placeholder="Search transactions..."
@@ -363,7 +412,9 @@ const TransactionHistory: React.FC = () => {
                 value={dateRange}
                 onChange={(e) => handleDateRangeChange(e.target.value)}
                 className={`flex-1 px-3 py-2 border rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  selectedDate ? 'border-gray-300 bg-gray-100' : 'border-gray-300'
+                  selectedDate
+                    ? "border-gray-300 bg-gray-100"
+                    : "border-gray-300"
                 }`}
                 disabled={!!selectedDate}
               >
@@ -372,41 +423,57 @@ const TransactionHistory: React.FC = () => {
                 <option value="30">Last 30 days</option>
                 <option value="90">Last 3 months</option>
                 <option value="365">Last year</option>
+                <option value="custom">Custom Range</option>
               </select>
               <button
                 type="button"
                 onClick={() => setShowCalendar(!showCalendar)}
-                className={`px-3 py-2 border border-l-0 rounded-r-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  selectedDate 
-                    ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100' 
-                    : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
+                className={`px-3 py-2 border border-l-0 rounded-r-md focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center justify-center ${
+                  selectedDate
+                    ? "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                    : "border-gray-300 bg-gray-50 hover:bg-gray-100"
                 }`}
                 title="Select specific date"
               >
-                📅
+                <Calendar className="h-4 w-4" />
               </button>
             </div>
-            
+
             {/* Active Filter Indicator */}
             {(selectedDate || dateRange) && (
               <div className="mt-1 text-xs">
                 {selectedDate ? (
                   <span className="text-blue-600 font-medium">
-                    📅 Filtering by date: {new Date(selectedDate).toLocaleDateString()}
+                    📅 Filtering by date:{" "}
+                    {new Date(selectedDate).toLocaleDateString()}
+                  </span>
+                ) : dateRange === "custom" ? (
+                  <span className="text-blue-600 font-medium">
+                    📅 Custom range:{" "}
+                    {customDateRange.startDate && customDateRange.endDate
+                      ? `${new Date(
+                          customDateRange.startDate
+                        ).toLocaleDateString()} - ${new Date(
+                          customDateRange.endDate
+                        ).toLocaleDateString()}`
+                      : "Select dates"}
                   </span>
                 ) : (
                   <span className="text-gray-600">
-                    📅 Filtering by: {dateRange === "today" ? "Today" : `Last ${dateRange} days`}
+                    📅 Filtering by:{" "}
+                    {dateRange === "today" ? "Today" : `Last ${dateRange} days`}
                   </span>
                 )}
               </div>
             )}
-            
+
             {/* Calendar Dropdown */}
             {showCalendar && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-10 p-3">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-700">Select Date</span>
+                  <span className="text-sm font-medium text-gray-700">
+                    Select Date
+                  </span>
                   <button
                     onClick={() => setShowCalendar(false)}
                     className="text-gray-400 hover:text-gray-600"
@@ -445,6 +512,53 @@ const TransactionHistory: React.FC = () => {
             Clear Filters
           </button>
         </div>
+
+        {/* Custom Date Range Inputs - Only show when custom is selected */}
+        {dateRange === "custom" && (
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Start Date
+                </label>
+                <input
+                  type="date"
+                  value={customDateRange.startDate}
+                  onChange={(e) =>
+                    setCustomDateRange((prev) => ({
+                      ...prev,
+                      startDate: e.target.value,
+                    }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  End Date
+                </label>
+                <input
+                  type="date"
+                  value={customDateRange.endDate}
+                  onChange={(e) =>
+                    setCustomDateRange((prev) => ({
+                      ...prev,
+                      endDate: e.target.value,
+                    }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            {customDateRange.startDate && customDateRange.endDate && (
+              <div className="mt-2 text-sm text-gray-600">
+                Showing transactions from{" "}
+                {new Date(customDateRange.startDate).toLocaleDateString()} to{" "}
+                {new Date(customDateRange.endDate).toLocaleDateString()}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Transactions Table with loading/error */}
@@ -525,28 +639,46 @@ const TransactionHistory: React.FC = () => {
                     </th>
                   </tr>
                 </thead>
-                                 <tbody className="bg-white divide-y divide-gray-200">
-                   {sortedTransactions.map((transaction) => (
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {sortedTransactions.map((transaction) => (
                     <tr key={transaction.id} className="hover:bg-gray-50">
                       <td className="px-2 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm font-medium text-gray-900">
-                        <span className="hidden sm:inline">{transaction.id}</span>
-                        <span className="sm:hidden">{transaction.id.substring(0, 8)}...</span>
+                        <span className="hidden sm:inline">
+                          {transaction.id}
+                        </span>
+                        <span className="sm:hidden">
+                          {transaction.id.substring(0, 8)}...
+                        </span>
                       </td>
                       <td className="px-2 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
-                        <span className="hidden sm:inline">{formatDateTime(transaction.date)}</span>
-                        <span className="sm:hidden">{new Date(transaction.date).toLocaleDateString()}</span>
+                        <span className="hidden sm:inline">
+                          {formatDateTime(transaction.date)}
+                        </span>
+                        <span className="sm:hidden">
+                          {new Date(transaction.date).toLocaleDateString()}
+                        </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {transaction.branchName}
                       </td>
                       <td className="px-2 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
-                        <span className="hidden sm:inline">{transaction.customer}</span>
-                        <span className="sm:hidden">{transaction.customer.length > 15 ? transaction.customer.substring(0, 15) + '...' : transaction.customer}</span>
+                        <span className="hidden sm:inline">
+                          {transaction.customer}
+                        </span>
+                        <span className="sm:hidden">
+                          {transaction.customer.length > 15
+                            ? transaction.customer.substring(0, 15) + "..."
+                            : transaction.customer}
+                        </span>
                       </td>
                       <td className="px-2 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                         <div className="flex items-center space-x-2">
-                          <span className="hidden sm:inline">{transaction.items?.length || 0} items</span>
-                          <span className="sm:hidden">{transaction.items?.length || 0}</span>
+                          <span className="hidden sm:inline">
+                            {transaction.items?.length || 0} items
+                          </span>
+                          <span className="sm:hidden">
+                            {transaction.items?.length || 0}
+                          </span>
                         </div>
                         <div className="hidden sm:block text-xs sm:text-sm text-gray-500">
                           {transaction.items
@@ -567,8 +699,12 @@ const TransactionHistory: React.FC = () => {
                             transaction.paymentMethod
                           )}`}
                         >
-                          <span className="hidden sm:inline">{transaction.paymentMethod}</span>
-                          <span className="sm:hidden">{transaction.paymentMethod.charAt(0).toUpperCase()}</span>
+                          <span className="hidden sm:inline">
+                            {transaction.paymentMethod}
+                          </span>
+                          <span className="sm:hidden">
+                            {transaction.paymentMethod.charAt(0).toUpperCase()}
+                          </span>
                         </span>
                       </td>
                       <td className="px-2 sm:px-6 py-4 whitespace-nowrap">

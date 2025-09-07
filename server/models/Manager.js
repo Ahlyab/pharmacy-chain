@@ -8,10 +8,16 @@ const managerSchema = new mongoose.Schema(
     branch: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Branch",
-      required: true,
+      required: function () {
+        return this.role !== "Admin";
+      },
     },
     status: { type: String, enum: ["Active", "Inactive"], default: "Active" },
-    role: { type: String, enum: ["Manager", "Sale Assistant"], default: "Manager" },
+    role: {
+      type: String,
+      enum: ["Admin", "Manager", "Sale Assistant"],
+      default: "Manager",
+    },
   },
   { timestamps: true }
 );

@@ -30,23 +30,47 @@ const Transactions: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [dateRange, setDateRange] = useState("7");
+  const [customDateRange, setCustomDateRange] = useState({
+    startDate: "",
+    endDate: "",
+  });
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
+  const [sortConfig, setSortConfig] = useState<{
+    key: string;
+    direction: "asc" | "desc";
+  } | null>(null);
 
   // Helper function to format date and time
   const formatDateTime = (dateString: string) => {
     const date = new Date(dateString);
     const hours = date.getHours();
     const minutes = date.getMinutes();
-    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const ampm = hours >= 12 ? "PM" : "AM";
     const formattedHours = hours % 12 || 12;
-    const formattedMinutes = minutes.toString().padStart(2, '0');
+    const formattedMinutes = minutes.toString().padStart(2, "0");
     const formattedDate = date.toLocaleDateString();
-    
+
     return `${formattedDate} ${formattedHours}:${formattedMinutes} ${ampm}`;
   };
+
+  // Helper function to format date for input (YYYY-MM-DD)
+  const formatDateForInput = (date: Date) => {
+    return date.toISOString().slice(0, 10);
+  };
+
+  // Set default custom date range to last 7 days
+  useEffect(() => {
+    const today = new Date();
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(today.getDate() - 7);
+
+    setCustomDateRange({
+      startDate: formatDateForInput(sevenDaysAgo),
+      endDate: formatDateForInput(today),
+    });
+  }, []);
 
   useEffect(() => {
     const fetchTransactions = async () => {
@@ -69,29 +93,42 @@ const Transactions: React.FC = () => {
 
   // Filter by search, status, and date range
   const now = new Date();
-  const filteredTransactions = transactions
-    .filter((transaction) => {
-      if (!transaction || !transaction.id)
-        return false;
-      const matchesSearch =
-        transaction.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (transaction.customer && transaction.customer.toLowerCase().includes(searchTerm.toLowerCase()));
-      const matchesStatus =
-        selectedStatus === "All" || transaction.status === selectedStatus;
-      // Date filter
-      const txnDate = new Date(transaction.date);
-      let matchesDate = true;
-      if (dateRange === "today") {
-        const todayStr = now.toISOString().slice(0, 10);
-        matchesDate = transaction.date.slice(0, 10) === todayStr;
+  const filteredTransactions = transactions.filter((transaction) => {
+    if (!transaction || !transaction.id) return false;
+    const matchesSearch =
+      transaction.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (transaction.customer &&
+        transaction.customer.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesStatus =
+      selectedStatus === "All" || transaction.status === selectedStatus;
+
+    // Date filter
+    const txnDate = new Date(transaction.date);
+    let matchesDate = true;
+
+    if (dateRange === "custom") {
+      // Custom date range filtering
+      if (customDateRange.startDate && customDateRange.endDate) {
+        const startDate = new Date(customDateRange.startDate);
+        const endDate = new Date(customDateRange.endDate);
+        // Set end date to end of day
+        endDate.setHours(23, 59, 59, 999);
+        matchesDate = txnDate >= startDate && txnDate <= endDate;
       } else {
-        const days = parseInt(dateRange, 10);
-        const dateLimit = new Date(now);
-        dateLimit.setDate(now.getDate() - days);
-        matchesDate = txnDate >= dateLimit;
+        matchesDate = true; // If no custom dates set, show all
       }
-      return matchesSearch && matchesStatus && matchesDate;
-    });
+    } else if (dateRange === "today") {
+      const todayStr = now.toISOString().slice(0, 10);
+      matchesDate = transaction.date.slice(0, 10) === todayStr;
+    } else {
+      const days = parseInt(dateRange, 10);
+      const dateLimit = new Date(now);
+      dateLimit.setDate(now.getDate() - days);
+      matchesDate = txnDate >= dateLimit;
+    }
+
+    return matchesSearch && matchesStatus && matchesDate;
+  });
 
   // Sorting
   const sortedTransactions = React.useMemo(() => {
@@ -259,8 +296,56 @@ const Transactions: React.FC = () => {
             <option value="30">Last 30 days</option>
             <option value="90">Last 3 months</option>
             <option value="365">Last year</option>
+            <option value="custom">Custom Range</option>
           </select>
         </div>
+
+        {/* Custom Date Range Inputs - Only show when custom is selected */}
+        {dateRange === "custom" && (
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Start Date
+                </label>
+                <input
+                  type="date"
+                  value={customDateRange.startDate}
+                  onChange={(e) =>
+                    setCustomDateRange((prev) => ({
+                      ...prev,
+                      startDate: e.target.value,
+                    }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  End Date
+                </label>
+                <input
+                  type="date"
+                  value={customDateRange.endDate}
+                  onChange={(e) =>
+                    setCustomDateRange((prev) => ({
+                      ...prev,
+                      endDate: e.target.value,
+                    }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            {customDateRange.startDate && customDateRange.endDate && (
+              <div className="mt-2 text-sm text-gray-600">
+                Showing transactions from{" "}
+                {new Date(customDateRange.startDate).toLocaleDateString()} to{" "}
+                {new Date(customDateRange.endDate).toLocaleDateString()}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Loading and Error States */}
@@ -279,7 +364,9 @@ const Transactions: React.FC = () => {
                     >
                       Transaction ID
                       {sortConfig?.key === "id" && (
-                        <span className="ml-1">{sortConfig.direction === "asc" ? "▲" : "▼"}</span>
+                        <span className="ml-1">
+                          {sortConfig.direction === "asc" ? "▲" : "▼"}
+                        </span>
                       )}
                     </th>
                     <th
@@ -288,7 +375,9 @@ const Transactions: React.FC = () => {
                     >
                       Date & Time
                       {sortConfig?.key === "date" && (
-                        <span className="ml-1">{sortConfig.direction === "asc" ? "▲" : "▼"}</span>
+                        <span className="ml-1">
+                          {sortConfig.direction === "asc" ? "▲" : "▼"}
+                        </span>
                       )}
                     </th>
                     <th
@@ -297,7 +386,9 @@ const Transactions: React.FC = () => {
                     >
                       Customer
                       {sortConfig?.key === "customer" && (
-                        <span className="ml-1">{sortConfig.direction === "asc" ? "▲" : "▼"}</span>
+                        <span className="ml-1">
+                          {sortConfig.direction === "asc" ? "▲" : "▼"}
+                        </span>
                       )}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -309,7 +400,9 @@ const Transactions: React.FC = () => {
                     >
                       Total
                       {sortConfig?.key === "total" && (
-                        <span className="ml-1">{sortConfig.direction === "asc" ? "▲" : "▼"}</span>
+                        <span className="ml-1">
+                          {sortConfig.direction === "asc" ? "▲" : "▼"}
+                        </span>
                       )}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -321,7 +414,9 @@ const Transactions: React.FC = () => {
                     >
                       Status
                       {sortConfig?.key === "status" && (
-                        <span className="ml-1">{sortConfig.direction === "asc" ? "▲" : "▼"}</span>
+                        <span className="ml-1">
+                          {sortConfig.direction === "asc" ? "▲" : "▼"}
+                        </span>
                       )}
                     </th>
                   </tr>

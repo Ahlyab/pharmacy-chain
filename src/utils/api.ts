@@ -280,6 +280,22 @@ export const apiEndpoints = {
   transferStock: (data: any, additionalHeaders?: Record<string, string>) => 
     api.post('/api/warehouse/transfer', data, additionalHeaders),
 
+  // All Inventory Across Branches
+  getAllInventoryAcrossBranches: (filters?: { search?: string; category?: string; status?: string; branchId?: string }, additionalHeaders?: Record<string, string>) => {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.category) params.append('category', filters.category);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.branchId) params.append('branchId', filters.branchId);
+    
+    const queryString = params.toString();
+    return api.get(`/api/inventory/all-branches${queryString ? `?${queryString}` : ''}`, additionalHeaders);
+  },
+
+  // Transfer inventory between branches
+  transferInventoryBetweenBranches: (data: { inventoryId: string; fromBranchId: string; toBranchId: string; quantity: number; reason?: string }, additionalHeaders?: Record<string, string>) => 
+    api.post('/api/inventory/transfer', data, additionalHeaders),
+
   // Audit
   getEntityAuditTrail: (entityType: string, entityId: string, additionalHeaders?: Record<string, string>) => 
     api.get(`/api/audit/entity/${entityType}/${entityId}`, additionalHeaders),

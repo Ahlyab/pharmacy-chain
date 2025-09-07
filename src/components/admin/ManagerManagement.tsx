@@ -1,7 +1,16 @@
 import React, { useState, useEffect } from "react";
 import { apiEndpoints } from "../../utils/api";
 import Swal from "sweetalert2";
-import { Plus, Edit, Trash2, Mail, Phone, Building2, Shield, UserCheck } from "lucide-react";
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Mail,
+  Phone,
+  Building2,
+  Shield,
+  UserCheck,
+} from "lucide-react";
 
 interface Manager {
   id: string;
@@ -10,7 +19,7 @@ interface Manager {
   phone: string;
   branch: string; // display name
   status: "Active" | "Inactive";
-  role: "Manager" | "Sale Assistant";
+  role: "Admin" | "Manager" | "Sale Assistant";
 }
 
 const ManagerManagement: React.FC = () => {
@@ -29,7 +38,7 @@ const ManagerManagement: React.FC = () => {
     phone: "",
     branch: "",
     status: "Active" as "Active" | "Inactive",
-    role: "Manager" as "Manager" | "Sale Assistant",
+    role: "Manager" as "Admin" | "Manager" | "Sale Assistant",
   });
   const [managerSearch, setManagerSearch] = useState("");
   const [sortColumn, setSortColumn] = useState<string>("name");
@@ -176,59 +185,64 @@ const ManagerManagement: React.FC = () => {
         console.log("Fetching managers using apiEndpoints");
         const data = await apiEndpoints.getManagers();
         console.log("Raw manager data:", data);
-        
+
         if (!Array.isArray(data)) {
           console.error("Manager data is not an array:", typeof data, data);
           setError("Manager data is not in expected format");
           return;
         }
-        
+
         const mappedManagers = data.map((m: any) => ({
           id: m._id || m.id,
           name: m.name || "Unknown",
           email: m.email || "No email",
           phone: m.phone || "No phone",
-          branch: m.branch?.name || m.branch || "No branch",
+          branch:
+            m.role === "Admin"
+              ? "All Branches"
+              : m.branch?.name || m.branch || "No branch",
           status: m.status || "Active",
           role: m.role || "Manager",
         }));
-        
+
         console.log("Mapped managers:", mappedManagers);
         setManagers(mappedManagers);
         setError(null);
       } catch (err) {
         console.error("Error fetching managers:", err);
-        const errorMessage = err instanceof Error ? err.message : "Failed to fetch managers";
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to fetch managers";
         setError(errorMessage);
       }
     };
-    
+
     const fetchBranches = async () => {
       try {
         console.log("Fetching branches using apiEndpoints");
         const data = await apiEndpoints.getBranches();
         console.log("Raw branch data:", data);
-        
+
         if (!Array.isArray(data)) {
           console.error("Branch data is not an array:", typeof data, data);
           setError("Branch data is not in expected format");
           return;
         }
-        
-        const mappedBranches = data.map((b: any) => ({ 
-          id: b._id || b.id, 
-          name: b.name || "Unknown" 
+
+        const mappedBranches = data.map((b: any) => ({
+          id: b._id || b.id,
+          name: b.name || "Unknown",
         }));
-        
+
         console.log("Mapped branches:", mappedBranches);
         setBranches(mappedBranches);
       } catch (err) {
         console.error("Error fetching branches:", err);
-        const errorMessage = err instanceof Error ? err.message : "Failed to fetch branches";
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to fetch branches";
         setError(errorMessage);
       }
     };
-    
+
     const loadData = async () => {
       setIsLoading(true);
       setError(null);
@@ -238,7 +252,7 @@ const ManagerManagement: React.FC = () => {
         setIsLoading(false);
       }
     };
-    
+
     loadData();
   }, []);
 
@@ -282,13 +296,15 @@ const ManagerManagement: React.FC = () => {
       if (editingManager) {
         // Update existing manager
         const selectedBranch = branches.find((b) => b.id === formData.branch);
-        if (!selectedBranch) throw new Error("Invalid branch selected");
+        if (formData.role !== "Admin" && !selectedBranch) {
+          throw new Error("Invalid branch selected");
+        }
 
         const updatePayload: any = {
           name: formData.name,
           email: formData.email,
           phone: formData.phone,
-          branchId: selectedBranch.id,
+          branchId: formData.role === "Admin" ? undefined : selectedBranch?.id,
           status: formData.status,
           role: formData.role,
         };
@@ -301,9 +317,9 @@ const ManagerManagement: React.FC = () => {
           changes.push(`Email: ${editingManager.email} → ${formData.email}`);
         if (formData.phone !== editingManager.phone)
           changes.push(`Phone: ${editingManager.phone} → ${formData.phone}`);
-        if (selectedBranch.name !== editingManager.branch)
+        if (selectedBranch && selectedBranch.name !== editingManager.branch)
           changes.push(
-            `Branch: ${editingManager.branch} → ${selectedBranch.name}`
+            `Branch: ${editingManager.branch} → ${selectedBranch?.name}`
           );
         if (formData.status !== editingManager.status)
           changes.push(`Status: ${editingManager.status} → ${formData.status}`);
@@ -361,11 +377,14 @@ const ManagerManagement: React.FC = () => {
           }
         }
 
-        const updatedManager = await apiEndpoints.updateManager(editingManager.id, updatePayload);
+        const updatedManager = await apiEndpoints.updateManager(
+          editingManager.id,
+          updatePayload
+        );
         setManagers(
           managers.map((m) =>
             m.id === editingManager.id
-                              ? {
+              ? {
                   id: updatedManager._id,
                   name: updatedManager.name,
                   email: updatedManager.email,
@@ -446,16 +465,18 @@ const ManagerManagement: React.FC = () => {
           });
         }
       } else {
-        // Find selected branch object
+        // Find selected branch object (only required for non-Admin roles)
         const selectedBranch = branches.find((b) => b.id === formData.branch);
-        if (!selectedBranch) throw new Error("Invalid branch selected");
+        if (formData.role !== "Admin" && !selectedBranch) {
+          throw new Error("Invalid branch selected");
+        }
         // Prepare payload: branch name for Manager, branch id for User
         const payload = {
           name: formData.name,
           email: formData.email,
           password: formData.password,
           phone: formData.phone,
-          branchId: selectedBranch.id,
+          branchId: formData.role === "Admin" ? undefined : selectedBranch?.id,
           status: formData.status,
           role: formData.role,
         };
@@ -468,7 +489,10 @@ const ManagerManagement: React.FC = () => {
             name: newManager.name,
             email: newManager.email,
             phone: newManager.phone,
-            branch: newManager.branch?.name || newManager.branch,
+            branch:
+              newManager.role === "Admin"
+                ? "All Branches"
+                : newManager.branch?.name || newManager.branch,
             status: newManager.status,
             role: newManager.role || formData.role,
           },
@@ -579,10 +603,10 @@ const ManagerManagement: React.FC = () => {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       Swal.fire({
-        title: 'Error',
-        text: 'Error adding/updating user: ' + message,
-        icon: 'error',
-        confirmButtonText: 'OK'
+        title: "Error",
+        text: "Error adding/updating user: " + message,
+        icon: "error",
+        confirmButtonText: "OK",
       });
     } finally {
       setIsSubmitting(false);
@@ -597,7 +621,11 @@ const ManagerManagement: React.FC = () => {
       password: "", // Do not prefill password for security
       phone: manager.phone,
       // set branch to the matching branch id so select shows correct option
-      branch: branches.find((b) => b.name === manager.branch)?.id || "",
+      // For Admin users, leave branch empty
+      branch:
+        manager.role === "Admin"
+          ? ""
+          : branches.find((b) => b.name === manager.branch)?.id || "",
       status: manager.status,
       role: manager.role,
     });
@@ -656,12 +684,22 @@ const ManagerManagement: React.FC = () => {
         <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
           <div className="flex">
             <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              <svg
+                className="h-5 w-5 text-red-400"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                  clipRule="evenodd"
+                />
               </svg>
             </div>
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">Error loading data</h3>
+              <h3 className="text-sm font-medium text-red-800">
+                Error loading data
+              </h3>
               <div className="mt-2 text-sm text-red-700">
                 <p>{error}</p>
                 <button
@@ -675,8 +713,6 @@ const ManagerManagement: React.FC = () => {
           </div>
         </div>
       )}
-
-      
 
       {/* Manager Search Filter */}
       {!isLoading && !error && (
@@ -693,162 +729,176 @@ const ManagerManagement: React.FC = () => {
 
           {/* Managers Table */}
           <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th 
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
-                  onClick={() => handleSort("name")}
-                >
-                  User {sortColumn === "name" && (sortDirection === "asc" ? "▲" : "▼")}
-                </th>
-                <th 
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
-                  onClick={() => handleSort("email")}
-                >
-                  Contact {sortColumn === "email" && (sortDirection === "asc" ? "▲" : "▼")}
-                </th>
-                <th 
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
-                  onClick={() => handleSort("branch")}
-                >
-                  Branch {sortColumn === "branch" && (sortDirection === "asc" ? "▲" : "▼")}
-                </th>
-                <th 
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
-                  onClick={() => handleSort("status")}
-                >
-                  Status {sortColumn === "status" && (sortDirection === "asc" ? "▲" : "▼")}
-                </th>
-                <th 
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
-                  onClick={() => handleSort("role")}
-                >
-                  Role {sortColumn === "role" && (sortDirection === "asc" ? "▲" : "▼")}
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {managers
-                .filter((manager) => {
-                  const q = managerSearch.toLowerCase();
-                  return (
-                    manager.name.toLowerCase().includes(q) ||
-                    manager.email.toLowerCase().includes(q) ||
-                    manager.branch.toLowerCase().includes(q) ||
-                    manager.role.toLowerCase().includes(q)
-                  );
-                })
-                .sort((a, b) => {
-                  let valA: any, valB: any;
-                  
-                  switch (sortColumn) {
-                    case "name":
-                      valA = a.name.toLowerCase();
-                      valB = b.name.toLowerCase();
-                      break;
-                    case "email":
-                      valA = a.email.toLowerCase();
-                      valB = b.email.toLowerCase();
-                      break;
-                    case "branch":
-                      valA = a.branch.toLowerCase();
-                      valB = b.branch.toLowerCase();
-                      break;
-                    case "status":
-                      valA = a.status;
-                      valB = b.status;
-                      break;
-                    case "role":
-                      valA = a.role;
-                      valB = b.role;
-                      break;
-                    default:
-                      valA = a.name.toLowerCase();
-                      valB = b.name.toLowerCase();
-                  }
-                  
-                  if (valA < valB) return sortDirection === "asc" ? -1 : 1;
-                  if (valA > valB) return sortDirection === "asc" ? 1 : -1;
-                  return 0;
-                })
-                .map((manager) => (
-                  <tr key={manager.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {manager.name}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 flex items-center">
-                        <Mail className="h-4 w-4 mr-1" />
-                        {manager.email}
-                      </div>
-                      <div className="text-sm text-gray-500 flex items-center">
-                        <Phone className="h-4 w-4 mr-1" />
-                        {manager.phone}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 flex items-center">
-                        <Building2 className="h-4 w-4 mr-1" />
-                        {manager.branch}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          manager.status === "Active"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-red-100 text-red-800"
-                        }`}
-                      >
-                        {manager.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          manager.role === "Manager"
-                            ? "bg-blue-100 text-blue-800"
-                            : "bg-purple-100 text-purple-800"
-                        }`}
-                      >
-                        {manager.role === "Manager" ? (
-                          <Shield className="inline h-3 w-3 mr-1" />
-                        ) : (
-                          <UserCheck className="inline h-3 w-3 mr-1" />
-                        )}
-                        {manager.role}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => handleEdit(manager)}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(manager.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                      onClick={() => handleSort("name")}
+                    >
+                      User{" "}
+                      {sortColumn === "name" &&
+                        (sortDirection === "asc" ? "▲" : "▼")}
+                    </th>
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                      onClick={() => handleSort("email")}
+                    >
+                      Contact{" "}
+                      {sortColumn === "email" &&
+                        (sortDirection === "asc" ? "▲" : "▼")}
+                    </th>
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                      onClick={() => handleSort("branch")}
+                    >
+                      Branch{" "}
+                      {sortColumn === "branch" &&
+                        (sortDirection === "asc" ? "▲" : "▼")}
+                    </th>
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                      onClick={() => handleSort("status")}
+                    >
+                      Status{" "}
+                      {sortColumn === "status" &&
+                        (sortDirection === "asc" ? "▲" : "▼")}
+                    </th>
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                      onClick={() => handleSort("role")}
+                    >
+                      Role{" "}
+                      {sortColumn === "role" &&
+                        (sortDirection === "asc" ? "▲" : "▼")}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
                   </tr>
-                ))}
-            </tbody>
-          </table>
-          
-          {/* No managers message */}
-                        {managers.filter((manager) => {
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {managers
+                    .filter((manager) => {
+                      const q = managerSearch.toLowerCase();
+                      return (
+                        manager.name.toLowerCase().includes(q) ||
+                        manager.email.toLowerCase().includes(q) ||
+                        manager.branch.toLowerCase().includes(q) ||
+                        manager.role.toLowerCase().includes(q)
+                      );
+                    })
+                    .sort((a, b) => {
+                      let valA: any, valB: any;
+
+                      switch (sortColumn) {
+                        case "name":
+                          valA = a.name.toLowerCase();
+                          valB = b.name.toLowerCase();
+                          break;
+                        case "email":
+                          valA = a.email.toLowerCase();
+                          valB = b.email.toLowerCase();
+                          break;
+                        case "branch":
+                          valA = a.branch.toLowerCase();
+                          valB = b.branch.toLowerCase();
+                          break;
+                        case "status":
+                          valA = a.status;
+                          valB = b.status;
+                          break;
+                        case "role":
+                          valA = a.role;
+                          valB = b.role;
+                          break;
+                        default:
+                          valA = a.name.toLowerCase();
+                          valB = b.name.toLowerCase();
+                      }
+
+                      if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+                      if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+                      return 0;
+                    })
+                    .map((manager) => (
+                      <tr key={manager.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">
+                            {manager.name}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900 flex items-center">
+                            <Mail className="h-4 w-4 mr-1" />
+                            {manager.email}
+                          </div>
+                          <div className="text-sm text-gray-500 flex items-center">
+                            <Phone className="h-4 w-4 mr-1" />
+                            {manager.phone}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900 flex items-center">
+                            <Building2 className="h-4 w-4 mr-1" />
+                            {manager.branch}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                            className={`px-2 py-1 text-xs font-medium rounded-full ${
+                              manager.status === "Active"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-red-100 text-red-800"
+                            }`}
+                          >
+                            {manager.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                            className={`px-2 py-1 text-xs font-medium rounded-full ${
+                              manager.role === "Admin"
+                                ? "bg-red-100 text-red-800"
+                                : manager.role === "Manager"
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-purple-100 text-purple-800"
+                            }`}
+                          >
+                            {manager.role === "Admin" ? (
+                              <Shield className="inline h-3 w-3 mr-1" />
+                            ) : manager.role === "Manager" ? (
+                              <Shield className="inline h-3 w-3 mr-1" />
+                            ) : (
+                              <UserCheck className="inline h-3 w-3 mr-1" />
+                            )}
+                            {manager.role}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleEdit(manager)}
+                              className="text-blue-600 hover:text-blue-900"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(manager.id)}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+
+              {/* No managers message */}
+              {managers.filter((manager) => {
                 const q = managerSearch.toLowerCase();
                 return (
                   manager.name.toLowerCase().includes(q) ||
@@ -857,35 +907,63 @@ const ManagerManagement: React.FC = () => {
                   manager.role.toLowerCase().includes(q)
                 );
               }).length === 0 && (
-            <div className="text-center py-8">
-              {managers.length === 0 ? (
-                <div>
-                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-                  </svg>
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">No users found</h3>
-                  <p className="mt-1 text-sm text-gray-500">Get started by creating a new user.</p>
-                </div>
-              ) : (
-                <div>
-                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">No users match your search</h3>
-                  <p className="mt-1 text-sm text-gray-500">Try adjusting your search terms.</p>
+                <div className="text-center py-8">
+                  {managers.length === 0 ? (
+                    <div>
+                      <svg
+                        className="mx-auto h-12 w-12 text-gray-400"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"
+                        />
+                      </svg>
+                      <h3 className="mt-2 text-sm font-medium text-gray-900">
+                        No users found
+                      </h3>
+                      <p className="mt-1 text-sm text-gray-500">
+                        Get started by creating a new user.
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <svg
+                        className="mx-auto h-12 w-12 text-gray-400"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                        />
+                      </svg>
+                      <h3 className="mt-2 text-sm font-medium text-gray-900">
+                        No users match your search
+                      </h3>
+                      <p className="mt-1 text-sm text-gray-500">
+                        Try adjusting your search terms.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
-        </div>
-      </div>
+          </div>
         </>
       )}
 
-             {/* Modal */}
-       {showModal && (
-         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
-           <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+      {/* Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-medium text-gray-900 mb-4">
               {editingManager ? "Edit User" : "Add New User"}
             </h3>
@@ -1018,23 +1096,36 @@ const ManagerManagement: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Branch
+                  Branch{" "}
+                  {formData.role !== "Admin" && (
+                    <span className="text-red-500">*</span>
+                  )}
                 </label>
                 <select
-                  required
+                  required={formData.role !== "Admin"}
                   value={formData.branch}
                   onChange={(e) =>
                     setFormData({ ...formData, branch: e.target.value })
                   }
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={formData.role === "Admin"}
                 >
-                  <option value="">Select Branch</option>
+                  <option value="">
+                    {formData.role === "Admin"
+                      ? "Not applicable for Admin"
+                      : "Select Branch"}
+                  </option>
                   {branches.map((branch) => (
                     <option key={branch.id} value={branch.id}>
                       {branch.name}
                     </option>
                   ))}
                 </select>
+                {formData.role === "Admin" && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Admin users have access to all branches
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1064,20 +1155,28 @@ const ManagerManagement: React.FC = () => {
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      role: e.target.value as "Manager" | "Sale Assistant",
+                      role: e.target.value as
+                        | "Admin"
+                        | "Manager"
+                        | "Sale Assistant",
                     })
                   }
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
+                  <option value="Admin">Admin</option>
                   <option value="Manager">Manager</option>
                   <option value="Sale Assistant">Sale Assistant</option>
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
                   <Shield className="inline h-3 w-3 mr-1" />
+                  Admin: Full system access including user management
+                  <br />
+                  <Shield className="inline h-3 w-3 mr-1" />
                   Manager: Full access to all features
                   <br />
                   <UserCheck className="inline h-3 w-3 mr-1" />
-                  Sale Assistant: Access to all features except inventory management
+                  Sale Assistant: Access to all features except inventory
+                  management
                 </p>
               </div>
               <div className="flex space-x-3 pt-4">
@@ -1107,5 +1206,4 @@ const ManagerManagement: React.FC = () => {
     </div>
   );
 };
-
 export default ManagerManagement;

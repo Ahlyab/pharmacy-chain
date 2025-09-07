@@ -22,8 +22,21 @@ import {
   updateManager,
   deleteManager,
 } from "../controllers/branchController.js";
-import { logSupplierAction, logFailedAction, logUserAction, logTransactionAction, logInventoryAction, logBulkOperation } from "../utils/auditLogger.js";
-import { authenticate, authorize, authorizeBranch } from "../middleware/auth.js";
+import {
+  logSupplierAction,
+  logFailedAction,
+  logUserAction,
+  logTransactionAction,
+  logInventoryAction,
+  logBulkOperation,
+  logCustomAction,
+} from "../utils/auditLogger.js";
+import {
+  authenticate,
+  authorize,
+  authorizeBranch,
+} from "../middleware/auth.js";
+import Branch from "../models/Branch.js";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -32,21 +45,24 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024, // 10MB limit
   },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
-        file.mimetype === 'application/vnd.ms-excel' ||
-        file.originalname.endsWith('.xlsx') || 
-        file.originalname.endsWith('.xls')) {
+    if (
+      file.mimetype ===
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+      file.mimetype === "application/vnd.ms-excel" ||
+      file.originalname.endsWith(".xlsx") ||
+      file.originalname.endsWith(".xls")
+    ) {
       cb(null, true);
     } else {
-      cb(new Error('Only Excel files are allowed'));
+      cb(new Error("Only Excel files are allowed"));
     }
-  }
+  },
 });
 // Branch Routes (Admin only)
-router.post("/branch", authenticate, authorize('Admin'), createBranch);
+router.post("/branch", authenticate, authorize("Admin"), createBranch);
 router.get("/branch", authenticate, getBranches);
-router.patch("/branch/:id", authenticate, authorize('Admin'), updateBranch);
-router.delete("/branch/:id", authenticate, authorize('Admin'), deleteBranch);
+router.patch("/branch/:id", authenticate, authorize("Admin"), updateBranch);
+router.delete("/branch/:id", authenticate, authorize("Admin"), deleteBranch);
 // Supplier Routes
 router.post("/supplier", authenticate, async (req, res) => {
   try {
@@ -65,7 +81,7 @@ router.post("/supplier", authenticate, async (req, res) => {
         email: supplier.email,
         address: supplier.address,
         gst: supplier.gst,
-        status: supplier.status
+        status: supplier.status,
       }
     );
 
@@ -104,9 +120,12 @@ router.patch("/supplier/:id", authenticate, async (req, res) => {
   try {
     // Get the current supplier for audit logging
     const currentSupplier = await Supplier.findById(req.params.id);
-    if (!currentSupplier) return res.status(404).json({ error: "Supplier not found" });
+    if (!currentSupplier)
+      return res.status(404).json({ error: "Supplier not found" });
 
-    const supplier = await Supplier.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const supplier = await Supplier.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+    });
 
     // Log the action
     await logSupplierAction(
@@ -129,7 +148,7 @@ router.patch("/supplier/:id", authenticate, async (req, res) => {
         newGst: supplier.gst,
         previousStatus: currentSupplier.status,
         newStatus: supplier.status,
-        changes: Object.keys(req.body)
+        changes: Object.keys(req.body),
       }
     );
 
@@ -175,7 +194,7 @@ router.delete("/supplier/:id", authenticate, async (req, res) => {
         email: supplier.email,
         address: supplier.address,
         gst: supplier.gst,
-        status: supplier.status
+        status: supplier.status,
       }
     );
 
@@ -208,23 +227,23 @@ router.post("/supplier/:id/delivery", authenticate, async (req, res) => {
     if (!date || !deliveryTime || !products || !quantity) {
       return res.status(400).json({ error: "Missing required fields" });
     }
-    
+
     const supplier = await Supplier.findById(req.params.id);
     if (!supplier) {
       return res.status(404).json({ error: "Supplier not found" });
     }
-    
+
     const newDelivery = {
       date,
       deliveryTime,
       products,
       quantity,
-      notes: notes || ""
+      notes: notes || "",
     };
-    
+
     supplier.deliveries.push(newDelivery);
     await supplier.save();
-    
+
     res.status(201).json(newDelivery);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -237,55 +256,72 @@ router.get("/supplier/:id/deliveries", authenticate, async (req, res) => {
     if (!supplier) {
       return res.status(404).json({ error: "Supplier not found" });
     }
-    
+
     res.status(200).json(supplier.deliveries || []);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-router.patch("/supplier/:id/delivery/:deliveryId", authenticate, async (req, res) => {
-  try {
-    const supplier = await Supplier.findById(req.params.id);
-    if (!supplier) {
-      return res.status(404).json({ error: "Supplier not found" });
-    }
-    
-    const delivery = supplier.deliveries.id(req.params.deliveryId);
-    if (!delivery) {
-      return res.status(404).json({ error: "Delivery not found" });
-    }
-    
-    Object.assign(delivery, req.body);
-    await supplier.save();
-    
-    res.status(200).json(delivery);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
+router.patch(
+  "/supplier/:id/delivery/:deliveryId",
+  authenticate,
+  async (req, res) => {
+    try {
+      const supplier = await Supplier.findById(req.params.id);
+      if (!supplier) {
+        return res.status(404).json({ error: "Supplier not found" });
+      }
 
-router.delete("/supplier/:id/delivery/:deliveryId", authenticate, async (req, res) => {
-  try {
-    const supplier = await Supplier.findById(req.params.id);
-    if (!supplier) {
-      return res.status(404).json({ error: "Supplier not found" });
+      const delivery = supplier.deliveries.id(req.params.deliveryId);
+      if (!delivery) {
+        return res.status(404).json({ error: "Delivery not found" });
+      }
+
+      Object.assign(delivery, req.body);
+      await supplier.save();
+
+      res.status(200).json(delivery);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
     }
-    
-    supplier.deliveries.pull(req.params.deliveryId);
-    await supplier.save();
-    
-    res.status(200).json({ message: "Delivery deleted" });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
   }
-});
+);
+
+router.delete(
+  "/supplier/:id/delivery/:deliveryId",
+  authenticate,
+  async (req, res) => {
+    try {
+      const supplier = await Supplier.findById(req.params.id);
+      if (!supplier) {
+        return res.status(404).json({ error: "Supplier not found" });
+      }
+
+      supplier.deliveries.pull(req.params.deliveryId);
+      await supplier.save();
+
+      res.status(200).json({ message: "Delivery deleted" });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+);
 // Manager Routes (Admin only)
-router.post("/manager", authenticate, authorize('Admin'), async (req, res) => {
+router.post("/manager", authenticate, authorize("Admin"), async (req, res) => {
   try {
     const { name, email, phone, branchId, status, password, role } = req.body;
-    if (!name || !email || !phone || !branchId || !password) {
+    if (!name || !email || !phone || !password) {
       return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // For Admin role, branchId is optional. For other roles, branchId is required.
+    if (role !== "Admin" && !branchId) {
+      return res
+        .status(400)
+        .json({
+          error: "Branch is required for Manager and Sale Assistant roles",
+        });
     }
     // Check if manager already exists
     const existingManager = await Manager.findOne({ email });
@@ -306,42 +342,36 @@ router.post("/manager", authenticate, authorize('Admin'), async (req, res) => {
       name,
       email,
       phone,
-      branch: branchId,
+      branch: branchId, // Will be undefined for Admin role, which is fine
       status,
       role: role || "Manager", // Use the role from request or default to "Manager"
     });
     await manager.save();
     // Create user document for login (branchId is id)
-    const user = new User({ name, email, password, role: role || "Manager", branchId });
+    const user = new User({
+      name,
+      email,
+      password,
+      role: role || "Manager",
+      branchId, // Will be undefined for Admin role, which is fine
+    });
     await user.save();
 
     // Log the manager creation
-    await logUserAction(
-      req,
-      "USER_CREATED",
-      manager._id,
-      manager.name,
-      {
-        email: manager.email,
-        phone: manager.phone,
-        branchId: manager.branch,
-        role: manager.role,
-        status: manager.status
-      }
-    );
+    await logUserAction(req, "USER_CREATED", manager._id, manager.name, {
+      email: manager.email,
+      phone: manager.phone,
+      branchId: manager.branch,
+      role: manager.role,
+      status: manager.status,
+    });
 
     // Log the user creation
-    await logUserAction(
-      req,
-      "USER_CREATED",
-      user._id,
-      user.name,
-      {
-        email: user.email,
-        role: user.role,
-        branchId: user.branchId
-      }
-    );
+    await logUserAction(req, "USER_CREATED", user._id, user.name, {
+      email: user.email,
+      role: user.role,
+      branchId: user.branchId,
+    });
 
     // Return manager info (populate branch name for convenience)
     const populated = await Manager.findById(manager._id).populate(
@@ -379,8 +409,8 @@ router.get("/manager", authenticate, async (req, res) => {
   }
 });
 
-router.patch("/manager/:id", authenticate, authorize('Admin'), updateManager);
-router.delete("/manager/:id", authenticate, authorize('Admin'), deleteManager);
+router.patch("/manager/:id", authenticate, authorize("Admin"), updateManager);
+router.delete("/manager/:id", authenticate, authorize("Admin"), deleteManager);
 
 // Health check endpoint
 router.get("/health", async (req, res) => {
@@ -455,7 +485,7 @@ router.post("/login", async (req, res) => {
 
       return res.status(401).json({ error: "Invalid email or password" });
     }
-    
+
     const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, {
       expiresIn: "1h",
     });
@@ -550,7 +580,7 @@ router.post("/billing", authenticate, async (req, res) => {
         totalAmount: billing.totalAmount,
         customerName: billing.customerName,
         itemsCount: billing.items?.length || 0,
-        branchId: billing.branchId
+        branchId: billing.branchId,
       }
     );
 
@@ -615,7 +645,7 @@ router.post("/inventory", authenticate, async (req, res) => {
     // Convert types
     const inventoryData = {
       name: req.body.name,
-      category: req.body.category || '', // Make category optional
+      category: req.body.category || "", // Make category optional
       stock: Number(req.body.stock),
       minStock: Number(req.body.minStock),
       price: Number(req.body.price),
@@ -626,14 +656,15 @@ router.post("/inventory", authenticate, async (req, res) => {
         ? new mongoose.Types.ObjectId(req.body.branchId)
         : undefined,
       // Include all new fields
-      store: req.body.store || '',
-      manufacturer: req.body.manufacturer || '',
-      composition: req.body.composition || '',
-      series: req.body.series || '',
+      store: req.body.store || "",
+      manufacturer: req.body.manufacturer || "",
+      composition: req.body.composition || "",
+      series: req.body.series || "",
       reservedQuantity: Number(req.body.reservedQuantity) || 0,
       purchasePriceExclVAT: Number(req.body.purchasePriceExclVAT) || 0,
       vat: Number(req.body.vat) || 0,
-      retailPriceVATIncluded: Number(req.body.retailPriceVATIncluded) || Number(req.body.price) || 0,
+      retailPriceVATIncluded:
+        Number(req.body.retailPriceVATIncluded) || Number(req.body.price) || 0,
     };
 
     // Validate numbers
@@ -654,7 +685,7 @@ router.post("/inventory", authenticate, async (req, res) => {
     console.log("POST /inventory body:", inventoryData);
     const inventory = new Inventory(inventoryData);
     await inventory.save();
-    
+
     // Log the action
     await logInventoryAction(
       req,
@@ -672,19 +703,19 @@ router.post("/inventory", authenticate, async (req, res) => {
         store: inventory.store,
         manufacturer: inventory.manufacturer,
         composition: inventory.composition,
-        series: inventory.series
+        series: inventory.series,
       }
     );
-    
+
     // Populate supplier information before sending response
     const populatedInventory = await Inventory.findById(inventory._id)
       .populate("supplierId", "name company contact email address gst status")
       .populate("branchId", "name");
-      
+
     res.status(201).json(populatedInventory);
   } catch (error) {
     console.error("Error in POST /inventory:", error);
-    
+
     // Log failed action
     try {
       await logFailedAction(
@@ -711,13 +742,13 @@ router.patch("/inventory/:id", authenticate, async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = { ...req.body };
-    
+
     // Get the current inventory item for audit logging
     const currentInventory = await Inventory.findById(id);
     if (!currentInventory) {
       return res.status(404).json({ error: "Inventory item not found" });
     }
-    
+
     if (updateData.expiryDate) {
       updateData.expiryDate = new Date(updateData.expiryDate);
     }
@@ -725,13 +756,15 @@ router.patch("/inventory/:id", authenticate, async (req, res) => {
       updateData.branchId = new mongoose.Types.ObjectId(updateData.branchId);
     }
     if (updateData.supplierId) {
-      updateData.supplierId = new mongoose.Types.ObjectId(updateData.supplierId);
+      updateData.supplierId = new mongoose.Types.ObjectId(
+        updateData.supplierId
+      );
     }
-    
+
     const updated = await Inventory.findByIdAndUpdate(id, updateData, {
       new: true,
     });
-    
+
     // Log the action with detailed change information
     await logInventoryAction(
       req,
@@ -748,15 +781,15 @@ router.patch("/inventory/:id", authenticate, async (req, res) => {
         newExpiry: updated.expiryDate,
         previousMinStock: currentInventory.minStock,
         newMinStock: updated.minStock,
-        changes: Object.keys(updateData)
+        changes: Object.keys(updateData),
       }
     );
-    
+
     // Populate supplier information before sending response
     const populatedInventory = await Inventory.findById(id)
       .populate("supplierId", "name company contact email address gst status")
       .populate("branchId", "name");
-      
+
     res.status(200).json(populatedInventory);
   } catch (error) {
     // Log failed action
@@ -783,15 +816,15 @@ router.patch("/inventory/:id", authenticate, async (req, res) => {
 router.delete("/inventory/:id", authenticate, async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Get the inventory item before deletion for audit logging
     const inventoryToDelete = await Inventory.findById(id);
     if (!inventoryToDelete) {
       return res.status(404).json({ error: "Inventory item not found" });
     }
-    
+
     await Inventory.findByIdAndDelete(id);
-    
+
     // Log the action
     await logInventoryAction(
       req,
@@ -804,10 +837,10 @@ router.delete("/inventory/:id", authenticate, async (req, res) => {
         price: inventoryToDelete.price,
         supplier: inventoryToDelete.supplier,
         expiryDate: inventoryToDelete.expiryDate,
-        branchId: inventoryToDelete.branchId
+        branchId: inventoryToDelete.branchId,
       }
     );
-    
+
     res.status(200).json({ message: "Inventory item deleted successfully" });
   } catch (error) {
     // Log failed action
@@ -849,6 +882,208 @@ router.get("/inventory", authenticate, async (req, res) => {
   }
 });
 
+// Get all inventory across branches for warehouse management
+router.get("/inventory/all-branches", authenticate, async (req, res) => {
+  try {
+    const { search, category, status, branchId } = req.query;
+    let matchStage = {};
+
+    // Apply filters
+    if (branchId && branchId !== "all") {
+      matchStage.branchId = new mongoose.Types.ObjectId(branchId);
+    }
+
+    if (category && category !== "all") {
+      matchStage.category = { $regex: category, $options: "i" };
+    }
+
+    if (search) {
+      matchStage.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { category: { $regex: search, $options: "i" } },
+        { supplier: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    // Add status filtering
+    if (status && status !== "all") {
+      if (status === "low_stock") {
+        matchStage.$expr = { $lte: ["$stock", "$minStock"] };
+      } else if (status === "out_of_stock") {
+        matchStage.stock = { $lte: 0 };
+      } else if (status === "in_stock") {
+        matchStage.$expr = { $gt: ["$stock", "$minStock"] };
+      }
+    }
+
+    const inventories = await Inventory.find(matchStage)
+      .populate("branchId", "name")
+      .populate("supplierId", "name company contact email address gst status")
+      .sort({ name: 1, "branchId.name": 1 });
+
+    // Add status field to each inventory item
+    const inventoriesWithStatus = inventories.map((item) => {
+      let status = "in_stock";
+      if (item.stock <= 0) {
+        status = "out_of_stock";
+      } else if (item.stock <= item.minStock) {
+        status = "low_stock";
+      }
+
+      return {
+        ...item.toObject(),
+        status,
+        branchName: item.branchId?.name || "Unknown Branch",
+        supplierName:
+          item.supplierId?.name || item.supplier || "Unknown Supplier",
+      };
+    });
+
+    res.status(200).json(inventoriesWithStatus);
+  } catch (error) {
+    console.error("Error getting all inventory across branches:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Transfer inventory between branches
+router.post("/inventory/transfer", authenticate, async (req, res) => {
+  try {
+    const { inventoryId, fromBranchId, toBranchId, quantity, reason } =
+      req.body;
+
+    // Validate input
+    if (
+      !inventoryId ||
+      !fromBranchId ||
+      !toBranchId ||
+      !quantity ||
+      quantity <= 0
+    ) {
+      return res.status(400).json({ error: "Invalid transfer data" });
+    }
+
+    // Validate IDs
+    if (
+      !mongoose.Types.ObjectId.isValid(inventoryId) ||
+      !mongoose.Types.ObjectId.isValid(fromBranchId) ||
+      !mongoose.Types.ObjectId.isValid(toBranchId)
+    ) {
+      return res.status(400).json({ error: "Invalid ID format" });
+    }
+
+    // Check if source inventory exists and has sufficient quantity
+    const sourceInventory = await Inventory.findById(inventoryId)
+      .populate("branchId", "name")
+      .populate("supplierId", "name");
+
+    if (!sourceInventory) {
+      return res.status(404).json({ error: "Source inventory not found" });
+    }
+
+    if (sourceInventory.branchId._id.toString() !== fromBranchId) {
+      return res
+        .status(400)
+        .json({ error: "Inventory does not belong to source branch" });
+    }
+
+    if (sourceInventory.stock < quantity) {
+      return res.status(400).json({ error: "Insufficient stock for transfer" });
+    }
+
+    // Check if destination branch exists
+    const destinationBranch = await Branch.findById(toBranchId);
+    if (!destinationBranch) {
+      return res.status(404).json({ error: "Destination branch not found" });
+    }
+
+    // Check if product already exists in destination branch
+    let destinationInventory = await Inventory.findOne({
+      name: sourceInventory.name,
+      branchId: toBranchId,
+      supplierId: sourceInventory.supplierId,
+    });
+
+    if (destinationInventory) {
+      // Update existing inventory
+      const previousStock = destinationInventory.stock;
+      destinationInventory.stock += quantity;
+      await destinationInventory.save();
+    } else {
+      // Create new inventory item for destination branch
+      destinationInventory = new Inventory({
+        name: sourceInventory.name,
+        category: sourceInventory.category,
+        stock: quantity,
+        minStock: sourceInventory.minStock,
+        price: sourceInventory.price,
+        supplier: sourceInventory.supplier,
+        supplierId: sourceInventory.supplierId,
+        expiryDate: sourceInventory.expiryDate,
+        branchId: toBranchId,
+        // Copy additional fields
+        store: sourceInventory.store,
+        manufacturer: sourceInventory.manufacturer,
+        composition: sourceInventory.composition,
+        series: sourceInventory.series,
+        reservedQuantity: sourceInventory.reservedQuantity,
+        purchasePriceExclVAT: sourceInventory.purchasePriceExclVAT,
+        vat: sourceInventory.vat,
+        retailPriceVATIncluded: sourceInventory.retailPriceVATIncluded,
+      });
+      await destinationInventory.save();
+    }
+
+    // Reduce source inventory
+    const previousSourceStock = sourceInventory.stock;
+    sourceInventory.stock -= quantity;
+    await sourceInventory.save();
+
+    // Log the transfer action
+    await logCustomAction(
+      req,
+      "INVENTORY_TRANSFER",
+      "Inventory",
+      inventoryId,
+      `Transfer ${quantity} ${sourceInventory.name} from ${sourceInventory.branchId.name} to ${destinationBranch.name}`,
+      `Transferred ${quantity} units of ${sourceInventory.name} from ${
+        sourceInventory.branchId.name
+      } to ${destinationBranch.name}. Reason: ${
+        reason || "No reason provided"
+      }`,
+      {
+        inventoryId: inventoryId,
+        fromBranchId: fromBranchId,
+        toBranchId: toBranchId,
+        quantity: quantity,
+        reason: reason,
+        productName: sourceInventory.name,
+        fromBranchName: sourceInventory.branchId.name,
+        toBranchName: destinationBranch.name,
+        previousSourceStock: previousSourceStock,
+        newSourceStock: sourceInventory.stock,
+        destinationStock: destinationInventory.stock,
+      }
+    );
+
+    res.status(200).json({
+      message: "Inventory transferred successfully",
+      transfer: {
+        inventoryId: inventoryId,
+        fromBranch: sourceInventory.branchId.name,
+        toBranch: destinationBranch.name,
+        quantity: quantity,
+        reason: reason,
+        remainingSourceStock: sourceInventory.stock,
+        destinationStock: destinationInventory.stock,
+      },
+    });
+  } catch (error) {
+    console.error("Error transferring inventory between branches:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Import inventory from Excel
 router.post("/inventory/import", authenticate, async (req, res) => {
   try {
@@ -881,367 +1116,496 @@ router.post("/inventory/import", authenticate, async (req, res) => {
       sku: product.sku || product.SKU,
     }));
 
-    console.log(`Importing ${inventoryData.length} products for branch: ${branchId}`);
-    
+    console.log(
+      `Importing ${inventoryData.length} products for branch: ${branchId}`
+    );
+
     const result = await Inventory.insertMany(inventoryData);
-    
-    console.log(`Successfully imported ${result.length} products for branch: ${branchId}`);
-    
+
+    console.log(
+      `Successfully imported ${result.length} products for branch: ${branchId}`
+    );
+
     res.status(201).json({
       message: `Imported ${result.length} products to branch`,
       products: result,
-      branchId: branchId
+      branchId: branchId,
     });
   } catch (error) {
     console.error("Error in inventory import:", error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: error.message,
-      details: "Failed to import products to database"
+      details: "Failed to import products to database",
     });
   }
 });
 
 // Excel File Upload and Import Endpoint
-router.post("/inventory/import-excel", authenticate, upload.single('file'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: "No file uploaded" });
-    }
+router.post(
+  "/inventory/import-excel",
+  authenticate,
+  upload.single("file"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
 
-    const { branchId } = req.body;
-    if (!branchId) {
-      return res.status(400).json({ error: "Branch ID is required" });
-    }
+      const { branchId } = req.body;
+      if (!branchId) {
+        return res.status(400).json({ error: "Branch ID is required" });
+      }
 
-    // Process the Excel file
-    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-    const rawData = XLSX.utils.sheet_to_json(worksheet);
+      // Process the Excel file
+      const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const rawData = XLSX.utils.sheet_to_json(worksheet);
 
-    if (rawData.length === 0) {
-      return res.status(400).json({ error: "Excel file is empty or has no data" });
-    }
+      if (rawData.length === 0) {
+        return res
+          .status(400)
+          .json({ error: "Excel file is empty or has no data" });
+      }
 
-    // Check if required columns exist
-    const firstRow = rawData[0];
-    const hasRequiredColumns = firstRow && (
-      (firstRow.SKU || firstRow.sku || firstRow.Sku) &&
-      (firstRow.Quantity || firstRow.quantity || firstRow.QUANTITY) &&
-      (firstRow['Retail price VAT included'] || firstRow['retail price VAT included'] || firstRow.retail_price_VAT_included)
-    );
+      // Check if required columns exist
+      const firstRow = rawData[0];
+      const hasRequiredColumns =
+        firstRow &&
+        (firstRow.SKU || firstRow.sku || firstRow.Sku) &&
+        (firstRow.Quantity || firstRow.quantity || firstRow.QUANTITY) &&
+        (firstRow["Retail price VAT included"] ||
+          firstRow["retail price VAT included"] ||
+          firstRow.retail_price_VAT_included);
 
-    if (!hasRequiredColumns) {
-      return res.status(400).json({ 
-        error: "Excel file must contain columns: SKU, Quantity, and Retail price VAT included (case insensitive)" 
-      });
-    }
+      if (!hasRequiredColumns) {
+        return res.status(400).json({
+          error:
+            "Excel file must contain columns: SKU, Quantity, and Retail price VAT included (case insensitive)",
+        });
+      }
 
-    // Helper function to check if a column is an ID/UUID column
-    const isIdColumn = (columnName) => {
-      if (!columnName) return false;
-      const lowerCol = columnName.toLowerCase();
-      return lowerCol.includes('id') || 
-             lowerCol.includes('uuid') || 
-             lowerCol.endsWith('_id') || 
-             lowerCol === 'id' ||
-             lowerCol === 'uuid';
-    };
+      // Helper function to check if a column is an ID/UUID column
+      const isIdColumn = (columnName) => {
+        if (!columnName) return false;
+        const lowerCol = columnName.toLowerCase();
+        return (
+          lowerCol.includes("id") ||
+          lowerCol.includes("uuid") ||
+          lowerCol.endsWith("_id") ||
+          lowerCol === "id" ||
+          lowerCol === "uuid"
+        );
+      };
 
-    // Helper function to get the human-readable name column
-    const getReadableColumn = (row, baseName) => {
-      // Priority order: name column first, then base column
-      const nameColumn = row[`${baseName}_name`] || row[`${baseName} name`] || row[`${baseName}Name`];
-      const baseColumn = row[baseName] || row[baseName.charAt(0).toUpperCase() + baseName.slice(1)];
-      
-      return nameColumn || baseColumn || '';
-    };
+      // Helper function to get the human-readable name column
+      const getReadableColumn = (row, baseName) => {
+        // Priority order: name column first, then base column
+        const nameColumn =
+          row[`${baseName}_name`] ||
+          row[`${baseName} name`] ||
+          row[`${baseName}Name`];
+        const baseColumn =
+          row[baseName] ||
+          row[baseName.charAt(0).toUpperCase() + baseName.slice(1)];
 
-    console.log(rawData);
+        return nameColumn || baseColumn || "";
+      };
 
-    // Process the data - Skip ID columns, keep only human-readable names
-    const jsonData = rawData
-      .map((row) => {
-        // Map only human-readable columns from Excel to our data structure
-        const processedRow = {
-          // Core required fields - Updated mapping based on user requirements
-          //sku has two column choose second on
-          name: row.SKU_1 || row.sku_1 || row.Sku_1 || row.SKU || row.sku || row.Sku || '', // SKU is the product name sku has two column choose second one
-          category: '',
-          stock: parseInt(row.Quantity || row.quantity || row.QUANTITY || '0') || 0,
-          minStock: parseInt(row['Reserved quantity'] || row['reserved quantity'] || row.reserved_quantity || '0') || 0,
-          price: parseFloat(row['Retail price VAT included'] || row['retail price VAT included'] || row.retail_price_VAT_included || '0') || 0,
-          supplier: row['Supplier name'] || row['supplier name'] || row.supplier_name || '', // Use supplier_name for supplier
-          expiryDate: row['Expiration date'] || row['expiration date'] || row.expiration_date || row.Expiry || row.expiry || '',
-          
-          // Human-readable fields only (skip ID columns)
-          supplierCompany: row['supplier_entity_name'] || '',
-          store: row.Store_1 || row.store_1 || row.STORE_1 || row.Store || row.store || row.STORE || '',
-          manufacturer: row['Manufacturer name'] || row['manufacturer name'] || row.manufacturer_name || row.Manufacturer || row.manufacturer || '',
-          composition: row.composition_name || row['Composition name'] || row['composition name'] || row.composition_name || row.COMPOSITION_NAME || row.Composition || row.composition || row.COMPOSITION || '',
-          series: row.Series || row.series || row.SERIES || '',
-          reservedQuantity: parseInt(row['Reserved quantity'] || row['reserved quantity'] || row.reserved_quantity || '0') || 0,
-          purchasePriceExclVAT: parseFloat(row['Purchase price VAT excluded'] || row['purchase price VAT excluded'] || row.purchase_price_VAT_excluded || '0') || 0,
-          vat: parseFloat(row.VAT || row.vat || row.Vat || '0') || 0,
-          retailPriceVATIncluded: parseFloat(row['Retail price VAT included'] || row['retail price VAT included'] || row.retail_price_VAT_included || '0') || 0,
-          divider: row.Divider || row.divider || row.DIVIDER || '',
-          dividerCustom: row['divider_custom'] || row['Divider custom'] || row['divider custom'] || '',
-        };
-        
-        // Process date fields
-        if (processedRow.expiryDate) {
-          const d = new Date(processedRow.expiryDate);
-          if (!isNaN(d.getTime())) {
-            processedRow.expiryDate = d.toISOString().slice(0, 10);
+      console.log(rawData);
+
+      // Process the data - Skip ID columns, keep only human-readable names
+      const jsonData = rawData
+        .map((row) => {
+          // Map only human-readable columns from Excel to our data structure
+          const processedRow = {
+            // Core required fields - Updated mapping based on user requirements
+            //sku has two column choose second on
+            name:
+              row.SKU_1 ||
+              row.sku_1 ||
+              row.Sku_1 ||
+              row.SKU ||
+              row.sku ||
+              row.Sku ||
+              "", // SKU is the product name sku has two column choose second one
+            category: "",
+            stock:
+              parseInt(row.Quantity || row.quantity || row.QUANTITY || "0") ||
+              0,
+            minStock:
+              parseInt(
+                row["Reserved quantity"] ||
+                  row["reserved quantity"] ||
+                  row.reserved_quantity ||
+                  "0"
+              ) || 0,
+            price:
+              parseFloat(
+                row["Retail price VAT included"] ||
+                  row["retail price VAT included"] ||
+                  row.retail_price_VAT_included ||
+                  "0"
+              ) || 0,
+            supplier:
+              row["Supplier name"] ||
+              row["supplier name"] ||
+              row.supplier_name ||
+              "", // Use supplier_name for supplier
+            expiryDate:
+              row["Expiration date"] ||
+              row["expiration date"] ||
+              row.expiration_date ||
+              row.Expiry ||
+              row.expiry ||
+              "",
+
+            // Human-readable fields only (skip ID columns)
+            supplierCompany: row["supplier_entity_name"] || "",
+            store:
+              row.Store_1 ||
+              row.store_1 ||
+              row.STORE_1 ||
+              row.Store ||
+              row.store ||
+              row.STORE ||
+              "",
+            manufacturer:
+              row["Manufacturer name"] ||
+              row["manufacturer name"] ||
+              row.manufacturer_name ||
+              row.Manufacturer ||
+              row.manufacturer ||
+              "",
+            composition:
+              row.composition_name ||
+              row["Composition name"] ||
+              row["composition name"] ||
+              row.composition_name ||
+              row.COMPOSITION_NAME ||
+              row.Composition ||
+              row.composition ||
+              row.COMPOSITION ||
+              "",
+            series: row.Series || row.series || row.SERIES || "",
+            reservedQuantity:
+              parseInt(
+                row["Reserved quantity"] ||
+                  row["reserved quantity"] ||
+                  row.reserved_quantity ||
+                  "0"
+              ) || 0,
+            purchasePriceExclVAT:
+              parseFloat(
+                row["Purchase price VAT excluded"] ||
+                  row["purchase price VAT excluded"] ||
+                  row.purchase_price_VAT_excluded ||
+                  "0"
+              ) || 0,
+            vat: parseFloat(row.VAT || row.vat || row.Vat || "0") || 0,
+            retailPriceVATIncluded:
+              parseFloat(
+                row["Retail price VAT included"] ||
+                  row["retail price VAT included"] ||
+                  row.retail_price_VAT_included ||
+                  "0"
+              ) || 0,
+            divider: row.Divider || row.divider || row.DIVIDER || "",
+            dividerCustom:
+              row["divider_custom"] ||
+              row["Divider custom"] ||
+              row["divider custom"] ||
+              "",
+          };
+
+          // Process date fields
+          if (processedRow.expiryDate) {
+            const d = new Date(processedRow.expiryDate);
+            if (!isNaN(d.getTime())) {
+              processedRow.expiryDate = d.toISOString().slice(0, 10);
+            } else {
+              // If date parsing fails, set to a default future date
+              const futureDate = new Date();
+              futureDate.setFullYear(futureDate.getFullYear() + 1);
+              processedRow.expiryDate = futureDate.toISOString().slice(0, 10);
+            }
           } else {
-            // If date parsing fails, set to a default future date
+            // Set default expiry date to 1 year from now
             const futureDate = new Date();
             futureDate.setFullYear(futureDate.getFullYear() + 1);
             processedRow.expiryDate = futureDate.toISOString().slice(0, 10);
           }
-        } else {
-          // Set default expiry date to 1 year from now
-          const futureDate = new Date();
-          futureDate.setFullYear(futureDate.getFullYear() + 1);
-          processedRow.expiryDate = futureDate.toISOString().slice(0, 10);
-        }
-        
-        return processedRow;
-      })
-      .filter((row) => {
-        // Filter out rows with missing essential data
-        return row.name && row.name.trim() !== '' && 
-               row.stock >= 0 && row.retailPriceVATIncluded > 0;
-      });
 
-    if (jsonData.length === 0) {
-      return res.status(400).json({ error: "No valid products found in the Excel file" });
-    }
-
-    // Get unique suppliers from imported data (using human-readable names)
-    const supplierMap = new Map();
-    for (const product of jsonData) {
-      if (product.supplier && product.supplier.trim() !== '') {
-        const supplierName = product.supplier.trim();
-        if (!supplierMap.has(supplierName)) {
-          // Find the corresponding supplier entity from the original data
-          const originalRow = rawData.find(row => 
-            (row['Supplier name'] || row['supplier name'] || row.supplier_name || '') === supplierName
+          return processedRow;
+        })
+        .filter((row) => {
+          // Filter out rows with missing essential data
+          return (
+            row.name &&
+            row.name.trim() !== "" &&
+            row.stock >= 0 &&
+            row.retailPriceVATIncluded > 0
           );
-          
-          supplierMap.set(supplierName, {
-            name: supplierName,
-            contact: 'Imported from Excel',
-            address: 'Address to be updated',
-            email: '',
-            company: product.supplierCompany || originalRow?.['Supplier entity'] || originalRow?.['supplier entity'] || originalRow?.supplier_entity || '',
-            gst: '',
-            notes: '',
-            productsSupplied: [],
-            status: 'Active'
-          });
+        });
+
+      if (jsonData.length === 0) {
+        return res
+          .status(400)
+          .json({ error: "No valid products found in the Excel file" });
+      }
+
+      // Get unique suppliers from imported data (using human-readable names)
+      const supplierMap = new Map();
+      for (const product of jsonData) {
+        if (product.supplier && product.supplier.trim() !== "") {
+          const supplierName = product.supplier.trim();
+          if (!supplierMap.has(supplierName)) {
+            // Find the corresponding supplier entity from the original data
+            const originalRow = rawData.find(
+              (row) =>
+                (row["Supplier name"] ||
+                  row["supplier name"] ||
+                  row.supplier_name ||
+                  "") === supplierName
+            );
+
+            supplierMap.set(supplierName, {
+              name: supplierName,
+              contact: "Imported from Excel",
+              address: "Address to be updated",
+              email: "",
+              company:
+                product.supplierCompany ||
+                originalRow?.["Supplier entity"] ||
+                originalRow?.["supplier entity"] ||
+                originalRow?.supplier_entity ||
+                "",
+              gst: "",
+              notes: "",
+              productsSupplied: [],
+              status: "Active",
+            });
+          }
         }
       }
-    }
 
-    // Create new suppliers if needed and get their IDs
-    const suppliersToCreate = [];
-    const supplierIdMap = new Map(); // Map supplier name to MongoDB ID
-    
-    for (const [supplierName, supplierDetails] of supplierMap) {
-      const existingSupplier = await Supplier.findOne({ 
-        name: { $regex: new RegExp(`^${supplierName}$`, 'i') } 
+      // Create new suppliers if needed and get their IDs
+      const suppliersToCreate = [];
+      const supplierIdMap = new Map(); // Map supplier name to MongoDB ID
+
+      for (const [supplierName, supplierDetails] of supplierMap) {
+        const existingSupplier = await Supplier.findOne({
+          name: { $regex: new RegExp(`^${supplierName}$`, "i") },
+        });
+
+        if (existingSupplier) {
+          // Supplier exists, use its ID
+          supplierIdMap.set(supplierName, existingSupplier._id);
+        } else {
+          // Supplier doesn't exist, create new one
+          suppliersToCreate.push(supplierDetails);
+        }
+      }
+
+      let suppliersCreated = 0;
+      for (const supplier of suppliersToCreate) {
+        try {
+          const newSupplier = new Supplier(supplier);
+          await newSupplier.save();
+          supplierIdMap.set(supplier.name, newSupplier._id);
+          suppliersCreated++;
+        } catch (error) {
+          console.error(`Failed to create supplier ${supplier.name}:`, error);
+        }
+      }
+
+      // Update jsonData to include supplier IDs
+      jsonData.forEach((product) => {
+        if (product.supplier && supplierIdMap.has(product.supplier)) {
+          product.supplierId = supplierIdMap.get(product.supplier);
+        }
       });
-      
-      if (existingSupplier) {
-        // Supplier exists, use its ID
-        supplierIdMap.set(supplierName, existingSupplier._id);
-      } else {
-        // Supplier doesn't exist, create new one
-        suppliersToCreate.push(supplierDetails);
+
+      // Check existing products and prepare update/insert operations
+      const existingProducts = await Inventory.find({ branchId });
+      const productsToUpdate = [];
+      const productsToInsert = [];
+
+      for (const importedProduct of jsonData) {
+        const existingProduct = existingProducts.find(
+          (ep) =>
+            ep.name.toLowerCase() === importedProduct.name.toLowerCase() &&
+            ep.composition?.toLowerCase() ===
+              importedProduct.composition?.toLowerCase() &&
+            ep.supplier.toLowerCase() === importedProduct.supplier.toLowerCase()
+        );
+
+        if (existingProduct) {
+          // Product exists, prepare for update with stock addition
+          const updatedProduct = {
+            id: existingProduct._id,
+            name: importedProduct.name,
+            category: importedProduct.category,
+            stock: existingProduct.stock + importedProduct.stock, // Add to existing stock
+            minStock: importedProduct.minStock, // Update min stock
+            price: importedProduct.retailPriceVATIncluded, // Use VAT included price
+            supplier: importedProduct.supplier, // Keep supplier name for display
+            supplierId: importedProduct.supplierId, // Store supplier MongoDB ID
+            expiryDate: importedProduct.expiryDate,
+            // Update all other human-readable fields (no ID fields)
+            store: importedProduct.store,
+            manufacturer: importedProduct.manufacturer,
+            composition: importedProduct.composition,
+            series: importedProduct.series,
+            reservedQuantity: importedProduct.reservedQuantity,
+            purchasePriceExclVAT: importedProduct.purchasePriceExclVAT,
+            vat: importedProduct.vat,
+            retailPriceVATIncluded: importedProduct.retailPriceVATIncluded,
+            divider: importedProduct.divider,
+            dividerCustom: importedProduct.dividerCustom,
+          };
+          productsToUpdate.push(updatedProduct);
+        } else {
+          // New product, prepare for insert with all human-readable fields
+          const newProduct = {
+            name: importedProduct.name,
+            category: importedProduct.category,
+            stock: importedProduct.stock,
+            minStock: importedProduct.minStock,
+            price: importedProduct.retailPriceVATIncluded, // Use VAT included price
+            supplier: importedProduct.supplier, // Keep supplier name for display
+            supplierId: importedProduct.supplierId, // Store supplier MongoDB ID
+            expiryDate: importedProduct.expiryDate,
+            branchId: branchId,
+            // Include all human-readable fields (no ID fields)
+            store: importedProduct.store,
+            manufacturer: importedProduct.manufacturer,
+            composition: importedProduct.composition,
+            series: importedProduct.series,
+            reservedQuantity: importedProduct.reservedQuantity,
+            purchasePriceExclVAT: importedProduct.purchasePriceExclVAT,
+            vat: importedProduct.vat,
+            retailPriceVATIncluded: importedProduct.retailPriceVATIncluded,
+            divider: importedProduct.divider,
+            dividerCustom: importedProduct.dividerCustom,
+          };
+          productsToInsert.push(newProduct);
+        }
       }
-    }
 
-    let suppliersCreated = 0;
-    for (const supplier of suppliersToCreate) {
-      try {
-        const newSupplier = new Supplier(supplier);
-        await newSupplier.save();
-        supplierIdMap.set(supplier.name, newSupplier._id);
-        suppliersCreated++;
-      } catch (error) {
-        console.error(`Failed to create supplier ${supplier.name}:`, error);
+      // Process updates and inserts
+      let updatedCount = 0;
+      let insertedCount = 0;
+
+      // Update existing products
+      for (const product of productsToUpdate) {
+        try {
+          const { id, ...updateData } = product;
+          await Inventory.findByIdAndUpdate(id, { ...updateData, branchId });
+          updatedCount++;
+        } catch (error) {
+          console.error(`Failed to update product ${product.name}:`, error);
+        }
       }
-    }
 
-    // Update jsonData to include supplier IDs
-    jsonData.forEach(product => {
-      if (product.supplier && supplierIdMap.has(product.supplier)) {
-        product.supplierId = supplierIdMap.get(product.supplier);
+      // Insert new products
+      if (productsToInsert.length > 0) {
+        try {
+          const insertResult = await Inventory.insertMany(productsToInsert);
+          insertedCount = insertResult.length;
+        } catch (error) {
+          throw new Error(`Error inserting new products: ${error.message}`);
+        }
       }
-    });
 
-    // Check existing products and prepare update/insert operations
-    const existingProducts = await Inventory.find({ branchId });
-    const productsToUpdate = [];
-    const productsToInsert = [];
-
-    for (const importedProduct of jsonData) {
-      const existingProduct = existingProducts.find((ep) => 
-        ep.name.toLowerCase() === importedProduct.name.toLowerCase() &&
-        ep.composition?.toLowerCase() === importedProduct.composition?.toLowerCase() &&
-        ep.supplier.toLowerCase() === importedProduct.supplier.toLowerCase()
+      // Calculate summary statistics
+      const importedCategories = [...new Set(jsonData.map((p) => p.category))];
+      const totalValue = jsonData.reduce(
+        (sum, p) => sum + p.stock * p.retailPriceVATIncluded,
+        0
       );
-      
-      if (existingProduct) {
-        // Product exists, prepare for update with stock addition
-        const updatedProduct = {
-          id: existingProduct._id,
-          name: importedProduct.name,
-          category: importedProduct.category,
-          stock: existingProduct.stock + importedProduct.stock, // Add to existing stock
-          minStock: importedProduct.minStock, // Update min stock
-          price: importedProduct.retailPriceVATIncluded, // Use VAT included price
-          supplier: importedProduct.supplier, // Keep supplier name for display
-          supplierId: importedProduct.supplierId, // Store supplier MongoDB ID
-          expiryDate: importedProduct.expiryDate,
-          // Update all other human-readable fields (no ID fields)
-          store: importedProduct.store,
-          manufacturer: importedProduct.manufacturer,
-          composition: importedProduct.composition,
-          series: importedProduct.series,
-          reservedQuantity: importedProduct.reservedQuantity,
-          purchasePriceExclVAT: importedProduct.purchasePriceExclVAT,
-          vat: importedProduct.vat,
-          retailPriceVATIncluded: importedProduct.retailPriceVATIncluded,
-          divider: importedProduct.divider,
-          dividerCustom: importedProduct.dividerCustom,
-        };
-        productsToUpdate.push(updatedProduct);
-      } else {
-        // New product, prepare for insert with all human-readable fields
-        const newProduct = {
-          name: importedProduct.name,
-          category: importedProduct.category,
-          stock: importedProduct.stock,
-          minStock: importedProduct.minStock,
-          price: importedProduct.retailPriceVATIncluded, // Use VAT included price
-          supplier: importedProduct.supplier, // Keep supplier name for display
-          supplierId: importedProduct.supplierId, // Store supplier MongoDB ID
-          expiryDate: importedProduct.expiryDate,
-          branchId: branchId,
-          // Include all human-readable fields (no ID fields)
-          store: importedProduct.store,
-          manufacturer: importedProduct.manufacturer,
-          composition: importedProduct.composition,
-          series: importedProduct.series,
-          reservedQuantity: importedProduct.reservedQuantity,
-          purchasePriceExclVAT: importedProduct.purchasePriceExclVAT,
-          vat: importedProduct.vat,
-          retailPriceVATIncluded: importedProduct.retailPriceVATIncluded,
-          divider: importedProduct.divider,
-          dividerCustom: importedProduct.dividerCustom,
-        };
-        productsToInsert.push(newProduct);
+      const totalPurchaseValue = jsonData.reduce(
+        (sum, p) => sum + p.stock * p.purchasePriceExclVAT,
+        0
+      );
+      const uniqueSuppliers = [
+        ...new Set(jsonData.map((p) => p.supplier).filter(Boolean)),
+      ];
+      const uniqueManufacturers = [
+        ...new Set(jsonData.map((p) => p.manufacturer).filter(Boolean)),
+      ];
+      const uniqueStores = [
+        ...new Set(jsonData.map((p) => p.store).filter(Boolean)),
+      ];
+
+      // Calculate stock addition for updated products
+      let totalStockAdded = 0;
+      if (productsToUpdate.length > 0) {
+        totalStockAdded = productsToUpdate.reduce((sum, p) => {
+          const originalProduct = existingProducts.find(
+            (ep) => ep._id.toString() === p.id
+          );
+          return sum + (p.stock - (originalProduct?.stock || 0));
+        }, 0);
       }
-    }
 
-    // Process updates and inserts
-    let updatedCount = 0;
-    let insertedCount = 0;
-
-    // Update existing products
-    for (const product of productsToUpdate) {
-      try {
-        const { id, ...updateData } = product;
-        await Inventory.findByIdAndUpdate(id, { ...updateData, branchId });
-        updatedCount++;
-      } catch (error) {
-        console.error(`Failed to update product ${product.name}:`, error);
-      }
-    }
-
-    // Insert new products
-    if (productsToInsert.length > 0) {
-      try {
-        const insertResult = await Inventory.insertMany(productsToInsert);
-        insertedCount = insertResult.length;
-      } catch (error) {
-        throw new Error(`Error inserting new products: ${error.message}`);
-      }
-    }
-
-    // Calculate summary statistics
-    const importedCategories = [...new Set(jsonData.map(p => p.category))];
-    const totalValue = jsonData.reduce((sum, p) => sum + (p.stock * p.retailPriceVATIncluded), 0);
-    const totalPurchaseValue = jsonData.reduce((sum, p) => sum + (p.stock * p.purchasePriceExclVAT), 0);
-    const uniqueSuppliers = [...new Set(jsonData.map(p => p.supplier).filter(Boolean))];
-    const uniqueManufacturers = [...new Set(jsonData.map(p => p.manufacturer).filter(Boolean))];
-    const uniqueStores = [...new Set(jsonData.map(p => p.store).filter(Boolean))];
-
-    // Calculate stock addition for updated products
-    let totalStockAdded = 0;
-    if (productsToUpdate.length > 0) {
-      totalStockAdded = productsToUpdate.reduce((sum, p) => {
-        const originalProduct = existingProducts.find((ep) => ep._id.toString() === p.id);
-        return sum + (p.stock - (originalProduct?.stock || 0));
-      }, 0);
-    }
-
-    // Log the bulk operation
-    await logBulkOperation(
-      req,
-      "BULK_UPLOAD",
-      `Inventory Import - ${req.file?.originalname || 'Unknown File'}`,
-      jsonData.length,
-      updatedCount + insertedCount,
-      0, // No errors in this case
-      []
-    );
-
-    res.status(200).json({
-      success: true,
-      message: `Successfully imported ${jsonData.length} products`,
-      summary: {
-        totalProcessed: jsonData.length,
-        productsUpdated: updatedCount,
-        productsAdded: insertedCount,
-        stockAdded: totalStockAdded,
-        suppliersCreated: suppliersCreated,
-        uniqueSuppliers: uniqueSuppliers.length,
-        uniqueManufacturers: uniqueManufacturers.length,
-        uniqueStores: uniqueStores.length,
-        categories: importedCategories,
-        totalRetailValue: totalValue,
-        totalPurchaseValue: totalPurchaseValue,
-        dataEfficiency: "ID columns skipped, only human-readable names stored"
-      }
-    });
-
-  } catch (error) {
-    console.error('Excel import error:', error);
-    
-    // Log the failed operation
-    try {
+      // Log the bulk operation
       await logBulkOperation(
         req,
         "BULK_UPLOAD",
-        `Failed Inventory Import - ${req.file?.originalname || 'Unknown File'}`,
-        0,
-        0,
-        1,
-        [error.message]
+        `Inventory Import - ${req.file?.originalname || "Unknown File"}`,
+        jsonData.length,
+        updatedCount + insertedCount,
+        0, // No errors in this case
+        []
       );
-    } catch (logError) {
-      console.error("Failed to log failed bulk operation:", logError);
-    }
 
-    res.status(500).json({ 
-      error: "Error processing Excel file", 
-      details: error.message 
-    });
+      res.status(200).json({
+        success: true,
+        message: `Successfully imported ${jsonData.length} products`,
+        summary: {
+          totalProcessed: jsonData.length,
+          productsUpdated: updatedCount,
+          productsAdded: insertedCount,
+          stockAdded: totalStockAdded,
+          suppliersCreated: suppliersCreated,
+          uniqueSuppliers: uniqueSuppliers.length,
+          uniqueManufacturers: uniqueManufacturers.length,
+          uniqueStores: uniqueStores.length,
+          categories: importedCategories,
+          totalRetailValue: totalValue,
+          totalPurchaseValue: totalPurchaseValue,
+          dataEfficiency:
+            "ID columns skipped, only human-readable names stored",
+        },
+      });
+    } catch (error) {
+      console.error("Excel import error:", error);
+
+      // Log the failed operation
+      try {
+        await logBulkOperation(
+          req,
+          "BULK_UPLOAD",
+          `Failed Inventory Import - ${
+            req.file?.originalname || "Unknown File"
+          }`,
+          0,
+          0,
+          1,
+          [error.message]
+        );
+      } catch (logError) {
+        console.error("Failed to log failed bulk operation:", logError);
+      }
+
+      res.status(500).json({
+        error: "Error processing Excel file",
+        details: error.message,
+      });
+    }
   }
-});
+);
 
 // Transaction Routes
 router.post("/transaction", authenticate, async (req, res) => {
@@ -1281,7 +1645,7 @@ router.post("/transaction", authenticate, async (req, res) => {
         paymentMethod: transaction.paymentMethod,
         customerName: transaction.customerName,
         itemsCount: transaction.items?.length || 0,
-        branchId: transaction.branchId
+        branchId: transaction.branchId,
       }
     );
 
@@ -1346,29 +1710,71 @@ router.get("/transaction", authenticate, async (req, res) => {
 // Return Transaction Route
 router.post("/transaction/return", authenticate, async (req, res) => {
   try {
-    const { transactionId, branchId, returnItems, returnReason, returnAmount, originalTotal, processedBy } = req.body;
+    const {
+      transactionId,
+      branchId,
+      returnItems,
+      returnReason,
+      returnAmount,
+      originalTotal,
+      processedBy,
+    } = req.body;
 
-    console.log("Return request received:", { transactionId, branchId, returnItems, returnReason, returnAmount, originalTotal, processedBy });
+    console.log("Return request received:", {
+      transactionId,
+      branchId,
+      returnItems,
+      returnReason,
+      returnAmount,
+      originalTotal,
+      processedBy,
+    });
 
-    if (!transactionId || !branchId || !returnItems || !returnReason || !processedBy) {
-      return res.status(400).json({ 
+    if (
+      !transactionId ||
+      !branchId ||
+      !returnItems ||
+      !returnReason ||
+      !processedBy
+    ) {
+      return res.status(400).json({
         error: "Missing required fields",
-        received: { transactionId, branchId, returnItems, returnReason, returnAmount, originalTotal, processedBy },
-        required: ["transactionId", "branchId", "returnItems", "returnReason", "processedBy"]
+        received: {
+          transactionId,
+          branchId,
+          returnItems,
+          returnReason,
+          returnAmount,
+          originalTotal,
+          processedBy,
+        },
+        required: [
+          "transactionId",
+          "branchId",
+          "returnItems",
+          "returnReason",
+          "processedBy",
+        ],
       });
     }
 
     if (!Array.isArray(returnItems) || returnItems.length === 0) {
-      return res.status(400).json({ error: "returnItems must be a non-empty array" });
+      return res
+        .status(400)
+        .json({ error: "returnItems must be a non-empty array" });
     }
 
     // Validate each return item
     for (const item of returnItems) {
-      if (!item.name || typeof item.returnQuantity !== 'number' || item.returnQuantity < 0) {
-        return res.status(400).json({ 
+      if (
+        !item.name ||
+        typeof item.returnQuantity !== "number" ||
+        item.returnQuantity < 0
+      ) {
+        return res.status(400).json({
           error: "Invalid return item data",
           item,
-          required: { name: "string", returnQuantity: "number >= 0" }
+          required: { name: "string", returnQuantity: "number >= 0" },
         });
       }
     }
@@ -1381,7 +1787,9 @@ router.post("/transaction/return", authenticate, async (req, res) => {
 
     // Validate that transaction belongs to the specified branch
     if (transaction.branchId.toString() !== branchId) {
-      return res.status(403).json({ error: "Transaction does not belong to this branch" });
+      return res
+        .status(403)
+        .json({ error: "Transaction does not belong to this branch" });
     }
 
     // Check if transaction is already returned
@@ -1393,15 +1801,15 @@ router.post("/transaction/return", authenticate, async (req, res) => {
     for (const returnItem of returnItems) {
       if (returnItem.returnQuantity > 0) {
         // Find the product in inventory by name and branch
-        let inventoryItem = await Inventory.findOne({ 
+        let inventoryItem = await Inventory.findOne({
           name: returnItem.name,
-          branchId: new mongoose.Types.ObjectId(branchId)
+          branchId: new mongoose.Types.ObjectId(branchId),
         });
 
         if (!inventoryItem) {
           // Try to find by name only (in case branchId is not set)
-          inventoryItem = await Inventory.findOne({ 
-            name: returnItem.name
+          inventoryItem = await Inventory.findOne({
+            name: returnItem.name,
           });
         }
 
@@ -1409,9 +1817,13 @@ router.post("/transaction/return", authenticate, async (req, res) => {
           // Increase stock quantity (reverse the sale)
           inventoryItem.stock += returnItem.returnQuantity;
           await inventoryItem.save();
-          console.log(`Updated inventory for ${returnItem.name}: +${returnItem.returnQuantity} units (new total: ${inventoryItem.stock})`);
+          console.log(
+            `Updated inventory for ${returnItem.name}: +${returnItem.returnQuantity} units (new total: ${inventoryItem.stock})`
+          );
         } else {
-          console.log(`Inventory item not found for product: ${returnItem.name} in branch: ${branchId}`);
+          console.log(
+            `Inventory item not found for product: ${returnItem.name} in branch: ${branchId}`
+          );
           // You could optionally create a new inventory item here if needed
           // For now, we'll just log it and continue
         }
@@ -1427,14 +1839,16 @@ router.post("/transaction/return", authenticate, async (req, res) => {
       originalTransactionId: transactionId,
       branchId: new mongoose.Types.ObjectId(branchId),
       returnReason,
-      returnItems: returnItems.filter(item => item.returnQuantity > 0).map(item => ({
-        productId: item.productId,
-        name: item.name,
-        originalQuantity: item.originalQuantity,
-        returnQuantity: item.returnQuantity,
-        price: item.price,
-        returnAmount: item.returnQuantity * item.price,
-      })),
+      returnItems: returnItems
+        .filter((item) => item.returnQuantity > 0)
+        .map((item) => ({
+          productId: item.productId,
+          name: item.name,
+          originalQuantity: item.originalQuantity,
+          returnQuantity: item.returnQuantity,
+          price: item.price,
+          returnAmount: item.returnQuantity * item.price,
+        })),
       totalReturnAmount: returnAmount,
       originalTotalAmount: originalTotal,
       processedBy,
@@ -1446,23 +1860,22 @@ router.post("/transaction/return", authenticate, async (req, res) => {
     let inventoryUpdates = 0;
     for (const returnItem of returnItems) {
       if (returnItem.returnQuantity > 0) {
-        const inventoryItem = await Inventory.findOne({ 
+        const inventoryItem = await Inventory.findOne({
           name: returnItem.name,
-          branchId: new mongoose.Types.ObjectId(branchId)
+          branchId: new mongoose.Types.ObjectId(branchId),
         });
         if (inventoryItem) inventoryUpdates++;
       }
     }
 
-    res.status(200).json({ 
+    res.status(200).json({
       message: "Return processed successfully",
       returnAmount,
-      returnedItems: returnItems.filter(item => item.returnQuantity > 0),
+      returnedItems: returnItems.filter((item) => item.returnQuantity > 0),
       returnId: returnRecord._id,
       inventoryUpdates,
-      totalItems: returnItems.filter(item => item.returnQuantity > 0).length
+      totalItems: returnItems.filter((item) => item.returnQuantity > 0).length,
     });
-
   } catch (error) {
     console.error("Return processing error:", error);
     res.status(500).json({ error: error.message });
@@ -1541,7 +1954,7 @@ router.get("/sales/recent", authenticate, async (req, res) => {
 });
 
 // User Routes (Admin only)
-router.post("/user", authenticate, authorize('Admin'), async (req, res) => {
+router.post("/user", authenticate, authorize("Admin"), async (req, res) => {
   try {
     const { name, email, password, role, branchId } = req.body;
     if (!name || !email || !password || !role) {
@@ -1560,17 +1973,11 @@ router.post("/user", authenticate, authorize('Admin'), async (req, res) => {
     await user.save();
 
     // Log the user creation
-    await logUserAction(
-      req,
-      "USER_CREATED",
-      user._id,
-      user.name,
-      {
-        email: user.email,
-        role: user.role,
-        branchId: user.branchId
-      }
-    );
+    await logUserAction(req, "USER_CREATED", user._id, user.name, {
+      email: user.email,
+      role: user.role,
+      branchId: user.branchId,
+    });
 
     // Return user info without password
     const { password: _, ...userInfo } = user.toObject();
@@ -1618,112 +2025,112 @@ router.get("/user/:id", authenticate, async (req, res) => {
   }
 });
 
-router.patch("/user/:id", authenticate, authorize('Admin'), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { password, ...updateData } = req.body;
+router.patch(
+  "/user/:id",
+  authenticate,
+  authorize("Admin"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { password, ...updateData } = req.body;
 
-    // Get the current user for audit logging
-    const currentUser = await User.findById(id);
-    if (!currentUser) {
-      return res.status(404).json({ error: "User not found" });
-    }
+      // Get the current user for audit logging
+      const currentUser = await User.findById(id);
+      if (!currentUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
 
-    const updateFields = { ...updateData };
+      const updateFields = { ...updateData };
 
-    // If password is provided, hash it before updating
-    if (password) {
-      const bcrypt = await import("bcrypt");
-      updateFields.password = await bcrypt.hash(password, 10);
-    }
+      // If password is provided, hash it before updating
+      if (password) {
+        const bcrypt = await import("bcrypt");
+        updateFields.password = await bcrypt.hash(password, 10);
+      }
 
-    const user = await User.findByIdAndUpdate(id, updateFields, { new: true });
+      const user = await User.findByIdAndUpdate(id, updateFields, {
+        new: true,
+      });
 
-    // Log the action
-    await logUserAction(
-      req,
-      "USER_UPDATED",
-      user._id,
-      user.name,
-      {
+      // Log the action
+      await logUserAction(req, "USER_UPDATED", user._id, user.name, {
         previousRole: currentUser.role,
         newRole: user.role,
         previousBranchId: currentUser.branchId,
         newBranchId: user.branchId,
-        changes: Object.keys(updateData)
+        changes: Object.keys(updateData),
+      });
+
+      // Return user info without password
+      const { password: _, ...userInfo } = user.toObject();
+      res.status(200).json(userInfo);
+    } catch (error) {
+      // Log failed action
+      try {
+        await logFailedAction(
+          req,
+          "USER_UPDATED",
+          "User",
+          req.params.id,
+          "Unknown User",
+          "Failed to update user",
+          error,
+          req.body
+        );
+      } catch (logError) {
+        console.error("Failed to log failed action:", logError);
       }
-    );
 
-    // Return user info without password
-    const { password: _, ...userInfo } = user.toObject();
-    res.status(200).json(userInfo);
-  } catch (error) {
-    // Log failed action
-    try {
-      await logFailedAction(
-        req,
-        "USER_UPDATED",
-        "User",
-        req.params.id,
-        "Unknown User",
-        "Failed to update user",
-        error,
-        req.body
-      );
-    } catch (logError) {
-      console.error("Failed to log failed action:", logError);
+      res.status(500).json({ error: error.message });
     }
-
-    res.status(500).json({ error: error.message });
   }
-});
+);
 
-router.delete("/user/:id", authenticate, authorize('Admin'), async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Get the user before deletion for audit logging
-    const userToDelete = await User.findById(id);
-    if (!userToDelete) {
-      return res.status(404).json({ error: "User not found" });
-    }
-    
-    await User.findByIdAndDelete(id);
-    
-    // Log the action
-    await logUserAction(
-      req,
-      "USER_DELETED",
-      id,
-      userToDelete.name,
-      {
+router.delete(
+  "/user/:id",
+  authenticate,
+  authorize("Admin"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      // Get the user before deletion for audit logging
+      const userToDelete = await User.findById(id);
+      if (!userToDelete) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      await User.findByIdAndDelete(id);
+
+      // Log the action
+      await logUserAction(req, "USER_DELETED", id, userToDelete.name, {
         email: userToDelete.email,
         role: userToDelete.role,
-        branchId: userToDelete.branchId
-      }
-    );
-    
-    res.status(200).json({ message: "User deleted successfully" });
-  } catch (error) {
-    // Log failed action
-    try {
-      await logFailedAction(
-        req,
-        "USER_DELETED",
-        "User",
-        req.params.id,
-        "Unknown User",
-        "Failed to delete user",
-        error,
-        {}
-      );
-    } catch (logError) {
-      console.error("Failed to log failed action:", logError);
-    }
+        branchId: userToDelete.branchId,
+      });
 
-    res.status(500).json({ error: error.message });
+      res.status(200).json({ message: "User deleted successfully" });
+    } catch (error) {
+      // Log failed action
+      try {
+        await logFailedAction(
+          req,
+          "USER_DELETED",
+          "User",
+          req.params.id,
+          "Unknown User",
+          "Failed to delete user",
+          error,
+          {}
+        );
+      } catch (logError) {
+        console.error("Failed to log failed action:", logError);
+      }
+
+      res.status(500).json({ error: error.message });
+    }
   }
-});
+);
 
 // Warehouse routes
 router.use("/warehouse", warehouseRoutes);

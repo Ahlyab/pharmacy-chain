@@ -23,14 +23,15 @@ const AuditLogSchema = new mongoose.Schema(
       enum: [
         // Product/Inventory actions
         "PRODUCT_CREATED",
-        "PRODUCT_UPDATED", 
+        "PRODUCT_UPDATED",
         "PRODUCT_DELETED",
         "STOCK_ADDED",
         "STOCK_UPDATED",
         "STOCK_DELETED",
         "INVENTORY_IMPORTED",
         "INVENTORY_EXPORTED",
-        
+        "INVENTORY_TRANSFER",
+
         // Transaction actions
         "SALE_CREATED",
         "SALE_UPDATED",
@@ -39,14 +40,14 @@ const AuditLogSchema = new mongoose.Schema(
         "INVOICE_CREATED",
         "INVOICE_UPDATED",
         "INVOICE_DELETED",
-        
+
         // User management
         "USER_CREATED",
         "USER_UPDATED",
         "USER_DELETED",
         "USER_LOGIN",
         "USER_LOGOUT",
-        
+
         // Branch/Warehouse actions
         "BRANCH_CREATED",
         "BRANCH_UPDATED",
@@ -54,24 +55,24 @@ const AuditLogSchema = new mongoose.Schema(
         "WAREHOUSE_TRANSFER",
         "WAREHOUSE_STOCK_ADDED",
         "WAREHOUSE_STOCK_UPDATED",
-        
+
         // Supplier actions
         "SUPPLIER_CREATED",
         "SUPPLIER_UPDATED",
         "SUPPLIER_DELETED",
-        
+
         // Bulk operations
         "BULK_UPLOAD",
         "BULK_UPDATE",
         "BULK_DELETE",
         "DATA_EXPORT",
-        
+
         // System actions
         "SYSTEM_BACKUP",
         "SYSTEM_RESTORE",
         "SETTINGS_UPDATED",
-        "REPORT_GENERATED"
-      ]
+        "REPORT_GENERATED",
+      ],
     },
 
     // What entity was affected
@@ -80,7 +81,7 @@ const AuditLogSchema = new mongoose.Schema(
       required: true,
       enum: [
         "Product",
-        "Inventory", 
+        "Inventory",
         "Transaction",
         "Sale",
         "Invoice",
@@ -91,8 +92,8 @@ const AuditLogSchema = new mongoose.Schema(
         "Supplier",
         "Stock",
         "System",
-        "BulkOperation"
-      ]
+        "BulkOperation",
+      ],
     },
     entityId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -144,7 +145,7 @@ const AuditLogSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: ["SUCCESS", "FAILED", "PARTIAL"],
-      default: "SUCCESS"
+      default: "SUCCESS",
     },
 
     // Error information if action failed
@@ -159,13 +160,13 @@ const AuditLogSchema = new mongoose.Schema(
     priority: {
       type: String,
       enum: ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
-      default: "MEDIUM"
+      default: "MEDIUM",
     },
 
     // Timestamps
     actionTimestamp: { type: Date, default: Date.now },
     createdAt: { type: Date, default: Date.now },
-    updatedAt: { type: Date, default: Date.now }
+    updatedAt: { type: Date, default: Date.now },
   },
   {
     timestamps: true,
@@ -176,19 +177,19 @@ const AuditLogSchema = new mongoose.Schema(
       { entityType: 1, entityId: 1 },
       { branchId: 1, actionTimestamp: -1 },
       { actionTimestamp: -1 },
-      { userRole: 1, actionTimestamp: -1 }
-    ]
+      { userRole: 1, actionTimestamp: -1 },
+    ],
   }
 );
 
 // Pre-save middleware to update timestamps
-AuditLogSchema.pre("save", function(next) {
+AuditLogSchema.pre("save", function (next) {
   this.updatedAt = new Date();
   next();
 });
 
 // Static method to create audit log entries easily
-AuditLogSchema.statics.logAction = function(data) {
+AuditLogSchema.statics.logAction = function (data) {
   return this.create({
     userId: data.userId,
     userName: data.userName,
@@ -208,38 +209,42 @@ AuditLogSchema.statics.logAction = function(data) {
     status: data.status || "SUCCESS",
     error: data.error,
     tags: data.tags || [],
-    priority: data.priority || "MEDIUM"
+    priority: data.priority || "MEDIUM",
   });
 };
 
 // Method to get audit trail for a specific entity
-AuditLogSchema.statics.getEntityAuditTrail = function(entityType, entityId, limit = 100) {
+AuditLogSchema.statics.getEntityAuditTrail = function (
+  entityType,
+  entityId,
+  limit = 100
+) {
   return this.find({
     entityType: entityType,
-    entityId: entityId
+    entityId: entityId,
   })
-  .sort({ actionTimestamp: -1 })
-  .limit(limit)
-  .populate("userId", "name email role")
-  .populate("branchId", "name");
+    .sort({ actionTimestamp: -1 })
+    .limit(limit)
+    .populate("userId", "name email role")
+    .populate("branchId", "name");
 };
 
 // Method to get user activity
-AuditLogSchema.statics.getUserActivity = function(userId, limit = 100) {
+AuditLogSchema.statics.getUserActivity = function (userId, limit = 100) {
   return this.find({ userId: userId })
-  .sort({ actionTimestamp: -1 })
-  .limit(limit)
-  .populate("entityId")
-  .populate("branchId", "name");
+    .sort({ actionTimestamp: -1 })
+    .limit(limit)
+    .populate("entityId")
+    .populate("branchId", "name");
 };
 
 // Method to get branch activity
-AuditLogSchema.statics.getBranchActivity = function(branchId, limit = 100) {
+AuditLogSchema.statics.getBranchActivity = function (branchId, limit = 100) {
   return this.find({ branchId: branchId })
-  .sort({ actionTimestamp: -1 })
-  .limit(limit)
-  .populate("userId", "name email role")
-  .populate("entityId");
+    .sort({ actionTimestamp: -1 })
+    .limit(limit)
+    .populate("userId", "name email role")
+    .populate("entityId");
 };
 
 export default mongoose.model("AuditLog", AuditLogSchema);

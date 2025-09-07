@@ -1,6 +1,5 @@
 import GreenProgressBar from "../GreenProgressBar";
 import React, { useState, useEffect, useCallback } from "react";
-import { VITE_BASE_URL } from "../../data";
 import { useAuth } from "../../contexts/AuthContext";
 import { apiEndpoints } from "../../utils/api";
 import Swal from "sweetalert2";
@@ -46,6 +45,7 @@ const POS: React.FC = () => {
   const [cashierName, setCashierName] = useState(
     () => localStorage.getItem("cashierName") || ""
   );
+  const [branchInfo, setBranchInfo] = useState<any>(null);
 
   // Print styles for receipt
   const printStyles = `
@@ -87,8 +87,6 @@ const POS: React.FC = () => {
     return { ...product, status, id: product._id || product.id };
   };
 
-  const BASE_URL = VITE_BASE_URL;
-
   // Fetch products from API (filtered by manager's branch)
   const fetchProducts = useCallback(async () => {
     setLoading(true);
@@ -108,12 +106,34 @@ const POS: React.FC = () => {
 
   useEffect(() => {
     fetchProducts();
+    fetchBranchInfo();
   }, [fetchProducts]);
 
-  const filteredProducts = products.filter((product) =>
-    product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (product.manufacturer && product.manufacturer.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    product.category.toLowerCase().includes(searchTerm.toLowerCase())
+  // Fetch branch information
+  const fetchBranchInfo = useCallback(async () => {
+    if (user?.branchId) {
+      try {
+        const branches = await apiEndpoints.getBranches();
+        const currentBranch = branches.find(
+          (branch: any) => branch._id === user.branchId
+        );
+        if (currentBranch) {
+          setBranchInfo(currentBranch);
+        }
+      } catch (err) {
+        console.error("Error fetching branch info:", err);
+      }
+    }
+  }, [user?.branchId]);
+
+  const filteredProducts = products.filter(
+    (product) =>
+      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (product.manufacturer &&
+        product.manufacturer
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase())) ||
+      product.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const addToCart = (product: Product) => {
@@ -129,10 +149,10 @@ const POS: React.FC = () => {
         );
       } else {
         Swal.fire({
-          title: 'Stock Limit Reached',
+          title: "Stock Limit Reached",
           text: `Cannot add more ${product.name}. Only ${product.stock} available in stock.`,
-          icon: 'warning',
-          confirmButtonText: 'OK'
+          icon: "warning",
+          confirmButtonText: "OK",
         });
       }
     } else {
@@ -140,10 +160,10 @@ const POS: React.FC = () => {
         setCart([...cart, { ...product, quantity: 1 }]);
       } else {
         Swal.fire({
-          title: 'Out of Stock',
+          title: "Out of Stock",
           text: `${product.name} is out of stock.`,
-          icon: 'error',
-          confirmButtonText: 'OK'
+          icon: "error",
+          confirmButtonText: "OK",
         });
       }
     }
@@ -160,10 +180,10 @@ const POS: React.FC = () => {
         );
       } else if (product && quantity > product.stock) {
         Swal.fire({
-          title: 'Stock Limit Exceeded',
+          title: "Stock Limit Exceeded",
           text: `Cannot set quantity to ${quantity}. Only ${product.stock} available in stock.`,
-          icon: 'warning',
-          confirmButtonText: 'OK'
+          icon: "warning",
+          confirmButtonText: "OK",
         });
       }
     }
@@ -189,20 +209,20 @@ const POS: React.FC = () => {
   const handleCheckout = async () => {
     if (cart.length === 0) {
       Swal.fire({
-        title: 'Empty Cart',
-        text: 'Cart is empty',
-        icon: 'warning',
-        confirmButtonText: 'OK'
+        title: "Empty Cart",
+        text: "Cart is empty",
+        icon: "warning",
+        confirmButtonText: "OK",
       });
       return;
     }
 
     if (!user?.branchId) {
       Swal.fire({
-        title: 'Branch Access Required',
-        text: 'Branch information not available. Please contact administrator.',
-        icon: 'error',
-        confirmButtonText: 'OK'
+        title: "Branch Access Required",
+        text: "Branch information not available. Please contact administrator.",
+        icon: "error",
+        confirmButtonText: "OK",
       });
       return;
     }
@@ -211,19 +231,20 @@ const POS: React.FC = () => {
     for (const item of cart) {
       if (item.quantity > item.stock) {
         Swal.fire({
-          title: 'Stock Validation Failed',
+          title: "Stock Validation Failed",
           text: `Cannot complete transaction: ${item.name} quantity (${item.quantity}) exceeds available stock (${item.stock})`,
-          icon: 'error',
-          confirmButtonText: 'OK'
+          icon: "error",
+          confirmButtonText: "OK",
         });
         return;
       }
     }
 
-    // Branch and company info (replace with real data as needed)
-    const COMPANY_NAME = "Ahlyab Pharmacy Chain";
-    const BRANCH_ADDRESS = "123 Main Street, City, Country";
-    const MANAGER_CONTACT = "+1 234-567-8901";
+    // Branch and company info
+    const BRANCH_ADDRESS =
+      branchInfo?.address || "Professional Healthcare Services";
+    const BRANCH_NAME = branchInfo?.name || "Main Branch";
+    const MANAGER_CONTACT = branchInfo?.phone || "+1 (555) 123-4567";
     const ADDITIONAL_NOTE =
       "Thank you for shopping with us! No returns after 7 days.";
 
@@ -252,11 +273,11 @@ const POS: React.FC = () => {
 
       // Show bill using the original transaction object (with all display info)
       setLastTransaction({
-        customer: customerName.trim() ? customerName : COMPANY_NAME,
         items: cart,
         total: getTotalAmount(),
         paymentMethod,
         date: new Date().toLocaleString(),
+        branchName: BRANCH_NAME,
         branchAddress: BRANCH_ADDRESS,
         managerContact: MANAGER_CONTACT,
         additionalNote: ADDITIONAL_NOTE,
@@ -272,10 +293,10 @@ const POS: React.FC = () => {
       fetchProducts();
     } catch (err: any) {
       Swal.fire({
-        title: 'Transaction Failed',
-        text: 'Error completing transaction: ' + (err.message || err),
-        icon: 'error',
-        confirmButtonText: 'OK'
+        title: "Transaction Failed",
+        text: "Error completing transaction: " + (err.message || err),
+        icon: "error",
+        confirmButtonText: "OK",
       });
     }
   };
@@ -286,24 +307,27 @@ const POS: React.FC = () => {
       // Update stock for each item in cart
       for (const item of cart) {
         const newStock = item.stock - item.quantity;
-        
+
         try {
           await apiEndpoints.updateInventory(item._id, { stock: newStock });
         } catch (error) {
-          console.error(`Failed to update stock for product ${item.name}:`, error);
+          console.error(
+            `Failed to update stock for product ${item.name}:`,
+            error
+          );
           // Log the error but don't fail the entire transaction
           // The stock will be refreshed when fetchProducts() is called
         }
       }
 
       // Update local products state to reflect new stock quantities
-      setProducts(prevProducts => 
-        prevProducts.map(product => {
-          const cartItem = cart.find(item => item._id === product._id);
+      setProducts((prevProducts) =>
+        prevProducts.map((product) => {
+          const cartItem = cart.find((item) => item._id === product._id);
           if (cartItem) {
             return {
               ...product,
-              stock: product.stock - cartItem.quantity
+              stock: product.stock - cartItem.quantity,
             };
           }
           return product;
@@ -345,50 +369,96 @@ const POS: React.FC = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="flex items-center space-x-3">
             <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              <svg
+                className="w-6 h-6 text-white"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                />
               </svg>
             </div>
             <div>
-              <div className="text-2xl font-bold text-gray-900">{products.length}</div>
+              <div className="text-2xl font-bold text-gray-900">
+                {products.length}
+              </div>
               <div className="text-sm text-gray-600">Total Products</div>
             </div>
           </div>
           <div className="flex items-center space-x-3">
             <div className="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center flex-shrink-0">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              <svg
+                className="w-6 h-6 text-white"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 13l4 4L19 7"
+                />
               </svg>
             </div>
             <div>
               <div className="text-2xl font-bold text-gray-900">
-                {products.filter(p => p.stock > (p.minStock || 5)).length}
+                {products.filter((p) => p.stock > (p.minStock || 5)).length}
               </div>
               <div className="text-sm text-gray-600">In Stock</div>
             </div>
           </div>
           <div className="flex items-center space-x-3">
             <div className="w-12 h-12 bg-yellow-600 rounded-lg flex items-center justify-center flex-shrink-0">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              <svg
+                className="w-6 h-6 text-white"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
+                />
               </svg>
             </div>
             <div>
               <div className="text-2xl font-bold text-gray-900">
-                {products.filter(p => p.stock > 0 && p.stock <= (p.minStock || 5)).length}
+                {
+                  products.filter(
+                    (p) => p.stock > 0 && p.stock <= (p.minStock || 5)
+                  ).length
+                }
               </div>
               <div className="text-sm text-gray-600">Low Stock</div>
             </div>
           </div>
           <div className="flex items-center space-x-3">
             <div className="w-12 h-12 bg-red-600 rounded-lg flex items-center justify-center flex-shrink-0">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <svg
+                className="w-6 h-6 text-white"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             </div>
             <div>
               <div className="text-2xl font-bold text-gray-900">
-                {products.filter(p => p.stock === 0).length}
+                {products.filter((p) => p.stock === 0).length}
               </div>
               <div className="text-sm text-gray-600">Out of Stock</div>
             </div>
@@ -455,7 +525,10 @@ const POS: React.FC = () => {
                           "border border-gray-200 rounded-lg p-4 transition-shadow " +
                           (isExpired ? "bg-red-100 " : "") +
                           (product.stock === 0 ? "bg-gray-100 " : "") +
-                          (product.stock > 0 && product.stock <= (product.minStock || 5) ? "bg-yellow-100 " : "") +
+                          (product.stock > 0 &&
+                          product.stock <= (product.minStock || 5)
+                            ? "bg-yellow-100 "
+                            : "") +
                           (!isOutOfStock && !isExpired
                             ? "hover:shadow-md cursor-pointer"
                             : "opacity-60 cursor-not-allowed")
@@ -493,11 +566,12 @@ const POS: React.FC = () => {
                           </span>
                         </div>
                         {expiryDisplay}
-                        {product.stock > 0 && product.stock <= (product.minStock || 5) && (
-                          <div className="text-xs text-yellow-600 font-semibold mt-1">
-                            ⚠️ Low Stock Alert
-                          </div>
-                        )}
+                        {product.stock > 0 &&
+                          product.stock <= (product.minStock || 5) && (
+                            <div className="text-xs text-yellow-600 font-semibold mt-1">
+                              ⚠️ Low Stock Alert
+                            </div>
+                          )}
                       </div>
                     );
                   })}
@@ -665,140 +739,186 @@ const POS: React.FC = () => {
         <>
           {/* Inject print styles */}
           <style dangerouslySetInnerHTML={{ __html: printStyles }} />
-          
-                     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50 p-4">
-             <div className="bg-white rounded-lg shadow-lg w-full max-w-md relative receipt-print max-h-[90vh] overflow-y-auto">
-               <div className="p-8">
-            <button
-              className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 print:hidden"
-              onClick={() => setShowBill(false)}
-            >
-              &times;
-            </button>
-            
-            {/* Pharmacy Header */}
-            <div className="text-center mb-6 border-b-2 border-blue-600 pb-4">
-              {/* Logo Placeholder */}
-              <div className="w-16 h-16 bg-blue-600 rounded-full mx-auto mb-3 flex items-center justify-center">
-                <span className="text-white text-2xl font-bold">D</span>
-              </div>
-              <h1 className="text-2xl font-bold text-blue-800 mb-1">DRUGWELL PHARMACY</h1>
-              <p className="text-sm text-gray-600 font-medium">Your Health, Our Priority</p>
-              <div className="text-xs text-gray-500 mt-1">
-                {lastTransaction.branchAddress || "Professional Healthcare Services"}
-              </div>
-              <div className="text-xs text-gray-500 mt-1">
-                📞 Contact: +1 (555) 123-4567 | 📧 info@drugwell.com
-              </div>
-            </div>
 
-            {/* Customer & Transaction Info */}
-            <div className="mb-4">
-              <div className="flex justify-between items-start mb-3">
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-800">
-                    Customer: {lastTransaction.customer || "Walk-in Customer"}
-                  </h2>
-                  <p className="text-sm text-gray-600">
-                    Date: {new Date(lastTransaction.date).toLocaleDateString()}
+          <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50 p-4">
+            <div className="bg-white rounded-lg shadow-lg w-full max-w-md relative receipt-print max-h-[90vh] overflow-y-auto">
+              <div className="p-8">
+                <button
+                  className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 print:hidden"
+                  onClick={() => setShowBill(false)}
+                >
+                  &times;
+                </button>
+
+                {/* Pharmacy Header */}
+                <div className="text-center mb-6 border-b-2 border-blue-600 pb-4">
+                  {/* Logo */}
+                  <div className="w-20 h-20 mx-auto mb-3 flex items-center justify-center">
+                    <img
+                      src="/invoice_logo.jpg"
+                      alt="Drugwell Pharmacy Logo"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                  <h1 className="text-2xl font-bold text-blue-800 mb-1">
+                    DRUGWELL PHARMACY
+                  </h1>
+                  <p className="text-sm text-gray-600 font-medium">
+                    Your Health, Our Priority
                   </p>
-                  <p className="text-sm text-gray-600">
-                    Time: {new Date(lastTransaction.date).toLocaleTimeString()}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <div className="bg-blue-100 px-3 py-1 rounded-full">
-                    <span className="text-xs font-medium text-blue-800">
-                      Receipt #{lastTransaction.transactionId?.slice(-8) || "N/A"}
-                    </span>
+                  <div className="text-xs text-gray-500 mt-1 font-semibold">
+                    {lastTransaction.branchName || "Main Branch"}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {lastTransaction.branchAddress ||
+                      "Professional Healthcare Services"}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    📞 Contact:{" "}
+                    {lastTransaction.managerContact || "+1 (555) 123-4567"} | 📧
+                    info@drugwell.com
                   </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Items Table */}
-            <div className="mb-4">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b-2 border-gray-300">
-                    <th className="text-left py-2 font-semibold text-gray-700">Product</th>
-                    <th className="text-right py-2 font-semibold text-gray-700">Price</th>
-                    <th className="text-right py-2 font-semibold text-gray-700">Qty</th>
-                    <th className="text-right py-2 font-semibold text-gray-700">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lastTransaction.items.map((item: any, index: number) => (
-                    <tr key={item._id || index} className="border-b border-gray-100">
-                      <td className="py-2 text-gray-800">
-                        <div className="font-medium">{item.name}</div>
-                        {item.composition && (
-                          <div className="text-xs text-gray-500">{item.composition}</div>
-                        )}
-                      </td>
-                      <td className="text-right py-2 text-gray-700">${item.price.toFixed(2)}</td>
-                      <td className="text-right py-2 text-gray-700">{item.quantity}</td>
-                      <td className="text-right py-2 font-medium text-gray-800">
-                        ${(item.price * item.quantity).toFixed(2)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Total Section */}
-            <div className="border-t-2 border-gray-300 pt-3 mb-4">
-              <div className="flex justify-between items-center text-lg font-bold text-gray-800 mb-2">
-                <span>Total Amount:</span>
-                <span className="text-2xl text-blue-600">${lastTransaction.total.toFixed(2)}</span>
-              </div>
-              <div className="text-sm text-gray-600 mb-1">
-                Payment Method:{" "}
-                <span className="font-semibold text-gray-800">
-                  {lastTransaction.paymentMethod?.toUpperCase() || "CASH"}
-                </span>
-              </div>
-              {lastTransaction.additionalNote && (
-                <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
-                  <span className="font-medium">Note:</span> {lastTransaction.additionalNote}
+                {/* Transaction Info */}
+                <div className="mb-4">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <p className="text-sm text-gray-600">
+                        Date:{" "}
+                        {new Date(lastTransaction.date).toLocaleDateString()}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        Time:{" "}
+                        {new Date(lastTransaction.date).toLocaleTimeString()}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <div className="bg-blue-100 px-3 py-1 rounded-full">
+                        <span className="text-xs font-medium text-blue-800">
+                          Receipt #
+                          {lastTransaction.transactionId?.slice(-8) || "N/A"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
 
-            {/* Footer */}
-            <div className="text-center border-t border-gray-200 pt-4">
-              <div className="text-sm text-gray-600 mb-3">
-                <p className="font-semibold text-blue-800">Thank you for choosing Drugwell Pharmacy!</p>
-                <p className="mt-1">We appreciate your trust in our healthcare services</p>
-                <p className="mt-1">For any queries, please contact our customer service</p>
-              </div>
-              <div className="text-xs text-gray-500 space-y-1">
-                <p>Cashier: {lastTransaction.cashierName || "Staff"}</p>
-                {/* <p>Branch: {user?.branchId || "Main Branch"}</p> */}
-                <p>Transaction ID: {lastTransaction.transactionId || "N/A"}</p>
-                <p className="mt-3 text-gray-400">This is a computer generated receipt</p>
-                <p className="text-gray-400">Valid for returns/exchanges within 30 days</p>
+                {/* Items Table */}
+                <div className="mb-4">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b-2 border-gray-300">
+                        <th className="text-left py-2 font-semibold text-gray-700">
+                          Product
+                        </th>
+                        <th className="text-right py-2 font-semibold text-gray-700">
+                          Price
+                        </th>
+                        <th className="text-right py-2 font-semibold text-gray-700">
+                          Qty
+                        </th>
+                        <th className="text-right py-2 font-semibold text-gray-700">
+                          Total
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lastTransaction.items.map((item: any, index: number) => (
+                        <tr
+                          key={item._id || index}
+                          className="border-b border-gray-100"
+                        >
+                          <td className="py-2 text-gray-800">
+                            <div className="font-medium">{item.name}</div>
+                            {item.composition && (
+                              <div className="text-xs text-gray-500">
+                                {item.composition}
+                              </div>
+                            )}
+                          </td>
+                          <td className="text-right py-2 text-gray-700">
+                            ${item.price.toFixed(2)}
+                          </td>
+                          <td className="text-right py-2 text-gray-700">
+                            {item.quantity}
+                          </td>
+                          <td className="text-right py-2 font-medium text-gray-800">
+                            ${(item.price * item.quantity).toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Total Section */}
+                <div className="border-t-2 border-gray-300 pt-3 mb-4">
+                  <div className="flex justify-between items-center text-lg font-bold text-gray-800 mb-2">
+                    <span>Total Amount:</span>
+                    <span className="text-2xl text-blue-600">
+                      ${lastTransaction.total.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-600 mb-1">
+                    Payment Method:{" "}
+                    <span className="font-semibold text-gray-800">
+                      {lastTransaction.paymentMethod?.toUpperCase() || "CASH"}
+                    </span>
+                  </div>
+                  {lastTransaction.additionalNote && (
+                    <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
+                      <span className="font-medium">Note:</span>{" "}
+                      {lastTransaction.additionalNote}
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="text-center border-t border-gray-200 pt-4">
+                  <div className="text-sm text-gray-600 mb-3">
+                    <p className="font-semibold text-blue-800">
+                      Thank you for choosing Drugwell Pharmacy!
+                    </p>
+                    <p className="mt-1">
+                      We appreciate your trust in our healthcare services
+                    </p>
+                    <p className="mt-1">
+                      For any queries, please contact our customer service
+                    </p>
+                  </div>
+                  <div className="text-xs text-gray-500 space-y-1">
+                    <p>Cashier: {lastTransaction.cashierName || "Staff"}</p>
+                    <p>Branch: {lastTransaction.branchName || "Main Branch"}</p>
+                    <p>
+                      Transaction ID: {lastTransaction.transactionId || "N/A"}
+                    </p>
+                    <p className="mt-3 text-gray-400">
+                      This is a computer generated receipt
+                    </p>
+                    <p className="text-gray-400">
+                      Valid for returns/exchanges within 30 days
+                    </p>
+                  </div>
+                </div>
+
+                {/* Print Button */}
+                <div className="text-center mt-6 print-hidden">
+                  <button
+                    className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-md"
+                    onClick={() => {
+                      window.print();
+                      setShowBill(false);
+                    }}
+                  >
+                    🖨️ Print Receipt
+                  </button>
+                </div>
               </div>
             </div>
-
-                         {/* Print Button */}
-             <div className="text-center mt-6 print-hidden">
-               <button
-                 className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-md"
-                 onClick={() => {
-                   window.print();
-                   setShowBill(false);
-                 }}
-               >
-                 🖨️ Print Receipt
-               </button>
-             </div>
-               </div>
-             </div>
-           </div>
-         </>
-       )}
+          </div>
+        </>
+      )}
     </div>
   );
 };
