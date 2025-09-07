@@ -19,6 +19,7 @@ interface Product {
   id: string;
   name: string;
   price: number;
+  unitPrice?: number; // Unit price for individual tablets
   stock: number;
   category: string;
   manufacturer?: string;
@@ -29,6 +30,7 @@ interface Product {
 
 interface CartItem extends Product {
   quantity: number;
+  isUnitPurchase?: boolean; // Whether this item was purchased by unit or full pack
 }
 
 const POS: React.FC = () => {
@@ -46,6 +48,10 @@ const POS: React.FC = () => {
     () => localStorage.getItem("cashierName") || ""
   );
   const [branchInfo, setBranchInfo] = useState<any>(null);
+  const [showPurchaseTypeModal, setShowPurchaseTypeModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [showUnitQuantityModal, setShowUnitQuantityModal] = useState(false);
+  const [unitQuantity, setUnitQuantity] = useState(1);
 
   // Print styles for receipt
   const printStyles = `
@@ -137,31 +143,39 @@ const POS: React.FC = () => {
   );
 
   const addToCart = (product: Product) => {
-    const existingItem = cart.find((item) => item._id === product._id);
+    // Always show purchase type selection modal for all products
+    setSelectedProduct(product);
+    setShowPurchaseTypeModal(true);
+  };
+
+  const addToCartDirect = (product: Product, isUnitPurchase: boolean, quantity: number = 1) => {
+    const existingItem = cart.find((item) => item._id === product._id && item.isUnitPurchase === isUnitPurchase);
+    
     if (existingItem) {
-      if (existingItem.quantity < product.stock) {
+      const maxStock = isUnitPurchase ? product.stock : product.stock;
+      if (existingItem.quantity + quantity <= maxStock) {
         setCart(
           cart.map((item) =>
-            item._id === product._id
-              ? { ...item, quantity: item.quantity + 1 }
+            item._id === product._id && item.isUnitPurchase === isUnitPurchase
+              ? { ...item, quantity: item.quantity + quantity }
               : item
           )
         );
       } else {
         Swal.fire({
           title: "Stock Limit Reached",
-          text: `Cannot add more ${product.name}. Only ${product.stock} available in stock.`,
+          text: `Cannot add ${quantity} more ${product.name}. Only ${maxStock - existingItem.quantity} available in stock.`,
           icon: "warning",
           confirmButtonText: "OK",
         });
       }
     } else {
-      if (product.stock > 0) {
-        setCart([...cart, { ...product, quantity: 1 }]);
+      if (product.stock >= quantity) {
+        setCart([...cart, { ...product, quantity: quantity, isUnitPurchase }]);
       } else {
         Swal.fire({
-          title: "Out of Stock",
-          text: `${product.name} is out of stock.`,
+          title: "Insufficient Stock",
+          text: `Cannot add ${quantity} ${product.name}. Only ${product.stock} available in stock.`,
           icon: "error",
           confirmButtonText: "OK",
         });
@@ -169,14 +183,18 @@ const POS: React.FC = () => {
     }
   };
 
-  const updateQuantity = (_id: string, quantity: number) => {
+  const updateQuantity = (_id: string, quantity: number, isUnitPurchase?: boolean) => {
     if (quantity === 0) {
-      setCart(cart.filter((item) => item._id !== _id));
+      setCart(cart.filter((item) => !(item._id === _id && item.isUnitPurchase === isUnitPurchase)));
     } else {
       const product = products.find((p) => p._id === _id);
       if (product && quantity <= product.stock) {
         setCart(
-          cart.map((item) => (item._id === _id ? { ...item, quantity } : item))
+          cart.map((item) => 
+            item._id === _id && item.isUnitPurchase === isUnitPurchase 
+              ? { ...item, quantity } 
+              : item
+          )
         );
       } else if (product && quantity > product.stock) {
         Swal.fire({
@@ -189,12 +207,15 @@ const POS: React.FC = () => {
     }
   };
 
-  const removeFromCart = (_id: string) => {
-    setCart(cart.filter((item) => item._id !== _id));
+  const removeFromCart = (_id: string, isUnitPurchase?: boolean) => {
+    setCart(cart.filter((item) => !(item._id === _id && item.isUnitPurchase === isUnitPurchase)));
   };
 
   const getTotalAmount = () => {
-    return cart.reduce((total, item) => total + item.price * item.quantity, 0);
+    return cart.reduce((total, item) => {
+      const price = item.isUnitPurchase && item.unitPrice ? item.unitPrice : item.price;
+      return total + price * item.quantity;
+    }, 0);
   };
 
   const getTotalItems = () => {
@@ -549,9 +570,16 @@ const POS: React.FC = () => {
                           {product.category}
                         </p>
                         <div className="flex justify-between items-center mb-1">
-                          <span className="text-lg font-bold text-blue-600">
-                            ${product.price}
-                          </span>
+                          <div className="flex flex-col">
+                            <span className="text-lg font-bold text-blue-600">
+                              ${product.price}
+                            </span>
+                            {product.unitPrice && product.unitPrice > 0 && (
+                              <span className="text-xs text-green-600 font-medium">
+                                ${product.unitPrice} per unit
+                              </span>
+                            )}
+                          </div>
                           <span
                             className={
                               "text-xs font-semibold " +
@@ -598,52 +626,62 @@ const POS: React.FC = () => {
               {cart.length === 0 ? (
                 <p className="text-gray-500 text-center py-4">Cart is empty</p>
               ) : (
-                cart.map((item) => (
-                  <div
-                    key={item._id}
-                    className="flex items-center justify-between border-b border-gray-100 pb-3"
-                  >
-                    <div className="flex-1">
-                      <h4 className="text-sm font-medium text-gray-900">
-                        {item.name}
-                      </h4>
-                      <p className="text-xs text-gray-500">
-                        ${item.price} each
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        Stock: {item.stock - item.quantity} remaining
-                      </p>
+                cart.map((item, index) => {
+                  const currentPrice = item.isUnitPurchase && item.unitPrice ? item.unitPrice : item.price;
+                  const priceLabel = item.isUnitPurchase ? "per unit" : "per pack";
+                  
+                  return (
+                    <div
+                      key={`${item._id}-${item.isUnitPurchase ? 'unit' : 'pack'}-${index}`}
+                      className="flex items-center justify-between border-b border-gray-100 pb-3"
+                    >
+                      <div className="flex-1">
+                        <h4 className="text-sm font-medium text-gray-900">
+                          {item.name}
+                        </h4>
+                        <p className="text-xs text-gray-500">
+                          ${currentPrice.toFixed(2)} {priceLabel}
+                        </p>
+                        {item.isUnitPurchase && (
+                          <p className="text-xs text-blue-600 font-medium">
+                            Unit Purchase
+                          </p>
+                        )}
+                        <p className="text-xs text-gray-400">
+                          Stock: {item.stock - item.quantity} remaining
+                        </p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() =>
+                            updateQuantity(item._id, item.quantity - 1, item.isUnitPurchase)
+                          }
+                          className="p-1 rounded-full hover:bg-gray-100"
+                        >
+                          <Minus className="h-3 w-3" />
+                        </button>
+                        <span className="text-sm font-medium w-8 text-center">
+                          {item.quantity}
+                        </span>
+                        <button
+                          onClick={() =>
+                            updateQuantity(item._id, item.quantity + 1, item.isUnitPurchase)
+                          }
+                          className="p-1 rounded-full hover:bg-gray-100"
+                          disabled={item.quantity >= item.stock}
+                        >
+                          <Plus className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={() => removeFromCart(item._id, item.isUnitPurchase)}
+                          className="p-1 rounded-full hover:bg-red-100 text-red-600"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() =>
-                          updateQuantity(item._id, item.quantity - 1)
-                        }
-                        className="p-1 rounded-full hover:bg-gray-100"
-                      >
-                        <Minus className="h-3 w-3" />
-                      </button>
-                      <span className="text-sm font-medium w-8 text-center">
-                        {item.quantity}
-                      </span>
-                      <button
-                        onClick={() =>
-                          updateQuantity(item._id, item.quantity + 1)
-                        }
-                        className="p-1 rounded-full hover:bg-gray-100"
-                        disabled={item.quantity >= item.stock}
-                      >
-                        <Plus className="h-3 w-3" />
-                      </button>
-                      <button
-                        onClick={() => removeFromCart(item._id)}
-                        className="p-1 rounded-full hover:bg-red-100 text-red-600"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
 
@@ -824,30 +862,40 @@ const POS: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {lastTransaction.items.map((item: any, index: number) => (
-                        <tr
-                          key={item._id || index}
-                          className="border-b border-gray-100"
-                        >
-                          <td className="py-2 text-gray-800">
-                            <div className="font-medium">{item.name}</div>
-                            {item.composition && (
-                              <div className="text-xs text-gray-500">
-                                {item.composition}
-                              </div>
-                            )}
-                          </td>
-                          <td className="text-right py-2 text-gray-700">
-                            ${item.price.toFixed(2)}
-                          </td>
-                          <td className="text-right py-2 text-gray-700">
-                            {item.quantity}
-                          </td>
-                          <td className="text-right py-2 font-medium text-gray-800">
-                            ${(item.price * item.quantity).toFixed(2)}
-                          </td>
-                        </tr>
-                      ))}
+                      {lastTransaction.items.map((item: any, index: number) => {
+                        const currentPrice = item.isUnitPurchase && item.unitPrice ? item.unitPrice : item.price;
+                        const priceLabel = item.isUnitPurchase ? " (per unit)" : " (per pack)";
+                        
+                        return (
+                          <tr
+                            key={item._id || index}
+                            className="border-b border-gray-100"
+                          >
+                            <td className="py-2 text-gray-800">
+                              <div className="font-medium">{item.name}</div>
+                              {item.isUnitPurchase && (
+                                <div className="text-xs text-blue-600 font-medium">
+                                  Unit Purchase
+                                </div>
+                              )}
+                              {item.composition && (
+                                <div className="text-xs text-gray-500">
+                                  {item.composition}
+                                </div>
+                              )}
+                            </td>
+                            <td className="text-right py-2 text-gray-700">
+                              ${currentPrice.toFixed(2)}{priceLabel}
+                            </td>
+                            <td className="text-right py-2 text-gray-700">
+                              {item.quantity}
+                            </td>
+                            <td className="text-right py-2 font-medium text-gray-800">
+                              ${(currentPrice * item.quantity).toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -918,6 +966,184 @@ const POS: React.FC = () => {
             </div>
           </div>
         </>
+      )}
+
+      {/* Purchase Type Selection Modal */}
+      {showPurchaseTypeModal && selectedProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-md">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Select Purchase Type
+              </h3>
+              <p className="text-sm text-gray-600 mb-6">
+                How would you like to purchase <strong>{selectedProduct.name}</strong>?
+                {!selectedProduct.unitPrice || selectedProduct.unitPrice === 0 ? (
+                  <span className="block text-xs text-gray-500 mt-1">
+                    (This product is only available as a full pack)
+                  </span>
+                ) : null}
+              </p>
+              
+              <div className="space-y-4">
+                {/* Full Pack Option */}
+                <button
+                  onClick={() => {
+                    addToCartDirect(selectedProduct, false, 1);
+                    setShowPurchaseTypeModal(false);
+                    setSelectedProduct(null);
+                  }}
+                  className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors text-left"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium text-gray-900">Full Pack</div>
+                      <div className="text-sm text-gray-600">
+                        ${selectedProduct.price.toFixed(2)} per pack
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {selectedProduct.stock} packs available
+                      </div>
+                    </div>
+                    <div className="text-2xl">📦</div>
+                  </div>
+                </button>
+
+                {/* Unit Purchase Option - Only show if product has unitPrice */}
+                {selectedProduct.unitPrice && selectedProduct.unitPrice > 0 && (
+                  <button
+                    onClick={() => {
+                      setUnitQuantity(1);
+                      setShowPurchaseTypeModal(false);
+                      setShowUnitQuantityModal(true);
+                    }}
+                    className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition-colors text-left"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-gray-900">Individual Units</div>
+                        <div className="text-sm text-gray-600">
+                          ${selectedProduct.unitPrice.toFixed(2)} per unit
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {selectedProduct.stock} units available
+                        </div>
+                      </div>
+                      <div className="text-2xl">💊</div>
+                    </div>
+                  </button>
+                )}
+              </div>
+
+              <div className="flex justify-end mt-6">
+                <button
+                  onClick={() => {
+                    setShowPurchaseTypeModal(false);
+                    setSelectedProduct(null);
+                  }}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unit Quantity Selection Modal */}
+      {showUnitQuantityModal && selectedProduct && selectedProduct.unitPrice && selectedProduct.unitPrice > 0 && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-md">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Add Units to Cart
+              </h3>
+              <p className="text-sm text-gray-600 mb-6">
+                How many units of <strong>{selectedProduct.name}</strong> do you want to add?
+              </p>
+              
+              <div className="mb-6">
+                <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Unit Price:</span>
+                    <span className="font-semibold text-green-600">
+                      ${selectedProduct.unitPrice?.toFixed(2) || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center mt-2">
+                    <span className="text-sm text-gray-600">Available Stock:</span>
+                    <span className="font-semibold text-blue-600">
+                      {selectedProduct.stock} units
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-center space-x-4">
+                  <button
+                    onClick={() => setUnitQuantity(Math.max(1, unitQuantity - 1))}
+                    className="w-10 h-10 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center"
+                    disabled={unitQuantity <= 1}
+                  >
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  
+                  <input
+                    type="number"
+                    min="1"
+                    max={selectedProduct.stock}
+                    value={unitQuantity}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value) || 1;
+                      setUnitQuantity(Math.max(1, Math.min(selectedProduct.stock, value)));
+                    }}
+                    className="w-20 text-center text-lg font-semibold border border-gray-300 rounded-md py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  
+                  <button
+                    onClick={() => setUnitQuantity(Math.min(selectedProduct.stock, unitQuantity + 1))}
+                    className="w-10 h-10 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center"
+                    disabled={unitQuantity >= selectedProduct.stock}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+                
+                <div className="text-center mt-4">
+                  <div className="text-sm text-gray-600">
+                    Total: <span className="font-semibold text-lg text-green-600">
+                      ${((selectedProduct.unitPrice || 0) * unitQuantity).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => {
+                    setShowUnitQuantityModal(false);
+                    setSelectedProduct(null);
+                    setUnitQuantity(1);
+                  }}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    addToCartDirect(selectedProduct, true, unitQuantity);
+                    setShowUnitQuantityModal(false);
+                    setSelectedProduct(null);
+                    setUnitQuantity(1);
+                  }}
+                  className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                >
+                  Add to Cart
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

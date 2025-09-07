@@ -26,6 +26,8 @@ interface Product {
   stock: number;
   minStock: number;
   price: number;
+  unitPrice?: number;
+  units?: string;
   supplier: string;
   supplierId?: string;
   expiryDate: string;
@@ -63,6 +65,8 @@ const AdminInventoryManagement: React.FC = () => {
     stock: 0,
     minStock: 0,
     price: 0,
+    unitPrice: 0,
+    units: "pieces",
     purchasePriceExclVAT: 0,
     retailPriceVATIncluded: 0,
     vat: 0,
@@ -239,6 +243,12 @@ const AdminInventoryManagement: React.FC = () => {
         category: "",
       };
 
+      // Debug logging to verify unitPrice and units are included
+      console.log("AdminInventoryManagement - Form data:", formData);
+      console.log("AdminInventoryManagement - Submit data:", submitData);
+      console.log("AdminInventoryManagement - unitPrice:", submitData.unitPrice);
+      console.log("AdminInventoryManagement - units:", submitData.units);
+
       if (editingProduct) {
         // Update existing product
         await apiEndpoints.updateInventory(editingProduct.id, submitData);
@@ -264,6 +274,8 @@ const AdminInventoryManagement: React.FC = () => {
         stock: 0,
         minStock: 0,
         price: 0,
+        unitPrice: 0,
+        units: "pieces",
         purchasePriceExclVAT: 0,
         retailPriceVATIncluded: 0,
         vat: 0,
@@ -297,6 +309,8 @@ const AdminInventoryManagement: React.FC = () => {
       stock: product.stock,
       minStock: product.minStock,
       price: product.price,
+      unitPrice: product.unitPrice || 0,
+      units: product.units || "pieces",
       purchasePriceExclVAT: product.purchasePriceExclVAT || 0,
       retailPriceVATIncluded: product.retailPriceVATIncluded || product.price,
       vat: product.vat || 0,
@@ -503,6 +517,8 @@ const AdminInventoryManagement: React.FC = () => {
                   stock: 0,
                   minStock: 0,
                   price: 0,
+                  unitPrice: 0,
+                  units: "pieces",
                   purchasePriceExclVAT: 0,
                   retailPriceVATIncluded: 0,
                   vat: 0,
@@ -844,6 +860,33 @@ const AdminInventoryManagement: React.FC = () => {
                     value={formData.price}
                     onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Unit Price
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.unitPrice}
+                    onChange={(e) => setFormData({ ...formData, unitPrice: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Units
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.units}
+                    onChange={(e) => setFormData({ ...formData, units: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="pieces, tablets, bottles, etc."
                   />
                 </div>
                 

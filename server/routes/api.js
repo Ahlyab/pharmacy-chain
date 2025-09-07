@@ -626,6 +626,8 @@ router.get("/billing", authenticate, async (req, res) => {
 // Inventory Routes
 router.post("/inventory", authenticate, async (req, res) => {
   console.log("POST /inventory body:", req.body);
+  console.log("POST /inventory - unitPrice:", req.body.unitPrice);
+  console.log("POST /inventory - units:", req.body.units);
   try {
     const requiredFields = [
       "name",
@@ -649,6 +651,8 @@ router.post("/inventory", authenticate, async (req, res) => {
       stock: Number(req.body.stock),
       minStock: Number(req.body.minStock),
       price: Number(req.body.price),
+      unitPrice: Number(req.body.unitPrice) || 0,
+      units: req.body.units || "pieces",
       supplier: req.body.supplier,
       supplierId: req.body.supplierId, // Include supplierId if provided
       expiryDate: new Date(req.body.expiryDate),
@@ -671,11 +675,12 @@ router.post("/inventory", authenticate, async (req, res) => {
     if (
       isNaN(inventoryData.stock) ||
       isNaN(inventoryData.minStock) ||
-      isNaN(inventoryData.price)
+      isNaN(inventoryData.price) ||
+      isNaN(inventoryData.unitPrice)
     ) {
       return res
         .status(400)
-        .json({ error: "Stock, minStock, and price must be numbers" });
+        .json({ error: "Stock, minStock, price, and unitPrice must be numbers" });
     }
     // Validate date
     if (isNaN(inventoryData.expiryDate.getTime())) {
@@ -683,8 +688,12 @@ router.post("/inventory", authenticate, async (req, res) => {
     }
 
     console.log("POST /inventory body:", inventoryData);
+    console.log("POST /inventory - inventoryData unitPrice:", inventoryData.unitPrice);
+    console.log("POST /inventory - inventoryData units:", inventoryData.units);
     const inventory = new Inventory(inventoryData);
     await inventory.save();
+    console.log("POST /inventory - Saved inventory unitPrice:", inventory.unitPrice);
+    console.log("POST /inventory - Saved inventory units:", inventory.units);
 
     // Log the action
     await logInventoryAction(
@@ -697,6 +706,8 @@ router.post("/inventory", authenticate, async (req, res) => {
         stock: inventory.stock,
         minStock: inventory.minStock,
         price: inventory.price,
+        unitPrice: inventory.unitPrice,
+        units: inventory.units,
         supplier: inventory.supplier,
         expiryDate: inventory.expiryDate,
         branchId: inventory.branchId,
@@ -1103,6 +1114,8 @@ router.post("/inventory/import", authenticate, async (req, res) => {
       stock: Number(product.stock || product.Quantity || 0),
       minStock: Number(product.minStock || 0),
       price: Number(product.price || product["Retail price VAT included"] || 0),
+      unitPrice: Number(product.unitPrice || product["Unit Price"] || 0),
+      units: product.units || product.Units || "pieces",
       supplier: product.supplier || product["Supplier name"] || "",
       expiryDate: product.expiryDate
         ? new Date(product.expiryDate)
@@ -1473,6 +1486,8 @@ router.post(
             stock: importedProduct.stock,
             minStock: importedProduct.minStock,
             price: importedProduct.retailPriceVATIncluded, // Use VAT included price
+            unitPrice: importedProduct.unitPrice || 0,
+            units: importedProduct.units || "pieces",
             supplier: importedProduct.supplier, // Keep supplier name for display
             supplierId: importedProduct.supplierId, // Store supplier MongoDB ID
             expiryDate: importedProduct.expiryDate,

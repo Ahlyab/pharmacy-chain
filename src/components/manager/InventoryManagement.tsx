@@ -13,6 +13,8 @@ interface Product {
   stock: number;
   minStock: number;
   price: number;
+  unitPrice?: number; // Unit price field
+  units?: string; // Unit of measurement (tablets, bottles, boxes, etc.)
   supplier: string;
   supplierId?: string; // MongoDB supplier ID reference
   expiryDate: string;
@@ -38,6 +40,8 @@ interface FormProduct {
   stock: number;
   minStock: number;
   price: number;
+  unitPrice?: number; // Unit price field
+  units?: string; // Unit of measurement (tablets, bottles, boxes, etc.)
   supplier: string;
   supplierId?: string; // MongoDB supplier ID reference
   expiryDate: string;
@@ -72,6 +76,8 @@ const initialFormState: FormProduct = {
   stock: 0,
   minStock: 0,
   price: 0,
+  unitPrice: 0, // Initialize unit price
+  units: "pieces", // Initialize units
   supplier: "",
   supplierId: "",
   expiryDate: "",
@@ -118,7 +124,7 @@ const InventoryManagement: React.FC = () => {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   // Helper to add status to a product
-  const addStatus = (product: any) => {
+  const addStatus = (product: any): Product => {
     let status: "In Stock" | "Low Stock" | "Out of Stock";
     if (product.stock === 0) status = "Out of Stock";
     else if (product.stock <= product.minStock) status = "Low Stock";
@@ -279,6 +285,8 @@ const InventoryManagement: React.FC = () => {
       supplier: product.supplier,
       supplierId: product.supplierId || "",
       price: product.price,
+      unitPrice: product.unitPrice || 0,
+      units: product.units || "pieces",
       purchasePriceExclVAT: product.purchasePriceExclVAT || 0,
       retailPriceVATIncluded:
         product.retailPriceVATIncluded || product.price || 0,
@@ -648,6 +656,8 @@ const InventoryManagement: React.FC = () => {
         composition: formData.composition || "",
         series: formData.series || "",
         reservedQuantity: formData.reservedQuantity || 0,
+        unitPrice: formData.unitPrice || 0,
+        units: formData.units || "pieces",
         purchasePriceExclVAT: formData.purchasePriceExclVAT || 0,
         vat: formData.vat || 0,
         retailPriceVATIncluded:
@@ -679,6 +689,8 @@ const InventoryManagement: React.FC = () => {
           composition: submitData.composition || "",
           series: submitData.series || "",
           reservedQuantity: submitData.reservedQuantity || 0,
+          unitPrice: submitData.unitPrice || 0,
+          units: submitData.units || "pieces",
           purchasePriceExclVAT: submitData.purchasePriceExclVAT || 0,
           vat: submitData.vat || 0,
           retailPriceVATIncluded:
@@ -753,6 +765,7 @@ const InventoryManagement: React.FC = () => {
                   "stock",
                   "minStock",
                   "price",
+                  "unitPrice",
                   "reservedQuantity",
                   "purchasePriceExclVAT",
                   "vat",
@@ -910,8 +923,9 @@ const InventoryManagement: React.FC = () => {
         const cleanSubmitData = Object.fromEntries(
           Object.entries(submitData)
             .filter(
-              ([_, value]) =>
-                value !== undefined && value !== null && value !== ""
+              ([key, value]) =>
+                value !== undefined && value !== null && value !== "" ||
+                key === "unitPrice" || key === "units" // Always include unitPrice and units
             )
             .map(([key, value]) => {
               // Convert numeric fields to numbers
@@ -920,6 +934,7 @@ const InventoryManagement: React.FC = () => {
                   "stock",
                   "minStock",
                   "price",
+                  "unitPrice",
                   "reservedQuantity",
                   "purchasePriceExclVAT",
                   "vat",
@@ -983,6 +998,8 @@ const InventoryManagement: React.FC = () => {
         );
 
         console.log("Final clean submit data:", cleanSubmitData);
+        console.log("Manager InventoryManagement - unitPrice:", cleanSubmitData.unitPrice);
+        console.log("Manager InventoryManagement - units:", cleanSubmitData.units);
 
         // Log data types for debugging
         console.log("Data types being sent:");
@@ -1041,6 +1058,8 @@ const InventoryManagement: React.FC = () => {
       stock: product.stock,
       minStock: product.minStock,
       price: product.price,
+      unitPrice: product.unitPrice || 0,
+      units: product.units || "pieces",
       supplier: product.supplier,
       supplierId: product.supplierId || "", // Ensure supplierId is populated
       expiryDate: expiryDate,
@@ -1208,6 +1227,10 @@ const InventoryManagement: React.FC = () => {
           valA = a.stock;
           valB = b.stock;
           break;
+        case "units":
+          valA = (a.units || "pieces").toLowerCase();
+          valB = (b.units || "pieces").toLowerCase();
+          break;
         case "minStock":
           valA = a.minStock;
           valB = b.minStock;
@@ -1289,6 +1312,18 @@ const InventoryManagement: React.FC = () => {
       label: "Min Stock",
       inputType: "number",
       isRequired: true,
+    },
+    {
+      key: "units",
+      label: "Units",
+      inputType: "text",
+      isRequired: false,
+    },
+    {
+      key: "unitPrice",
+      label: "Unit Price ($)",
+      inputType: "number",
+      isRequired: false,
     },
     {
       key: "price",
@@ -1497,6 +1532,14 @@ const InventoryManagement: React.FC = () => {
                   </th>
                   <th
                     className="px-4 py-2 text-left cursor-pointer select-none hover:bg-blue-100 transition-colors"
+                    onClick={() => handleSort("units")}
+                  >
+                    Units{" "}
+                    {sortColumn === "units" &&
+                      (sortDirection === "asc" ? "▲" : "▼")}
+                  </th>
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none hover:bg-blue-100 transition-colors"
                     onClick={() => handleSort("minStock")}
                   >
                     Min Stock{" "}
@@ -1549,7 +1592,7 @@ const InventoryManagement: React.FC = () => {
               <tbody>
                 {sortedProducts.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="text-center py-4">
+                    <td colSpan={11} className="text-center py-4">
                       No products found.
                     </td>
                   </tr>
@@ -1568,6 +1611,9 @@ const InventoryManagement: React.FC = () => {
                         )}
                       </td>
                       <td className="px-4 py-2 text-left">{product.stock}</td>
+                      <td className="px-4 py-2 text-left">
+                        {product.units || "pieces"}
+                      </td>
                       <td className="px-4 py-2 text-left">
                         {product.minStock}
                       </td>
