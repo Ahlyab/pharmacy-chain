@@ -15,6 +15,8 @@ interface Product {
   price: number;
   unitPrice?: number; // Unit price field
   units?: string; // Unit of measurement (tablets, bottles, boxes, etc.)
+  shelfStock?: number; // Stock on shelf/display
+  unitsPerPack?: number; // Number of units per pack
   supplier: string;
   supplierId?: string; // MongoDB supplier ID reference
   expiryDate: string;
@@ -42,6 +44,8 @@ interface FormProduct {
   price: number;
   unitPrice?: number; // Unit price field
   units?: string; // Unit of measurement (tablets, bottles, boxes, etc.)
+  shelfStock?: number; // Stock on shelf/display
+  unitsPerPack?: number; // Number of units per pack
   supplier: string;
   supplierId?: string; // MongoDB supplier ID reference
   expiryDate: string;
@@ -78,6 +82,8 @@ const initialFormState: FormProduct = {
   price: 0,
   unitPrice: 0, // Initialize unit price
   units: "pieces", // Initialize units
+  shelfStock: 0, // Initialize shelf stock
+  unitsPerPack: 1, // Initialize per pack unit
   supplier: "",
   supplierId: "",
   expiryDate: "",
@@ -287,6 +293,7 @@ const InventoryManagement: React.FC = () => {
       price: product.price,
       unitPrice: product.unitPrice || 0,
       units: product.units || "pieces",
+      unitsPerPack: product.unitsPerPack || 1,
       purchasePriceExclVAT: product.purchasePriceExclVAT || 0,
       retailPriceVATIncluded:
         product.retailPriceVATIncluded || product.price || 0,
@@ -512,76 +519,208 @@ const InventoryManagement: React.FC = () => {
       );
 
       if (existingProduct && !editingProduct) {
-        // Product exists, ask user if they want to update stock or create new
+        // Product exists, populate form with existing product details
+        let expiryDate = existingProduct.expiryDate;
+        if (expiryDate && expiryDate.length > 10) {
+          expiryDate = new Date(expiryDate).toISOString().slice(0, 10);
+        }
+
+        // Populate form with existing product details
+        setFormData({
+          id: existingProduct.id,
+          name: existingProduct.name,
+          category: "", // Set empty category since we removed it from UI
+          stock: existingProduct.stock,
+          minStock: existingProduct.minStock,
+          price: existingProduct.price,
+          unitPrice: existingProduct.unitPrice || 0,
+          units: existingProduct.units || "pieces",
+          shelfStock: existingProduct.shelfStock || 0,
+          unitsPerPack: existingProduct.unitsPerPack || 1,
+          supplier: existingProduct.supplier,
+          supplierId: existingProduct.supplierId || "",
+          expiryDate: expiryDate,
+          // New fields
+          store: existingProduct.store || "",
+          manufacturer: existingProduct.manufacturer || "",
+          composition: existingProduct.composition || "",
+          series: existingProduct.series || "",
+          reservedQuantity: existingProduct.reservedQuantity || 0,
+          purchasePriceExclVAT: existingProduct.purchasePriceExclVAT || 0,
+          vat: existingProduct.vat || 0,
+          retailPriceVATIncluded:
+            existingProduct.retailPriceVATIncluded || existingProduct.price || 0,
+        });
+
+        setSupplierSearch(existingProduct.supplier);
+        setProductSearch(existingProduct.name);
+        setShowSupplierDropdown(false);
+        setShowProductDropdown(false);
+        setEditingProduct(existingProduct);
+
+        // Show confirmation dialog with existing product details
         const result = await Swal.fire({
           title: "Product Already Exists",
-          text: `A product with name "${formData.name}" already exists. Would you like to add stock to the existing product or create a new one?`,
-          icon: "question",
+          html: `
+            <div class="text-left">
+              <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                <h4 style="margin: 0 0 10px 0; color: #2c3e50;">📦 Product Details</h4>
+                <p style="margin: 5px 0;"><strong>Product Name:</strong> ${existingProduct.name}</p>
+                <p style="margin: 5px 0;"><strong>Manufacturer:</strong> ${existingProduct.manufacturer || "N/A"}</p>
+                <p style="margin: 5px 0;"><strong>Composition:</strong> ${existingProduct.composition || "N/A"}</p>
+                <p style="margin: 5px 0;"><strong>Series:</strong> ${existingProduct.series || "N/A"}</p>
+              </div>
+              
+              <div style="background: #e8f4fd; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                <h4 style="margin: 0 0 10px 0; color: #2c3e50;">📊 Stock & Pricing</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                  <div>
+                    <p style="margin: 5px 0;"><strong>Current Stock:</strong> ${existingProduct.stock}</p>
+                    <p style="margin: 5px 0;"><strong>Shelf Stock:</strong> ${existingProduct.shelfStock || 0}</p>
+                    <p style="margin: 5px 0;"><strong>Min Stock:</strong> ${existingProduct.minStock}</p>
+                    <p style="margin: 5px 0;"><strong>Units:</strong> ${existingProduct.units || "pieces"}</p>
+                    <p style="margin: 5px 0;"><strong>Per Pack Unit:</strong> ${existingProduct.unitsPerPack || 1}</p>
+                  </div>
+                  <div>
+                    <p style="margin: 5px 0;"><strong>Selling Price:</strong> $${existingProduct.price}</p>
+                    <p style="margin: 5px 0;"><strong>Unit Price:</strong> $${existingProduct.unitPrice || 0}</p>
+                    <p style="margin: 5px 0;"><strong>Cost Price:</strong> $${existingProduct.purchasePriceExclVAT || 0}</p>
+                    <p style="margin: 5px 0;"><strong>Retail Price (VAT):</strong> $${existingProduct.retailPriceVATIncluded || existingProduct.price}</p>
+                    <p style="margin: 5px 0;"><strong>VAT:</strong> ${existingProduct.vat || 0}%</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div style="background: #f0f8f0; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                <h4 style="margin: 0 0 10px 0; color: #2c3e50;">🏢 Supplier & Dates</h4>
+                <p style="margin: 5px 0;"><strong>Supplier:</strong> ${existingProduct.supplier}</p>
+                <p style="margin: 5px 0;"><strong>Expiry Date:</strong> ${existingProduct.expiryDate ? new Date(existingProduct.expiryDate).toLocaleDateString() : "N/A"}</p>
+                <p style="margin: 5px 0;"><strong>Reserved Quantity:</strong> ${existingProduct.reservedQuantity || 0}</p>
+                <p style="margin: 5px 0;"><strong>Store:</strong> ${existingProduct.store || "N/A"}</p>
+              </div>
+              
+              <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107;">
+                <h4 style="margin: 0 0 10px 0; color: #856404;">⚠️ What would you like to do?</h4>
+                <p style="margin: 5px 0; color: #856404;">This product already exists in your inventory. Choose an action below:</p>
+              </div>
+            </div>
+          `,
+          icon: "info",
           showCancelButton: true,
           showDenyButton: true,
-          confirmButtonText: "Add Stock to Existing",
-          denyButtonText: "Create New Product",
-          cancelButtonText: "Cancel",
+          confirmButtonText: "✏️ Edit Existing Product",
+          denyButtonText: "📦 Add Stock Only",
+          cancelButtonText: "❌ Cancel",
           confirmButtonColor: "#3085d6",
           denyButtonColor: "#28a745",
           cancelButtonColor: "#d33",
+          width: "600px",
         });
 
         if (result.isDenied) {
-          // User wants to create new product, continue with normal flow
-        } else if (result.isConfirmed) {
-          // User wants to add stock to existing product
-          const newStock = existingProduct.stock + formData.stock;
-          const updateData = {
-            stock: newStock,
-            price: formData.price, // Update price if different
-            purchasePriceExclVAT: formData.purchasePriceExclVAT,
-            retailPriceVATIncluded: formData.retailPriceVATIncluded,
-            vat: formData.vat,
-            expiryDate: formData.expiryDate,
-            minStock: formData.minStock,
-          };
+          // User wants to add stock only - show simplified form with just stock field
+          const stockResult = await Swal.fire({
+            title: "Add Stock to Existing Product",
+            html: `
+              <div class="text-left">
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                  <h4 style="margin: 0 0 10px 0; color: #2c3e50;">📦 Product Information</h4>
+                  <p style="margin: 5px 0;"><strong>Product:</strong> ${existingProduct.name}</p>
+                  <p style="margin: 5px 0;"><strong>Manufacturer:</strong> ${existingProduct.manufacturer || "N/A"}</p>
+                  <p style="margin: 5px 0;"><strong>Supplier:</strong> ${existingProduct.supplier}</p>
+                </div>
+                
+                <div style="background: #e8f4fd; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                  <h4 style="margin: 0 0 10px 0; color: #2c3e50;">📊 Current Stock Details</h4>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div>
+                      <p style="margin: 5px 0;"><strong>Current Stock:</strong> ${existingProduct.stock}</p>
+                      <p style="margin: 5px 0;"><strong>Shelf Stock:</strong> ${existingProduct.shelfStock || 0}</p>
+                      <p style="margin: 5px 0;"><strong>Min Stock:</strong> ${existingProduct.minStock}</p>
+                    </div>
+                    <div>
+                      <p style="margin: 5px 0;"><strong>Units:</strong> ${existingProduct.units || "pieces"}</p>
+                      <p style="margin: 5px 0;"><strong>Per Pack Unit:</strong> ${existingProduct.unitsPerPack || 1}</p>
+                      <p style="margin: 5px 0;"><strong>Price:</strong> $${existingProduct.price}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107;">
+                  <h4 style="margin: 0 0 10px 0; color: #856404;">➕ Add Stock</h4>
+                  <p style="margin: 5px 0; color: #856404;">Enter the amount of stock to add to this product:</p>
+                  <input type="number" id="stockToAdd" class="swal2-input" placeholder="Enter stock to add" min="1" value="${formData.stock}" style="margin-top: 10px;">
+                </div>
+              </div>
+            `,
+            icon: "question",
+            showCancelButton: true,
+            confirmButtonText: "📦 Add Stock",
+            cancelButtonText: "❌ Cancel",
+            confirmButtonColor: "#3085d6",
+            cancelButtonColor: "#d33",
+            width: "500px",
+            preConfirm: () => {
+              const stockToAdd = document.getElementById('stockToAdd') as HTMLInputElement;
+              const stockValue = parseInt(stockToAdd.value);
+              if (!stockValue || stockValue <= 0) {
+                Swal.showValidationMessage('Please enter a valid stock amount');
+                return false;
+              }
+              return stockValue;
+            }
+          });
 
-          const response = await fetch(
-            `${BASE_URL}/inventory/${existingProduct.id}`,
-            {
-              method: "PATCH",
+          if (stockResult.isConfirmed) {
+            const stockToAdd = stockResult.value;
+            const newStock = existingProduct.stock + stockToAdd;
+            const updateData = {
+              stock: newStock,
+            };
+
+            const response = await fetch(
+              `${BASE_URL}/inventory/${existingProduct.id}`,
+              {
+                method: "PATCH",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify(updateData),
+              }
+            );
+
+            if (!response.ok)
+              throw new Error("Failed to update existing product");
+
+            Swal.fire({
+              title: "Stock Updated!",
+              text: `Added ${stockToAdd} units to existing product. New total: ${newStock}`,
+              icon: "success",
+              confirmButtonText: "Great!",
+            });
+
+            // Refresh products
+            const productsResponse = await fetch(`${BASE_URL}/inventory`, {
               headers: {
-                "Content-Type": "application/json",
                 Authorization: `Bearer ${token}`,
               },
-              body: JSON.stringify(updateData),
+            });
+            if (productsResponse.ok) {
+              const data = await productsResponse.json();
+              setProducts(data.map(addStatus));
             }
-          );
-
-          if (!response.ok)
-            throw new Error("Failed to update existing product");
-
-          Swal.fire({
-            title: "Stock Updated!",
-            text: `Added ${formData.stock} units to existing product. New total: ${newStock}`,
-            icon: "success",
-            confirmButtonText: "Great!",
-          });
-
-          setShowModal(false);
-          setEditingProduct(null);
-          setFormData(initialFormState);
-          setShowSupplierDropdown(false);
-          setSupplierSearch("");
-          setShowProductDropdown(false);
-          setProductSearch("");
-
-          // Refresh products
-          const productsResponse = await fetch(`${BASE_URL}/inventory`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          });
-          if (productsResponse.ok) {
-            const data = await productsResponse.json();
-            setProducts(data.map(addStatus));
+            setIsSubmitting(false);
+            return;
+          } else {
+            // User cancelled stock addition
+            setIsSubmitting(false);
+            return;
           }
+        } else if (result.isConfirmed) {
+          // User wants to edit existing product - form is already populated
+          // Just show the modal with populated data
+          setShowModal(true);
           setIsSubmitting(false);
           return;
         } else {
@@ -658,6 +797,8 @@ const InventoryManagement: React.FC = () => {
         reservedQuantity: formData.reservedQuantity || 0,
         unitPrice: formData.unitPrice || 0,
         units: formData.units || "pieces",
+        shelfStock: formData.shelfStock || 0,
+        unitsPerPack: formData.unitsPerPack || 1,
         purchasePriceExclVAT: formData.purchasePriceExclVAT || 0,
         vat: formData.vat || 0,
         retailPriceVATIncluded:
@@ -691,6 +832,8 @@ const InventoryManagement: React.FC = () => {
           reservedQuantity: submitData.reservedQuantity || 0,
           unitPrice: submitData.unitPrice || 0,
           units: submitData.units || "pieces",
+          shelfStock: submitData.shelfStock || 0,
+          unitsPerPack: submitData.unitsPerPack || 1,
           purchasePriceExclVAT: submitData.purchasePriceExclVAT || 0,
           vat: submitData.vat || 0,
           retailPriceVATIncluded:
@@ -766,6 +909,8 @@ const InventoryManagement: React.FC = () => {
                   "minStock",
                   "price",
                   "unitPrice",
+                  "shelfStock",
+                  "unitsPerPack",
                   "reservedQuantity",
                   "purchasePriceExclVAT",
                   "vat",
@@ -925,7 +1070,7 @@ const InventoryManagement: React.FC = () => {
             .filter(
               ([key, value]) =>
                 value !== undefined && value !== null && value !== "" ||
-                key === "unitPrice" || key === "units" // Always include unitPrice and units
+                key === "unitPrice" || key === "units" || key === "shelfStock" || key === "unitsPerPack" // Always include unitPrice, units, shelfStock, and unitsPerPack
             )
             .map(([key, value]) => {
               // Convert numeric fields to numbers
@@ -935,6 +1080,8 @@ const InventoryManagement: React.FC = () => {
                   "minStock",
                   "price",
                   "unitPrice",
+                  "shelfStock",
+                  "unitsPerPack",
                   "reservedQuantity",
                   "purchasePriceExclVAT",
                   "vat",
@@ -1060,6 +1207,8 @@ const InventoryManagement: React.FC = () => {
       price: product.price,
       unitPrice: product.unitPrice || 0,
       units: product.units || "pieces",
+      shelfStock: product.shelfStock || 0,
+      unitsPerPack: product.unitsPerPack || 1,
       supplier: product.supplier,
       supplierId: product.supplierId || "", // Ensure supplierId is populated
       expiryDate: expiryDate,
@@ -1227,9 +1376,17 @@ const InventoryManagement: React.FC = () => {
           valA = a.stock;
           valB = b.stock;
           break;
+        case "shelfStock":
+          valA = a.shelfStock || 0;
+          valB = b.shelfStock || 0;
+          break;
         case "units":
           valA = (a.units || "pieces").toLowerCase();
           valB = (b.units || "pieces").toLowerCase();
+          break;
+        case "unitsPerPack":
+          valA = a.unitsPerPack || 1;
+          valB = b.unitsPerPack || 1;
           break;
         case "minStock":
           valA = a.minStock;
@@ -1308,6 +1465,12 @@ const InventoryManagement: React.FC = () => {
     },
     { key: "stock", label: "Stock", inputType: "number", isRequired: true },
     {
+      key: "shelfStock",
+      label: "Shelf Stock",
+      inputType: "number",
+      isRequired: false,
+    },
+    {
       key: "minStock",
       label: "Min Stock",
       inputType: "number",
@@ -1317,6 +1480,12 @@ const InventoryManagement: React.FC = () => {
       key: "units",
       label: "Units",
       inputType: "text",
+      isRequired: false,
+    },
+    {
+      key: "unitsPerPack",
+      label: "Per Pack Unit",
+      inputType: "number",
       isRequired: false,
     },
     {
@@ -1532,10 +1701,26 @@ const InventoryManagement: React.FC = () => {
                   </th>
                   <th
                     className="px-4 py-2 text-left cursor-pointer select-none hover:bg-blue-100 transition-colors"
+                    onClick={() => handleSort("shelfStock")}
+                  >
+                    Shelf Stock{" "}
+                    {sortColumn === "shelfStock" &&
+                      (sortDirection === "asc" ? "▲" : "▼")}
+                  </th>
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none hover:bg-blue-100 transition-colors"
                     onClick={() => handleSort("units")}
                   >
                     Units{" "}
                     {sortColumn === "units" &&
+                      (sortDirection === "asc" ? "▲" : "▼")}
+                  </th>
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none hover:bg-blue-100 transition-colors"
+                    onClick={() => handleSort("unitsPerPack")}
+                  >
+                    Per Pack Unit{" "}
+                    {sortColumn === "unitsPerPack" &&
                       (sortDirection === "asc" ? "▲" : "▼")}
                   </th>
                   <th
@@ -1592,7 +1777,7 @@ const InventoryManagement: React.FC = () => {
               <tbody>
                 {sortedProducts.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="text-center py-4">
+                    <td colSpan={13} className="text-center py-4">
                       No products found.
                     </td>
                   </tr>
@@ -1612,7 +1797,13 @@ const InventoryManagement: React.FC = () => {
                       </td>
                       <td className="px-4 py-2 text-left">{product.stock}</td>
                       <td className="px-4 py-2 text-left">
+                        {product.shelfStock || 0}
+                      </td>
+                      <td className="px-4 py-2 text-left">
                         {product.units || "pieces"}
+                      </td>
+                      <td className="px-4 py-2 text-left">
+                        {product.unitsPerPack || 1}
                       </td>
                       <td className="px-4 py-2 text-left">
                         {product.minStock}

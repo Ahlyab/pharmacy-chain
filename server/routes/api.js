@@ -653,6 +653,8 @@ router.post("/inventory", authenticate, async (req, res) => {
       price: Number(req.body.price),
       unitPrice: Number(req.body.unitPrice) || 0,
       units: req.body.units || "pieces",
+      unitsPerPack: Number(req.body.unitsPerPack) || 1,
+      shelfStock: Number(req.body.shelfStock) || 0,
       supplier: req.body.supplier,
       supplierId: req.body.supplierId, // Include supplierId if provided
       expiryDate: new Date(req.body.expiryDate),
@@ -708,6 +710,7 @@ router.post("/inventory", authenticate, async (req, res) => {
         price: inventory.price,
         unitPrice: inventory.unitPrice,
         units: inventory.units,
+        shelfStock: inventory.shelfStock,
         supplier: inventory.supplier,
         expiryDate: inventory.expiryDate,
         branchId: inventory.branchId,
@@ -786,6 +789,9 @@ router.patch("/inventory/:id", authenticate, async (req, res) => {
         previousStock: currentInventory.stock,
         newStock: updated.stock,
         quantityChanged: updated.stock - currentInventory.stock,
+        previousShelfStock: currentInventory.shelfStock,
+        newShelfStock: updated.shelfStock,
+        shelfStockChanged: (updated.shelfStock || 0) - (currentInventory.shelfStock || 0),
         previousPrice: currentInventory.price,
         newPrice: updated.price,
         previousExpiry: currentInventory.expiryDate,
@@ -1033,6 +1039,10 @@ router.post("/inventory/transfer", authenticate, async (req, res) => {
         expiryDate: sourceInventory.expiryDate,
         branchId: toBranchId,
         // Copy additional fields
+        unitPrice: sourceInventory.unitPrice,
+        units: sourceInventory.units,
+        unitsPerPack: sourceInventory.unitsPerPack,
+        shelfStock: sourceInventory.shelfStock,
         store: sourceInventory.store,
         manufacturer: sourceInventory.manufacturer,
         composition: sourceInventory.composition,
@@ -1116,6 +1126,7 @@ router.post("/inventory/import", authenticate, async (req, res) => {
       price: Number(product.price || product["Retail price VAT included"] || 0),
       unitPrice: Number(product.unitPrice || product["Unit Price"] || 0),
       units: product.units || product.Units || "pieces",
+      shelfStock: Number(product.shelfStock || product["Shelf Stock"] || 0),
       supplier: product.supplier || product["Supplier name"] || "",
       expiryDate: product.expiryDate
         ? new Date(product.expiryDate)
@@ -1488,6 +1499,7 @@ router.post(
             price: importedProduct.retailPriceVATIncluded, // Use VAT included price
             unitPrice: importedProduct.unitPrice || 0,
             units: importedProduct.units || "pieces",
+            shelfStock: importedProduct.shelfStock || 0,
             supplier: importedProduct.supplier, // Keep supplier name for display
             supplierId: importedProduct.supplierId, // Store supplier MongoDB ID
             expiryDate: importedProduct.expiryDate,
