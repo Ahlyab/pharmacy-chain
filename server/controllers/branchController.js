@@ -1,4 +1,5 @@
 // Manager controller for PATCH and DELETE
+import mongoose from "mongoose";
 import Manager from "../models/Manager.js";
 import User from "../models/User.js";
 import Branch from "../models/Branch.js";
@@ -10,7 +11,7 @@ export const updateManager = async (req, res) => {
     const { password, branchId, role, ...rest } = req.body;
     const updateData = { ...rest, role };
     if (branchId) {
-      updateData.branch = branchId;
+      updateData.branch = new mongoose.Types.ObjectId(branchId);
     }
 
     // Get the current manager for audit logging
@@ -33,7 +34,7 @@ export const updateManager = async (req, res) => {
         needsSave = true;
       }
       if (branchId) {
-        user.branchId = branchId;
+        user.branchId = new mongoose.Types.ObjectId(branchId);
         needsSave = true;
       }
       if (role) {

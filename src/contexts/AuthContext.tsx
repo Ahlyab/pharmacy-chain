@@ -63,6 +63,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             email: data.email,
             role: data.role,
             branchId: data.branchId,
+            branchName: data.branchName,
           });
         } catch (err) {
           console.error('Error restoring user:', err);

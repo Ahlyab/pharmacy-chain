@@ -44,15 +44,23 @@
         try {
           console.log('Fetching data for user:', user);
           
+          // Check if user has a valid branchId
+          if (!user?.branchId) {
+            setError("No branch assigned. Please contact administrator.");
+            setProducts([]);
+            setSales([]);
+            return;
+          }
+
           // Fetch products using authenticated API
           console.log('Fetching products with authentication');
-          const productsData = await apiEndpoints.getInventory(user?.branchId);
+          const productsData = await apiEndpoints.getInventory(user.branchId);
           setProducts(productsData);
 
           // Fetch sales data using authenticated API
           console.log('Fetching sales with authentication');
           try {
-            const salesData = await apiEndpoints.getRecentSales(user?.branchId);
+            const salesData = await apiEndpoints.getRecentSales(user.branchId);
             setSales(salesData);
           } catch (salesError) {
             console.warn('Failed to fetch sales data:', salesError);

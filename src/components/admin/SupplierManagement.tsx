@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { apiEndpoints } from '../../utils/api';
-import SupplierDetails from './SupplierDetails';
+import BulkSupplyDialog from './BulkSupplyDialog';
 import Swal from 'sweetalert2';
+import SupplierDetails from './SupplierDetails';
 
 interface Delivery {
   _id: string;
@@ -10,6 +11,18 @@ interface Delivery {
   products: string;
   quantity: number;
   notes?: string;
+  totalAmount?: number;
+  invoiceNumber?: string;
+}
+
+interface Invoice {
+  _id: string;
+  fileName: string;
+  originalName: string;
+  deliveryDate: string;
+  invoiceNumber: string;
+  uploadedAt: string;
+  filePath: string;
 }
 
 interface Supplier {
@@ -19,6 +32,7 @@ interface Supplier {
   address: string;
   productsSupplied: string[];
   deliveries?: Delivery[];
+  invoices?: Invoice[];
   email?: string;
   company?: string;
   gst?: string;
@@ -46,6 +60,7 @@ const SupplierManagement: React.FC = () => {
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showBulkSupplyDialog, setShowBulkSupplyDialog] = useState(false);
 
   // Fetch suppliers from backend
   useEffect(() => {
@@ -60,6 +75,7 @@ const SupplierManagement: React.FC = () => {
           address: s.address ?? '',
           productsSupplied: s.productsSupplied ?? [],
           deliveries: s.deliveries ?? [],
+          invoices: s.invoices ?? [],
           email: s.email ?? '',
           company: s.company ?? '',
           gst: s.gst ?? '',
@@ -128,6 +144,7 @@ const SupplierManagement: React.FC = () => {
               address: s.address ?? '',
               productsSupplied: s.productsSupplied ?? [],
               deliveries: s.deliveries ?? [],
+              invoices: s.invoices ?? [],
               email: s.email ?? '',
               company: s.company ?? '',
               gst: s.gst ?? '',
@@ -171,7 +188,15 @@ const SupplierManagement: React.FC = () => {
           value={searchTerm}
           onChange={e => setSearchTerm(e.target.value)}
         />
-        <button onClick={() => setShowAddDialog(true)} className="bg-blue-600 text-white px-4 py-2 rounded">+ Add Supplier</button>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setShowBulkSupplyDialog(true)} 
+            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+          >
+            📦 Bulk Supply
+          </button>
+          <button onClick={() => setShowAddDialog(true)} className="bg-blue-600 text-white px-4 py-2 rounded">+ Add Supplier</button>
+        </div>
       </div>
 
       {/* Supplier Cards */}
@@ -220,9 +245,13 @@ const SupplierManagement: React.FC = () => {
             <div className="flex items-center gap-2">
               <span role="img" aria-label="phone">📞</span> {supplier.contact}
             </div>
-            {/* Delivery count indicator */}
+            {/* Delivery count and total amount indicator */}
             <div className="text-gray-700 mt-2">
-              <span className="font-semibold">Deliveries:</span> {supplier.deliveries?.length || 0}
+              <div><span className="font-semibold">Deliveries:</span> {supplier.deliveries?.length || 0}</div>
+              <div><span className="font-semibold">Invoices:</span> {supplier.invoices?.length || 0}</div>
+              {supplier.deliveries && supplier.deliveries.length > 0 && (
+                <div><span className="font-semibold">Total Supplied:</span> ₦{supplier.deliveries.reduce((total, delivery) => total + (delivery.totalAmount || 0), 0).toFixed(2)}</div>
+              )}
             </div>
             
             {/* Products removed from card. Deliveries managed in details view. */}
@@ -305,6 +334,36 @@ const SupplierManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Bulk Supply Dialog */}
+      <BulkSupplyDialog
+        isOpen={showBulkSupplyDialog}
+        onClose={() => setShowBulkSupplyDialog(false)}
+        suppliers={suppliers}
+        onSuccess={() => {
+          // Refresh suppliers list to show updated delivery counts
+          const refetch = async () => {
+            try {
+              const data = await apiEndpoints.getSuppliers();
+              setSuppliers(data.map((s: any) => ({
+                id: s._id,
+                name: s.name ?? '',
+                contact: s.contact ?? '',
+                address: s.address ?? '',
+                productsSupplied: s.productsSupplied ?? [],
+                deliveries: s.deliveries ?? [],
+                invoices: s.invoices ?? [],
+                email: s.email ?? '',
+                company: s.company ?? '',
+                gst: s.gst ?? '',
+                status: s.status ?? 'Active',
+                notes: s.notes ?? '',
+              })));
+            } catch {}
+          };
+          refetch();
+        }}
+      />
     </div>
   );
 };

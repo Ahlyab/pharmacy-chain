@@ -136,8 +136,15 @@ const POS: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
+      // Check if user has a valid branchId
+      if (!user?.branchId) {
+        setError("No branch assigned. Please contact administrator.");
+        setProducts([]);
+        return;
+      }
+
       // Use authenticated API endpoint
-      const data = await apiEndpoints.getInventory(user?.branchId);
+      const data = await apiEndpoints.getInventory(user.branchId);
 
       const productsWithStatus = data.map(addStatus);
       setProducts(productsWithStatus);
@@ -541,6 +548,9 @@ const POS: React.FC = () => {
                 {products.filter((p) => p.stock > (p.minStock || 5)).length}
               </div>
               <div className="text-sm text-gray-600">In Stock</div>
+              <div className="text-xs text-gray-500">
+                {products.filter((p) => p.shelfStock !== undefined && p.shelfStock > 0).length} on shelf
+              </div>
             </div>
           </div>
           <div className="flex items-center space-x-3">
@@ -568,6 +578,9 @@ const POS: React.FC = () => {
                 }
               </div>
               <div className="text-sm text-gray-600">Low Stock</div>
+              <div className="text-xs text-gray-500">
+                {products.filter((p) => p.shelfStock !== undefined && p.shelfStock > 0 && p.shelfStock <= (p.minStock || 5)).length} shelf low
+              </div>
             </div>
           </div>
           <div className="flex items-center space-x-3">
@@ -591,6 +604,9 @@ const POS: React.FC = () => {
                 {products.filter((p) => p.stock === 0).length}
               </div>
               <div className="text-sm text-gray-600">Out of Stock</div>
+              <div className="text-xs text-gray-500">
+                {products.filter((p) => p.shelfStock !== undefined && p.shelfStock === 0).length} shelf empty
+              </div>
             </div>
           </div>
         </div>
@@ -695,23 +711,34 @@ const POS: React.FC = () => {
                             )}
                           </div>
                           <div className="text-right">
-                            <span
-                              className={
-                                "text-xs font-semibold " +
-                                (isOutOfStock
-                                  ? "text-red-600"
-                                  : product.stock <= (product.minStock || 5)
-                                  ? "text-yellow-600"
-                                  : "text-green-600")
-                              }
-                            >
-                              {product.stock} in stock
-                            </span>
-                            {product.shelfStock !== undefined && product.shelfStock > 0 && (
-                              <div className="text-xs text-blue-600 font-medium">
-                                {product.shelfStock} on shelf
-                              </div>
-                            )}
+                            <div className="flex flex-col items-end space-y-1">
+                              <span
+                                className={
+                                  "text-xs font-semibold " +
+                                  (isOutOfStock
+                                    ? "text-red-600"
+                                    : product.stock <= (product.minStock || 5)
+                                    ? "text-yellow-600"
+                                    : "text-green-600")
+                                }
+                              >
+                                {product.stock} total stock
+                              </span>
+                              {product.shelfStock !== undefined && (
+                                <span
+                                  className={
+                                    "text-xs font-medium " +
+                                    (product.shelfStock === 0
+                                      ? "text-red-500"
+                                      : product.shelfStock <= (product.minStock || 5)
+                                      ? "text-yellow-500"
+                                      : "text-blue-600")
+                                  }
+                                >
+                                  {product.shelfStock} on shelf
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                         {expiryDisplay}
@@ -768,14 +795,16 @@ const POS: React.FC = () => {
                             Unit Purchase
                           </p>
                         )}
-                        <p className="text-xs text-gray-400">
-                          Stock: {item.stock - item.quantity} remaining
+                        <div className="text-xs text-gray-400 space-y-1">
+                          <div>
+                            Total Stock: {item.stock - item.quantity} remaining
+                          </div>
                           {item.shelfStock !== undefined && (
-                            <span className="ml-2 text-blue-600">
-                              (Shelf: {item.shelfStock - (item.isUnitPurchase ? item.quantity : (item.quantity * (item.unitsPerPack || 1)))} remaining)
-                            </span>
+                            <div className="text-blue-600">
+                              Shelf Stock: {item.shelfStock - (item.isUnitPurchase ? item.quantity : (item.quantity * (item.unitsPerPack || 1)))} remaining
+                            </div>
                           )}
-                        </p>
+                        </div>
                         {/* Show units and packs breakdown */}
                         <div className="text-xs text-gray-500 mt-1">
                           {item.isUnitPurchase ? (

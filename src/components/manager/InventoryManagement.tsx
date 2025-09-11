@@ -73,6 +73,16 @@ interface Supplier {
   notes?: string;
 }
 
+interface Branch {
+  _id: string;
+  name: string;
+  address: string;
+  phone?: string;
+  email?: string;
+  manager?: string;
+  status?: string;
+}
+
 const initialFormState: FormProduct = {
   id: "",
   name: "",
@@ -110,6 +120,7 @@ const InventoryManagement: React.FC = () => {
   const BASE_URL = VITE_BASE_URL;
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState<FormProduct>(initialFormState);
@@ -167,6 +178,16 @@ const InventoryManagement: React.FC = () => {
     }
   };
 
+  // Fetch branches from backend
+  const fetchBranches = async () => {
+    try {
+      const data = await apiEndpoints.getBranches();
+      setBranches(data);
+    } catch (err) {
+      console.error("Error fetching branches:", err);
+    }
+  };
+
   useEffect(() => {
     const fetchProducts = async () => {
       try {
@@ -174,20 +195,6 @@ const InventoryManagement: React.FC = () => {
         // Always fetch all products using authenticated API
         const data = await apiEndpoints.getInventory();
         setProducts(data.map(addStatus));
-
-        // Set branchFilter to user's branch name if available
-        if (user?.branchId && data.length > 0) {
-          // Find branch name for manager's branch
-          const branchProduct = data.find(
-            (p: any) =>
-              typeof p.branchId === "object" &&
-              p.branchId?._id === user.branchId
-          );
-          const branchName = branchProduct?.branchId?.name ?? null;
-          if (branchName) {
-            setBranchFilter(branchName);
-          }
-        }
       } catch (err) {
         Swal.fire({
           title: "Error",
@@ -202,7 +209,18 @@ const InventoryManagement: React.FC = () => {
 
     fetchProducts();
     fetchSuppliers();
+    fetchBranches();
   }, [BASE_URL, user?.branchId]);
+
+  // Set branch filter to manager's assigned branch when branches are loaded
+  useEffect(() => {
+    if (user?.branchId && branches.length > 0) {
+      const managerBranch = branches.find(branch => branch._id === user.branchId);
+      if (managerBranch) {
+        setBranchFilter(managerBranch.name);
+      }
+    }
+  }, [branches, user?.branchId]);
 
   // Handle clicking outside dropdowns
   useEffect(() => {
@@ -465,16 +483,12 @@ const InventoryManagement: React.FC = () => {
           const productsData = await productsResponse.json();
           setProducts(productsData.map(addStatus));
 
-          // Ensure branch filter is set to current branch
-          if (user?.branchId && productsData.length > 0) {
-            const branchProduct = productsData.find(
-              (p: any) =>
-                typeof p.branchId === "object" &&
-                p.branchId?._id === user.branchId
-            );
-            const branchName = branchProduct?.branchId?.name ?? null;
-            if (branchName) {
-              setBranchFilter(branchName);
+          // Refresh branches and set correct branch filter
+          await fetchBranches();
+          if (user?.branchId && branches.length > 0) {
+            const managerBranch = branches.find(branch => branch._id === user.branchId);
+            if (managerBranch) {
+              setBranchFilter(managerBranch.name);
             }
           }
         }
@@ -1166,16 +1180,13 @@ const InventoryManagement: React.FC = () => {
       // Refresh products after add/edit (fetch all products)
       const data = await apiEndpoints.getInventory();
       setProducts(data.map(addStatus));
-      // Reset branchFilter to manager's branch name if available
-      if (user?.branchId && data.length > 0) {
-        // Find branch name for manager's branch
-        const branchProduct = data.find(
-          (p: any) =>
-            typeof p.branchId === "object" && p.branchId?._id === user.branchId
-        );
-        const branchName = branchProduct?.branchId?.name ?? null;
-        if (branchName) {
-          setBranchFilter(branchName);
+      
+      // Refresh branches and set correct branch filter
+      await fetchBranches();
+      if (user?.branchId && branches.length > 0) {
+        const managerBranch = branches.find(branch => branch._id === user.branchId);
+        if (managerBranch) {
+          setBranchFilter(managerBranch.name);
         }
       }
     } catch (err) {
@@ -1314,18 +1325,8 @@ const InventoryManagement: React.FC = () => {
   //   XLSX.writeFile(wb, "inventory_template.xlsx");
   // };
 
-  // Get unique branches for dropdown
-  const branches = Array.from(
-    new Set(
-      products
-        .map((p) =>
-          typeof p.branchId === "object" && p.branchId?.name
-            ? p.branchId.name
-            : null
-        )
-        .filter((branch): branch is string => branch !== null)
-    )
-  );
+  // Get unique branches for dropdown from fetched branches
+  const availableBranches = branches.map(branch => branch.name);
 
   // Filter products
   const filteredProducts = products.filter((product) => {
@@ -1628,7 +1629,7 @@ const InventoryManagement: React.FC = () => {
                 className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="All">All Branches</option>
-                {branches.map((branch) => (
+                {availableBranches.map((branch) => (
                   <option key={branch} value={branch}>
                     {branch}
                   </option>

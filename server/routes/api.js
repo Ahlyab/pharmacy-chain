@@ -14,6 +14,8 @@ import Manager from "../models/Manager.js";
 import Return from "../models/Return.js";
 import multer from "multer";
 import * as XLSX from "xlsx";
+import path from "path";
+import fs from "fs";
 import {
   createBranch,
   getBranches,
@@ -39,12 +41,61 @@ import {
 import Branch from "../models/Branch.js";
 
 // Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = 'uploads/invoices';
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage: storage,
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB limit
   },
   fileFilter: (req, file, cb) => {
+    // For Excel files (existing functionality)
+    if (
+      file.mimetype ===
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+      file.mimetype === "application/vnd.ms-excel" ||
+      file.originalname.endsWith(".xlsx") ||
+      file.originalname.endsWith(".xls")
+    ) {
+      cb(null, true);
+    }
+    // For invoice files (new functionality)
+    else if (
+      file.mimetype === "image/jpeg" ||
+      file.mimetype === "image/png" ||
+      file.mimetype === "image/gif" ||
+      file.mimetype === "application/pdf" ||
+      file.originalname.match(/\.(jpg|jpeg|png|gif|pdf)$/i)
+    ) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only Excel files (.xlsx, .xls) or image/PDF files (.jpg, .jpeg, .png, .gif, .pdf) are allowed"));
+    }
+  },
+});
+
+// Memory storage for Excel imports (needs buffer access)
+const memoryStorage = multer.memoryStorage();
+
+const memoryUpload = multer({
+  storage: memoryStorage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    // For Excel files
     if (
       file.mimetype ===
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
@@ -54,7 +105,7 @@ const upload = multer({
     ) {
       cb(null, true);
     } else {
-      cb(new Error("Only Excel files are allowed"));
+      cb(new Error("Only Excel files are allowed"), false);
     }
   },
 });
@@ -223,7 +274,7 @@ router.delete("/supplier/:id", authenticate, async (req, res) => {
 // Supplier Delivery Routes
 router.post("/supplier/:id/delivery", authenticate, async (req, res) => {
   try {
-    const { date, deliveryTime, products, quantity, notes } = req.body;
+    const { date, deliveryTime, products, quantity, notes, totalAmount, invoiceNumber } = req.body;
     if (!date || !deliveryTime || !products || !quantity) {
       return res.status(400).json({ error: "Missing required fields" });
     }
@@ -239,10 +290,21 @@ router.post("/supplier/:id/delivery", authenticate, async (req, res) => {
       products,
       quantity,
       notes: notes || "",
+      totalAmount: totalAmount || 0,
+      invoiceNumber: invoiceNumber || "",
     };
 
     supplier.deliveries.push(newDelivery);
     await supplier.save();
+
+    // Log the delivery creation
+    await logSupplierAction(req, "DELIVERY_CREATED", req.params.id, supplier.name, {
+      date,
+      products,
+      quantity,
+      totalAmount: totalAmount || 0,
+      invoiceNumber: invoiceNumber || ""
+    });
 
     res.status(201).json(newDelivery);
   } catch (error) {
@@ -307,6 +369,211 @@ router.delete(
     }
   }
 );
+
+// Invoice upload endpoint
+router.post("/supplier/invoice-upload", authenticate, upload.single('invoice'), async (req, res) => {
+  try {
+    const { supplierId, deliveryDate, invoiceNumber } = req.body;
+    
+    if (!req.file) {
+      return res.status(400).json({ error: "No invoice file uploaded" });
+    }
+
+    if (!supplierId) {
+      return res.status(400).json({ error: "Supplier ID is required" });
+    }
+
+    // Verify supplier exists
+    const supplier = await Supplier.findById(supplierId);
+    if (!supplier) {
+      return res.status(404).json({ error: "Supplier not found" });
+    }
+
+    // Store file information in supplier record
+    const invoiceInfo = {
+      fileName: req.file.filename,
+      originalName: req.file.originalname,
+      deliveryDate: deliveryDate,
+      invoiceNumber: invoiceNumber,
+      uploadedAt: new Date(),
+      filePath: req.file.path
+    };
+
+    // Add invoice to supplier's deliveries or create a separate invoices array
+    if (!supplier.invoices) {
+      supplier.invoices = [];
+    }
+    supplier.invoices.push(invoiceInfo);
+    await supplier.save();
+
+    // Log the invoice upload
+    await logSupplierAction(req, "INVOICE_UPLOADED", supplierId, supplier.name, {
+      fileName: req.file.filename,
+      originalName: req.file.originalname,
+      deliveryDate: deliveryDate,
+      invoiceNumber: invoiceNumber
+    });
+
+    res.status(200).json({ 
+      message: "Invoice uploaded successfully",
+      invoiceInfo: invoiceInfo
+    });
+  } catch (error) {
+    console.error("Invoice upload error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get supplier invoices
+router.get("/supplier/:id/invoices", authenticate, async (req, res) => {
+  try {
+    const supplier = await Supplier.findById(req.params.id);
+    if (!supplier) {
+      return res.status(404).json({ error: "Supplier not found" });
+    }
+
+    res.status(200).json(supplier.invoices || []);
+  } catch (error) {
+    console.error("Get invoices error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Download supplier invoice
+router.get("/supplier/invoice/:invoiceId/download", authenticate, async (req, res) => {
+  try {
+    const supplier = await Supplier.findOne({ "invoices._id": req.params.invoiceId });
+    if (!supplier) {
+      return res.status(404).json({ error: "Invoice not found" });
+    }
+
+    const invoice = supplier.invoices.id(req.params.invoiceId);
+    if (!invoice) {
+      return res.status(404).json({ error: "Invoice not found" });
+    }
+
+    // Check if file exists
+    const fs = require('fs');
+    if (!fs.existsSync(invoice.filePath)) {
+      return res.status(404).json({ error: "Invoice file not found" });
+    }
+
+    res.download(invoice.filePath, invoice.originalName);
+  } catch (error) {
+    console.error("Download invoice error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Bulk supply processing endpoint
+router.post("/supplier/bulk-supply", authenticate, async (req, res) => {
+  try {
+    const { supplierId, supplyDate, products, invoiceNumber, notes, totalAmount } = req.body;
+    
+    if (!supplierId || !supplyDate || !products || !Array.isArray(products) || products.length === 0) {
+      return res.status(400).json({ error: "Missing required fields: supplierId, supplyDate, products" });
+    }
+
+    // Verify supplier exists
+    const supplier = await Supplier.findById(supplierId);
+    if (!supplier) {
+      return res.status(404).json({ error: "Supplier not found" });
+    }
+
+    const createdInventory = [];
+    const errors = [];
+
+    // Process each product
+    for (const product of products) {
+      try {
+        const inventoryData = {
+          name: product.name,
+          category: product.category || "",
+          stock: product.quantity,
+          minStock: product.minStock || 10,
+          price: product.retailPriceVATIncluded || product.unitPrice,
+          unitPrice: product.unitPrice,
+          units: product.units || "pieces",
+          unitsPerPack: product.unitsPerPack || 1,
+          shelfStock: product.quantity,
+          supplier: supplier.name,
+          supplierId: supplierId,
+          expiryDate: new Date(product.expiryDate),
+          store: supplier.company || "",
+          manufacturer: product.manufacturer || "",
+          composition: product.composition || "",
+          series: "",
+          reservedQuantity: 0,
+          purchasePriceExclVAT: product.purchasePriceExclVAT || product.unitPrice,
+          vat: product.vat || 0,
+          retailPriceVATIncluded: product.retailPriceVATIncluded || product.unitPrice,
+        };
+
+        const inventory = new Inventory(inventoryData);
+        await inventory.save();
+        createdInventory.push(inventory);
+
+        // Log each inventory creation
+        await logInventoryAction(req, "PRODUCT_CREATED", inventory._id, inventory.name, {
+          supplier: supplier.name,
+          supplierId: supplierId,
+          quantity: product.quantity,
+          unitPrice: product.unitPrice,
+          totalPrice: product.quantity * product.unitPrice,
+          expiryDate: product.expiryDate,
+          supplyDate: supplyDate
+        });
+
+      } catch (error) {
+        console.error(`Error creating inventory for product ${product.name}:`, error);
+        errors.push({
+          product: product.name,
+          error: error.message
+        });
+      }
+    }
+
+    // Create delivery record
+    const deliveryData = {
+      date: supplyDate,
+      deliveryTime: new Date().toLocaleTimeString(),
+      products: products.map(p => `${p.name} (${p.quantity} ${p.units})`).join(', '),
+      quantity: products.reduce((total, p) => total + p.quantity, 0),
+      notes: `Bulk supply - Invoice: ${invoiceNumber || 'N/A'}. ${notes || ''}`,
+      totalAmount: totalAmount || products.reduce((total, p) => total + (p.quantity * p.unitPrice), 0),
+      invoiceNumber: invoiceNumber || null,
+    };
+
+    supplier.deliveries.push(deliveryData);
+    await supplier.save();
+
+    // Log bulk supply action
+    await logSupplierAction(req, "BULK_SUPPLY_PROCESSED", supplierId, supplier.name, {
+      supplyDate: supplyDate,
+      productsCount: products.length,
+      totalAmount: totalAmount,
+      invoiceNumber: invoiceNumber,
+      createdInventoryCount: createdInventory.length,
+      errorsCount: errors.length
+    });
+
+    res.status(200).json({
+      message: `Bulk supply processed successfully. Created ${createdInventory.length} inventory items.`,
+      createdInventory: createdInventory.length,
+      errors: errors.length,
+      details: {
+        supplier: supplier.name,
+        supplyDate: supplyDate,
+        totalAmount: totalAmount,
+        invoiceNumber: invoiceNumber
+      }
+    });
+
+  } catch (error) {
+    console.error("Bulk supply error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
 // Manager Routes (Admin only)
 router.post("/manager", authenticate, authorize("Admin"), async (req, res) => {
   try {
@@ -347,13 +614,14 @@ router.post("/manager", authenticate, authorize("Admin"), async (req, res) => {
       role: role || "Manager", // Use the role from request or default to "Manager"
     });
     await manager.save();
+    
     // Create user document for login (branchId is id)
     const user = new User({
       name,
       email,
       password,
       role: role || "Manager",
-      branchId, // Will be undefined for Admin role, which is fine
+      branchId: branchId ? new mongoose.Types.ObjectId(branchId) : undefined, // Convert to ObjectId if provided
     });
     await user.save();
 
@@ -545,18 +813,23 @@ router.get("/me", authenticate, async (req, res) => {
   try {
     //populate branchId from branch model
     const user = await User.findById(req.user.id).populate("branchId");
-    console.log(user);
+    console.log("User from /me endpoint:", user);
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
-    res.status(200).json({
+    
+    // Ensure we return the correct branch information
+    const response = {
       id: user._id,
       name: user.name,
       email: user.email,
       role: user.role,
-      branchId: user?.branchId?._id || null,
+      branchId: user?.branchId?._id || user?.branchId || null,
       branchName: user?.branchId?.name || null,
-    });
+    };
+    
+    console.log("Response from /me endpoint:", response);
+    res.status(200).json(response);
   } catch (error) {
     console.error("Error in /me endpoint:", error);
     res.status(500).json({ error: error.message });
@@ -885,16 +1158,24 @@ router.get("/inventory", authenticate, async (req, res) => {
     const { branchId } = req.query;
     let query = {};
 
+    console.log("Inventory request - branchId:", branchId);
+    console.log("Inventory request - user:", req.user);
+
     // If branchId is provided, filter by it
     if (branchId && branchId !== "all") {
       query.branchId = new mongoose.Types.ObjectId(branchId);
     }
 
+    console.log("Inventory query:", query);
+
     const inventories = await Inventory.find(query)
       .populate("branchId", "name")
       .populate("supplierId", "name company contact email address gst status"); // Populate supplier details
+    
+    console.log("Found inventories:", inventories.length);
     res.status(200).json(inventories);
   } catch (error) {
+    console.error("Inventory fetch error:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1168,7 +1449,7 @@ router.post("/inventory/import", authenticate, async (req, res) => {
 router.post(
   "/inventory/import-excel",
   authenticate,
-  upload.single("file"),
+  memoryUpload.single("file"),
   async (req, res) => {
     try {
       if (!req.file) {
@@ -2158,6 +2439,135 @@ router.delete(
     }
   }
 );
+
+// New Invoice Management Routes
+// Create new invoice
+router.post("/supplier/invoice", authenticate, async (req, res) => {
+  try {
+    const {
+      supplierId,
+      store,
+      supplier,
+      supplierPurchaseInvoiceId,
+      issueDate,
+      count,
+      countOfProductInStock,
+      quantity,
+      quantityInPackageInStock,
+      amountOfProductInStock,
+      createdBy,
+      createdAt
+    } = req.body;
+
+    if (!supplierId || !store || !supplier || !supplierPurchaseInvoiceId || !issueDate) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    const supplierDoc = await Supplier.findById(supplierId);
+    if (!supplierDoc) {
+      return res.status(404).json({ error: "Supplier not found" });
+    }
+
+    const newInvoice = {
+      store,
+      supplier,
+      supplierPurchaseInvoiceId,
+      issueDate,
+      count: count || 0,
+      countOfProductInStock: countOfProductInStock || 0,
+      quantity: quantity || 0,
+      quantityInPackageInStock: quantityInPackageInStock || 0,
+      amountOfProductInStock: amountOfProductInStock || 0,
+      createdBy: createdBy || 'Unknown',
+      createdAt: createdAt || new Date(),
+      fileName: '',
+      originalName: '',
+      deliveryDate: issueDate,
+      invoiceNumber: supplierPurchaseInvoiceId,
+      uploadedAt: new Date(),
+      filePath: ''
+    };
+
+    if (!supplierDoc.invoices) {
+      supplierDoc.invoices = [];
+    }
+    supplierDoc.invoices.push(newInvoice);
+    await supplierDoc.save();
+
+    // Log the invoice creation
+    await logSupplierAction(req, "INVOICE_CREATED", supplierId, supplierDoc.name, {
+      store,
+      supplier,
+      supplierPurchaseInvoiceId,
+      issueDate,
+      amountOfProductInStock: amountOfProductInStock || 0
+    });
+
+    res.status(201).json(newInvoice);
+  } catch (error) {
+    console.error("Create invoice error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update invoice
+router.patch("/supplier/invoice/:invoiceId", authenticate, async (req, res) => {
+  try {
+    const supplier = await Supplier.findOne({ "invoices._id": req.params.invoiceId });
+    if (!supplier) {
+      return res.status(404).json({ error: "Invoice not found" });
+    }
+
+    const invoice = supplier.invoices.id(req.params.invoiceId);
+    if (!invoice) {
+      return res.status(404).json({ error: "Invoice not found" });
+    }
+
+    // Update invoice fields
+    Object.assign(invoice, req.body);
+    await supplier.save();
+
+    // Log the invoice update
+    await logSupplierAction(req, "INVOICE_UPDATED", supplier._id, supplier.name, {
+      invoiceId: req.params.invoiceId,
+      updatedFields: Object.keys(req.body)
+    });
+
+    res.status(200).json(invoice);
+  } catch (error) {
+    console.error("Update invoice error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete invoice
+router.delete("/supplier/invoice/:invoiceId", authenticate, async (req, res) => {
+  try {
+    const supplier = await Supplier.findOne({ "invoices._id": req.params.invoiceId });
+    if (!supplier) {
+      return res.status(404).json({ error: "Invoice not found" });
+    }
+
+    const invoice = supplier.invoices.id(req.params.invoiceId);
+    if (!invoice) {
+      return res.status(404).json({ error: "Invoice not found" });
+    }
+
+    // Log the invoice deletion
+    await logSupplierAction(req, "INVOICE_DELETED", supplier._id, supplier.name, {
+      invoiceId: req.params.invoiceId,
+      supplierPurchaseInvoiceId: invoice.supplierPurchaseInvoiceId
+    });
+
+    supplier.invoices.pull(req.params.invoiceId);
+    await supplier.save();
+
+    res.status(200).json({ message: "Invoice deleted successfully" });
+  } catch (error) {
+    console.error("Delete invoice error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // Warehouse routes
 router.use("/warehouse", warehouseRoutes);

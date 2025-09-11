@@ -81,9 +81,11 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ onViewDetails }) => {
         ...Object.fromEntries(Object.entries(filters).filter(([_, value]) => value !== ''))
       });
 
-      console.log(`${VITE_BASE_URL}/api/audit/system?${queryParams}`);
+      const fullUrl = `${VITE_BASE_URL}/audit/system?${queryParams}`;
+      console.log('Making request to:', fullUrl);
+      console.log('Token:', token ? 'Present' : 'Missing');
 
-      const response = await fetch(`${VITE_BASE_URL}/audit/system?${queryParams}`, {
+      const response = await fetch(fullUrl, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -91,7 +93,10 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ onViewDetails }) => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch audit logs');
+        const errorText = await response.text();
+        console.error('Error response:', response.status, response.statusText);
+        console.error('Error body:', errorText);
+        throw new Error(`Failed to fetch audit logs: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();

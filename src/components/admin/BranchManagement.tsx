@@ -21,18 +21,19 @@ const BranchManagement: React.FC = () => {
         const data = await apiEndpoints.getBranches();
         setBranches(
           data.map((b: any) => ({
-            id: b._id,
+            id: b._id || b.id,
             name: b.name,
             address: b.address,
             phone: b.phone,
             status: b.status,
           }))
         );
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error fetching branches:', err);
+        const errorMessage = err?.message || err?.error || 'Failed to fetch branches';
         Swal.fire({
           title: 'Error',
-          text: 'Failed to fetch branches',
+          text: errorMessage,
           icon: 'error',
           confirmButtonText: 'OK'
         });
@@ -61,7 +62,7 @@ const BranchManagement: React.FC = () => {
           branches.map((branch) =>
             branch.id === editingBranch.id
               ? {
-                  id: updatedBranch._id,
+                  id: updatedBranch._id || updatedBranch.id,
                   name: updatedBranch.name,
                   address: updatedBranch.address,
                   phone: updatedBranch.phone,
@@ -70,27 +71,41 @@ const BranchManagement: React.FC = () => {
               : branch
           )
         );
+        Swal.fire({
+          title: 'Success',
+          text: 'Branch updated successfully',
+          icon: 'success',
+          confirmButtonText: 'OK'
+        });
       } else {
         // Add branch to backend
         const newBranch = await apiEndpoints.createBranch(formData);
         setBranches([
           ...branches,
           {
-            id: newBranch._id,
+            id: newBranch._id || newBranch.id,
             name: newBranch.name,
             address: newBranch.address,
             phone: newBranch.phone,
             status: newBranch.status,
           },
         ]);
+        Swal.fire({
+          title: 'Success',
+          text: 'Branch created successfully',
+          icon: 'success',
+          confirmButtonText: 'OK'
+        });
       }
       setShowModal(false);
       setEditingBranch(null);
       setFormData({ name: "", address: "", phone: "", status: "Active" });
-    } catch (err) {
+    } catch (err: any) {
+      console.error('Branch operation error:', err);
+      const errorMessage = err?.message || err?.error || 'An unexpected error occurred';
       Swal.fire({
         title: 'Error',
-        text: 'Error adding/updating branch: ' + (err as Error).message,
+        text: `Error ${editingBranch ? 'updating' : 'creating'} branch: ${errorMessage}`,
         icon: 'error',
         confirmButtonText: 'OK'
       });
@@ -123,8 +138,10 @@ const BranchManagement: React.FC = () => {
         await apiEndpoints.deleteBranch(id);
         setBranches(branches.filter((branch) => branch.id !== id));
         Swal.fire("Deleted!", "Branch has been deleted.", "success");
-      } catch (err) {
-        Swal.fire("Error", "Could not delete branch.", "error");
+      } catch (err: any) {
+        console.error('Error deleting branch:', err);
+        const errorMessage = err?.message || err?.error || 'Could not delete branch';
+        Swal.fire("Error", errorMessage, "error");
       }
     }
   };

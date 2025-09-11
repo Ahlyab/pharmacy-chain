@@ -28,7 +28,8 @@ const createAuthHeaders = (additionalHeaders: Record<string, string> = {}): Reco
 // Generic API request function
 const apiRequest = async <T = any>(
   url: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  skipContentType: boolean = false
 ): Promise<T> => {
   const token = getToken();
   
@@ -39,7 +40,9 @@ const apiRequest = async <T = any>(
 
   const config: RequestInit = {
     ...options,
-    headers: createAuthHeaders(options.headers as Record<string, string>),
+    headers: skipContentType 
+      ? { ...options.headers, 'Authorization': `Bearer ${token}` }
+      : createAuthHeaders(options.headers as Record<string, string>),
   };
 
   // Debug logging
@@ -168,11 +171,13 @@ export const api = {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
+    // For file uploads, we need to let the browser set Content-Type automatically
+    // Don't set Content-Type manually for FormData uploads
     return apiRequest<T>(url, {
       method: 'POST',
       body: formData,
       headers,
-    });
+    }, true); // Add a flag to skip Content-Type setting
   },
 };
 
