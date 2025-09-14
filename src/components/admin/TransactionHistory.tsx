@@ -1,8 +1,15 @@
 import React, { useState, useEffect } from "react";
-import { Calendar, DollarSign, Receipt, Search } from "lucide-react";
+import { Calendar, DollarSign, Receipt, Search, FileSpreadsheet } from "lucide-react";
 import GreenProgressBar from "../GreenProgressBar";
 import { apiEndpoints } from "../../utils/api";
 import { useAuth } from "../../contexts/AuthContext";
+import {
+  generateExcelReport,
+  downloadExcel,
+  generateReportFilename,
+  ExportData,
+  ExportFilters,
+} from "../../utils/exportUtils";
 
 interface Transaction {
   id: string;
@@ -59,6 +66,7 @@ const TransactionHistory: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [sortColumn, setSortColumn] = useState<string>("date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [exportLoading, setExportLoading] = useState(false);
 
   // Set default custom date range to last 7 days
   useEffect(() => {
@@ -288,17 +296,52 @@ const TransactionHistory: React.FC = () => {
     }
   };
 
-  const totalRevenue = sortedTransactions
-    .filter((t) => t.status === "Completed")
-    .reduce((sum, t) => sum + t.total, 0);
-  const completedCount = sortedTransactions.filter(
-    (t) => t.status === "Completed"
-  ).length;
+  const completedTransactions = sortedTransactions.filter((t) => t.status === "Completed");
+  const totalRevenue = completedTransactions.reduce((sum, t) => sum + (t.total || 0), 0);
+  const completedCount = completedTransactions.length;
   const avgTransaction = totalRevenue / Math.max(completedCount, 1);
+  
   const todayStr = now.toISOString().slice(0, 10);
   const completedToday = sortedTransactions.filter(
     (t) => t.status === "Completed" && t.date.slice(0, 10) === todayStr
   ).length;
+
+  // Export functions
+  const handleExportExcel = async () => {
+    setExportLoading(true);
+    try {
+      const exportData: ExportData[] = sortedTransactions.map(transaction => ({
+        id: transaction.id,
+        date: transaction.date,
+        customer: transaction.customer,
+        items: transaction.items,
+        total: transaction.total,
+        paymentMethod: transaction.paymentMethod,
+        status: transaction.status,
+        branchName: transaction.branchName,
+      }));
+
+      const filters: ExportFilters = {
+        dateRange,
+        selectedDate,
+        customDateRange,
+        selectedStatus,
+        selectedBranch,
+        searchTerm,
+      };
+
+      const csvContent = generateExcelReport(exportData, "Transaction History Report", filters, true);
+      const filename = generateReportFilename("transaction_history_report", filters, "xlsx");
+      downloadExcel(csvContent, filename);
+
+      // Show success message
+      alert('Excel report has been downloaded successfully!');
+    } catch (error: any) {
+      alert(`Error generating Excel: ${error.message}`);
+    } finally {
+      setExportLoading(false);
+    }
+  };
 
   const stats = [
     {
@@ -309,13 +352,13 @@ const TransactionHistory: React.FC = () => {
     },
     {
       name: "Total Revenue",
-      value: `$${totalRevenue.toFixed(2)}`,
+      value: `#${totalRevenue.toFixed(2)}`,
       icon: DollarSign,
       color: "bg-green-500",
     },
     {
       name: "Avg Transaction",
-      value: `$${avgTransaction.toFixed(2)}`,
+      value: `#${avgTransaction.toFixed(2)}`,
       icon: Calendar,
       color: "bg-purple-500",
     },
@@ -329,11 +372,23 @@ const TransactionHistory: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">
-          Transaction History
-        </h2>
-        <p className="text-gray-600">View all transactions across branches</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">
+            Transaction History
+          </h2>
+          <p className="text-gray-600">View all transactions across branches</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={handleExportExcel}
+            disabled={exportLoading || sortedTransactions.length === 0}
+            className="w-full sm:w-auto bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center sm:justify-start space-x-2"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            <span>{exportLoading ? "Exporting..." : "Export Excel"}</span>
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -691,7 +746,7 @@ const TransactionHistory: React.FC = () => {
                         </div>
                       </td>
                       <td className="px-2 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm font-medium text-gray-900">
-                        ${transaction.total.toFixed(2)}
+                        #${transaction.total.toFixed(2)}
                       </td>
                       <td className="px-2 sm:px-6 py-4 whitespace-nowrap">
                         <span

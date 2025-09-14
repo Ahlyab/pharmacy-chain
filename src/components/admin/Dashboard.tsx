@@ -23,7 +23,7 @@ type Product = {
 };
 type Transaction = {
   date: string;
-  totalAmount: number;
+  total: number;
 };
 
 const Dashboard: React.FC = () => {
@@ -39,12 +39,14 @@ const Dashboard: React.FC = () => {
       apiEndpoints.getBranches(),
       apiEndpoints.getManagers(),
       apiEndpoints.getInventory(),
-      apiEndpoints.getTransactions(),
+      apiEndpoints.getTransactions(), // Get all transactions for admin dashboard
     ]).then(([branchData, managerData, productData, transactionData]) => {
       setBranches(branchData || []);
       setManagers(managerData || []);
       setProducts(productData || []);
-      setTransactions(transactionData || []);
+      // Ensure transactions is an array and has the correct structure
+      const transactionsArray = Array.isArray(transactionData) ? transactionData : [];
+      setTransactions(transactionsArray);
       setLoading(false);
     }).catch((error) => {
       console.error('Error fetching dashboard data:', error);
@@ -56,12 +58,16 @@ const Dashboard: React.FC = () => {
   const now = new Date();
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
-  const monthlyRevenue = transactions
-    .filter((t) => {
-      const d = new Date(t.date);
-      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-    })
-    .reduce((sum, t) => sum + (t.totalAmount || 0), 0);
+  
+  const currentMonthTransactions = transactions.filter((t) => {
+    if (!t || !t.date) {
+      return false;
+    }
+    const d = new Date(t.date);
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  });
+  
+  const monthlyRevenue = currentMonthTransactions.reduce((sum, t) => sum + (t.total || 0), 0);
 
   const stats = [
     {
@@ -89,7 +95,7 @@ const Dashboard: React.FC = () => {
     },
     {
       name: "Monthly Revenue",
-      value: loading ? "..." : `$${monthlyRevenue.toLocaleString()}`,
+      value: loading ? "..." : `#${monthlyRevenue.toLocaleString()}`,
       icon: TrendingUp,
       color: "bg-orange-500",
       change: "",

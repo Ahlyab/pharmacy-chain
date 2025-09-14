@@ -3,14 +3,25 @@ import mongoose from "mongoose";
 import apiRoutes from "./routes/api.js";
 import cors from "cors";
 import dotenv from "dotenv";
-import auditRoutes from "./routes/audit.js";
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: [
+    'http://localhost:3000', 
+    'http://localhost:5173', 
+    'http://127.0.0.1:3000', 
+    'http://127.0.0.1:5173',
+    'http://192.168.18.45:3000',
+    'http://192.168.18.45:5173'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 // Routes
@@ -18,7 +29,6 @@ app.get("/", (req, res) => {
   res.send("API is working");
 });
 app.use("/api", apiRoutes);
-app.use("/api/audit", auditRoutes);
 
 // Global error handler middleware
 app.use((error, req, res, next) => {

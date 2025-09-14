@@ -9,6 +9,8 @@ const initialState = {
   stock: '',
   minStock: '',
   price: '',
+  unitPrice: '',
+  units: 'pieces',
   supplier: '',
   expiryDate: '',
   store: '',
@@ -44,10 +46,15 @@ export default function AddProductForm() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     try {
-      // Only send fields with values
+      // Only send fields with values, but always include unitPrice and units
       const data = Object.fromEntries(
         Object.entries(form).filter(([_, v]) => v !== '')
       );
+      
+      // Ensure unitPrice and units are always included
+      if (!data.unitPrice) data.unitPrice = '0';
+      if (!data.units) data.units = 'pieces';
+      
   await axios.post(`${VITE_BASE_URL}/inventory`, data);
       setMessage('Product added successfully!');
       setForm(initialState);

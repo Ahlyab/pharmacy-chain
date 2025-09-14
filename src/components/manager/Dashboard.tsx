@@ -6,7 +6,6 @@
     Package,
     ShoppingCart,
     DollarSign,
-    TrendingUp,
     AlertTriangle,
   } from "lucide-react";
   import GreenProgressBar from "../GreenProgressBar";
@@ -44,15 +43,23 @@
         try {
           console.log('Fetching data for user:', user);
           
+          // Check if user has a valid branchId
+          if (!user?.branchId) {
+            setError("No branch assigned. Please contact administrator.");
+            setProducts([]);
+            setSales([]);
+            return;
+          }
+
           // Fetch products using authenticated API
           console.log('Fetching products with authentication');
-          const productsData = await apiEndpoints.getInventory(user?.branchId);
+          const productsData = await apiEndpoints.getInventory(user.branchId);
           setProducts(productsData);
 
           // Fetch sales data using authenticated API
           console.log('Fetching sales with authentication');
           try {
-            const salesData = await apiEndpoints.getRecentSales(user?.branchId);
+            const salesData = await apiEndpoints.getRecentSales(user.branchId);
             setSales(salesData);
           } catch (salesError) {
             console.warn('Failed to fetch sales data:', salesError);
@@ -122,7 +129,7 @@
       },
       {
         name: "24 Hours Revenue",
-        value: `$${totalRevenue24h.toFixed(2)}`,
+        value: `#${totalRevenue24h.toFixed(2)}`,
         icon: DollarSign,
         color: "bg-purple-500",
         change: `From ${totalSalesCount} sales`,
@@ -253,7 +260,7 @@
                         </div>
                         <div className="ml-4 text-right">
                           <span className="text-sm font-medium text-gray-900">
-                            ${sale.totalAmount.toFixed(2)}
+                            #{sale.totalAmount.toFixed(2)}
                           </span>
                           <p className="text-xs text-gray-400">
                             ID: {sale.transactionId.slice(-6)}
@@ -316,7 +323,7 @@
           <h3 className="text-lg font-medium text-gray-900 mb-4">
             Quick Actions
           </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <button className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-center">
               <ShoppingCart className="h-8 w-8 mx-auto mb-2 text-blue-600" />
               <span className="text-sm font-medium text-gray-900">New Sale</span>
@@ -325,12 +332,6 @@
               <Package className="h-8 w-8 mx-auto mb-2 text-green-600" />
               <span className="text-sm font-medium text-gray-900">
                 {getActualRole(user) === 'manager' ? 'Add Stock' : 'View Stock'}
-              </span>
-            </button>
-            <button className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-center">
-              <TrendingUp className="h-8 w-8 mx-auto mb-2 text-purple-600" />
-              <span className="text-sm font-medium text-gray-900">
-                View Reports
               </span>
             </button>
                       <button className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-center">

@@ -50,6 +50,8 @@ export const authenticate = async (req, res, next) => {
       role: user.role,
       branchId: user.branchId
     };
+    
+    console.log("Authenticated user:", req.user);
 
     next();
   } catch (error) {

@@ -11,6 +11,9 @@ const TransactionSchema = new mongoose.Schema({
       },
       quantity: { type: Number, required: true },
       price: { type: Number, required: true },
+      isUnitPurchase: { type: Boolean, default: false }, // Whether sold as units or packs
+      unitsSold: { type: Number, default: 0 }, // Total units sold (calculated)
+      packsSold: { type: Number, default: 0 }, // Total packs sold (calculated)
     },
   ],
   totalAmount: { type: Number, required: true },

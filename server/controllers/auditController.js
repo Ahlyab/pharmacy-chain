@@ -148,6 +148,9 @@ export const getBranchActivity = async (req, res) => {
 // Get system-wide audit logs with filters
 export const getSystemAuditLogs = async (req, res) => {
   try {
+    console.log('getSystemAuditLogs called with user:', req.user);
+    console.log('Query params:', req.query);
+    
     const { 
       limit = 100, 
       page = 1, 

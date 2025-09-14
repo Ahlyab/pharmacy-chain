@@ -19,7 +19,11 @@ interface Product {
   id: string;
   name: string;
   price: number;
+  unitPrice?: number; // Unit price for individual tablets
   stock: number;
+  shelfStock?: number; // Stock on shelf/display
+  unitsPerPack?: number; // Number of units per pack
+  units?: string; // Unit of measurement (tablets, bottles, boxes, etc.)
   category: string;
   manufacturer?: string;
   minStock?: number;
@@ -29,6 +33,9 @@ interface Product {
 
 interface CartItem extends Product {
   quantity: number;
+  isUnitPurchase?: boolean; // Whether this item was purchased by unit or full pack
+  unitsSold?: number; // Total units sold (calculated)
+  packsSold?: number; // Total packs sold (calculated)
 }
 
 const POS: React.FC = () => {
@@ -46,6 +53,10 @@ const POS: React.FC = () => {
     () => localStorage.getItem("cashierName") || ""
   );
   const [branchInfo, setBranchInfo] = useState<any>(null);
+  const [showPurchaseTypeModal, setShowPurchaseTypeModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [showUnitQuantityModal, setShowUnitQuantityModal] = useState(false);
+  const [unitQuantity, setUnitQuantity] = useState(1);
 
   // Print styles for receipt
   const printStyles = `
@@ -87,13 +98,53 @@ const POS: React.FC = () => {
     return { ...product, status, id: product._id || product.id };
   };
 
+  // Helper function to calculate units and packs for a cart item
+  const calculateUnitsAndPacks = (item: CartItem) => {
+    const unitsPerPack = item.unitsPerPack || 1;
+    let unitsSold = 0;
+    let packsSold = 0;
+
+    if (item.isUnitPurchase) {
+      // Selling individual units
+      unitsSold = item.quantity;
+      packsSold = Math.floor(unitsSold / unitsPerPack);
+    } else {
+      // Selling full packs
+      packsSold = item.quantity;
+      unitsSold = packsSold * unitsPerPack;
+    }
+
+    return { unitsSold, packsSold };
+  };
+
+  // Helper function to calculate total units and packs for all cart items
+  const calculateTotalUnitsAndPacks = () => {
+    let totalUnits = 0;
+    let totalPacks = 0;
+
+    cart.forEach(item => {
+      const { unitsSold, packsSold } = calculateUnitsAndPacks(item);
+      totalUnits += unitsSold;
+      totalPacks += packsSold;
+    });
+
+    return { totalUnits, totalPacks };
+  };
+
   // Fetch products from API (filtered by manager's branch)
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
+      // Check if user has a valid branchId
+      if (!user?.branchId) {
+        setError("No branch assigned. Please contact administrator.");
+        setProducts([]);
+        return;
+      }
+
       // Use authenticated API endpoint
-      const data = await apiEndpoints.getInventory(user?.branchId);
+      const data = await apiEndpoints.getInventory(user.branchId);
 
       const productsWithStatus = data.map(addStatus);
       setProducts(productsWithStatus);
@@ -137,31 +188,53 @@ const POS: React.FC = () => {
   );
 
   const addToCart = (product: Product) => {
-    const existingItem = cart.find((item) => item._id === product._id);
+    // Always show purchase type selection modal for all products
+    setSelectedProduct(product);
+    setShowPurchaseTypeModal(true);
+  };
+
+  const addToCartDirect = (product: Product, isUnitPurchase: boolean, quantity: number = 1) => {
+    const existingItem = cart.find((item) => item._id === product._id && item.isUnitPurchase === isUnitPurchase);
+    
+    // Determine available stock based on purchase type
+    const availableStock = isUnitPurchase 
+      ? (product.shelfStock !== undefined ? product.shelfStock : product.stock)
+      : product.stock;
+    
     if (existingItem) {
-      if (existingItem.quantity < product.stock) {
+      if (existingItem.quantity + quantity <= availableStock) {
+        const updatedItem = { ...existingItem, quantity: existingItem.quantity + quantity };
+        const { unitsSold, packsSold } = calculateUnitsAndPacks(updatedItem);
+        updatedItem.unitsSold = unitsSold;
+        updatedItem.packsSold = packsSold;
+        
         setCart(
           cart.map((item) =>
-            item._id === product._id
-              ? { ...item, quantity: item.quantity + 1 }
+            item._id === product._id && item.isUnitPurchase === isUnitPurchase
+              ? updatedItem
               : item
           )
         );
       } else {
         Swal.fire({
           title: "Stock Limit Reached",
-          text: `Cannot add more ${product.name}. Only ${product.stock} available in stock.`,
+          text: `Cannot add ${quantity} more ${product.name}. Only ${availableStock - existingItem.quantity} available in ${isUnitPurchase ? 'shelf' : 'total'} stock.`,
           icon: "warning",
           confirmButtonText: "OK",
         });
       }
     } else {
-      if (product.stock > 0) {
-        setCart([...cart, { ...product, quantity: 1 }]);
+      if (availableStock >= quantity) {
+        const newItem: CartItem = { ...product, quantity: quantity, isUnitPurchase };
+        const { unitsSold, packsSold } = calculateUnitsAndPacks(newItem);
+        newItem.unitsSold = unitsSold;
+        newItem.packsSold = packsSold;
+        
+        setCart([...cart, newItem]);
       } else {
         Swal.fire({
-          title: "Out of Stock",
-          text: `${product.name} is out of stock.`,
+          title: "Insufficient Stock",
+          text: `Cannot add ${quantity} ${product.name}. Only ${availableStock} available in ${isUnitPurchase ? 'shelf' : 'total'} stock.`,
           icon: "error",
           confirmButtonText: "OK",
         });
@@ -169,32 +242,51 @@ const POS: React.FC = () => {
     }
   };
 
-  const updateQuantity = (_id: string, quantity: number) => {
+  const updateQuantity = (_id: string, quantity: number, isUnitPurchase?: boolean) => {
     if (quantity === 0) {
-      setCart(cart.filter((item) => item._id !== _id));
+      setCart(cart.filter((item) => !(item._id === _id && item.isUnitPurchase === isUnitPurchase)));
     } else {
       const product = products.find((p) => p._id === _id);
-      if (product && quantity <= product.stock) {
-        setCart(
-          cart.map((item) => (item._id === _id ? { ...item, quantity } : item))
-        );
-      } else if (product && quantity > product.stock) {
-        Swal.fire({
-          title: "Stock Limit Exceeded",
-          text: `Cannot set quantity to ${quantity}. Only ${product.stock} available in stock.`,
-          icon: "warning",
-          confirmButtonText: "OK",
-        });
+      if (product) {
+        // Determine available stock based on purchase type
+        const availableStock = isUnitPurchase 
+          ? (product.shelfStock !== undefined ? product.shelfStock : product.stock)
+          : product.stock;
+          
+        if (quantity <= availableStock) {
+          setCart(
+            cart.map((item) => {
+              if (item._id === _id && item.isUnitPurchase === isUnitPurchase) {
+                const updatedItem = { ...item, quantity };
+                const { unitsSold, packsSold } = calculateUnitsAndPacks(updatedItem);
+                updatedItem.unitsSold = unitsSold;
+                updatedItem.packsSold = packsSold;
+                return updatedItem;
+              }
+              return item;
+            })
+          );
+        } else {
+          Swal.fire({
+            title: "Stock Limit Exceeded",
+            text: `Cannot set quantity to ${quantity}. Only ${availableStock} available in ${isUnitPurchase ? 'shelf' : 'total'} stock.`,
+            icon: "warning",
+            confirmButtonText: "OK",
+          });
+        }
       }
     }
   };
 
-  const removeFromCart = (_id: string) => {
-    setCart(cart.filter((item) => item._id !== _id));
+  const removeFromCart = (_id: string, isUnitPurchase?: boolean) => {
+    setCart(cart.filter((item) => !(item._id === _id && item.isUnitPurchase === isUnitPurchase)));
   };
 
   const getTotalAmount = () => {
-    return cart.reduce((total, item) => total + item.price * item.quantity, 0);
+    return cart.reduce((total, item) => {
+      const price = item.isUnitPurchase && item.unitPrice ? item.unitPrice : item.price;
+      return total + price * item.quantity;
+    }, 0);
   };
 
   const getTotalItems = () => {
@@ -229,10 +321,14 @@ const POS: React.FC = () => {
 
     // Validate stock quantities before proceeding
     for (const item of cart) {
-      if (item.quantity > item.stock) {
+      const availableStock = item.isUnitPurchase 
+        ? (item.shelfStock !== undefined ? item.shelfStock : item.stock)
+        : item.stock;
+        
+      if (item.quantity > availableStock) {
         Swal.fire({
           title: "Stock Validation Failed",
-          text: `Cannot complete transaction: ${item.name} quantity (${item.quantity}) exceeds available stock (${item.stock})`,
+          text: `Cannot complete transaction: ${item.name} quantity (${item.quantity}) exceeds available ${item.isUnitPurchase ? 'shelf' : 'total'} stock (${availableStock})`,
           icon: "error",
           confirmButtonText: "OK",
         });
@@ -251,11 +347,17 @@ const POS: React.FC = () => {
     // Map cart items to match backend schema
     const transaction = {
       transactionId: `TXN${Date.now()}`,
-      items: cart.map((item) => ({
-        productId: item._id,
-        quantity: item.quantity,
-        price: item.price,
-      })),
+      items: cart.map((item) => {
+        const { unitsSold, packsSold } = calculateUnitsAndPacks(item);
+        return {
+          productId: item._id,
+          quantity: item.quantity,
+          price: item.isUnitPurchase && item.unitPrice ? item.unitPrice : item.price,
+          isUnitPurchase: item.isUnitPurchase || false,
+          unitsSold: unitsSold,
+          packsSold: packsSold,
+        };
+      }),
       totalAmount: getTotalAmount(),
       customerName: customerName.trim() ? customerName : undefined,
       cashierName: cashierName.trim() ? cashierName : undefined,
@@ -306,10 +408,35 @@ const POS: React.FC = () => {
     try {
       // Update stock for each item in cart
       for (const item of cart) {
-        const newStock = item.stock - item.quantity;
+        const { unitsSold, packsSold } = calculateUnitsAndPacks(item);
+        
+        // Calculate new stock based on what was actually sold
+        let newStock = item.stock;
+        let newShelfStock = item.shelfStock;
+        
+        if (item.isUnitPurchase) {
+          // Selling individual units - reduce by units sold
+          newStock = item.stock - unitsSold;
+          if (item.shelfStock !== undefined) {
+            newShelfStock = Math.max(0, item.shelfStock - unitsSold);
+          }
+        } else {
+          // Selling full packs - reduce by packs sold
+          newStock = item.stock - packsSold;
+          // For pack sales, also reduce shelf stock by the units in those packs
+          if (item.shelfStock !== undefined) {
+            newShelfStock = Math.max(0, item.shelfStock - unitsSold);
+          }
+        }
 
         try {
-          await apiEndpoints.updateInventory(item._id, { stock: newStock });
+          // Prepare update data
+          const updateData: any = { stock: newStock };
+          if (item.shelfStock !== undefined) {
+            updateData.shelfStock = newShelfStock;
+          }
+
+          await apiEndpoints.updateInventory(item._id, updateData);
         } catch (error) {
           console.error(
             `Failed to update stock for product ${item.name}:`,
@@ -325,10 +452,20 @@ const POS: React.FC = () => {
         prevProducts.map((product) => {
           const cartItem = cart.find((item) => item._id === product._id);
           if (cartItem) {
-            return {
+            const { unitsSold, packsSold } = calculateUnitsAndPacks(cartItem);
+            const updatedProduct = {
               ...product,
-              stock: product.stock - cartItem.quantity,
+              stock: cartItem.isUnitPurchase 
+                ? product.stock - unitsSold 
+                : product.stock - packsSold,
             };
+            
+            // Update shelf stock for both unit and pack purchases
+            if (product.shelfStock !== undefined) {
+              updatedProduct.shelfStock = Math.max(0, product.shelfStock - unitsSold);
+            }
+            
+            return updatedProduct;
           }
           return product;
         })
@@ -411,6 +548,9 @@ const POS: React.FC = () => {
                 {products.filter((p) => p.stock > (p.minStock || 5)).length}
               </div>
               <div className="text-sm text-gray-600">In Stock</div>
+              <div className="text-xs text-gray-500">
+                {products.filter((p) => p.shelfStock !== undefined && p.shelfStock > 0).length} on shelf
+              </div>
             </div>
           </div>
           <div className="flex items-center space-x-3">
@@ -438,6 +578,9 @@ const POS: React.FC = () => {
                 }
               </div>
               <div className="text-sm text-gray-600">Low Stock</div>
+              <div className="text-xs text-gray-500">
+                {products.filter((p) => p.shelfStock !== undefined && p.shelfStock > 0 && p.shelfStock <= (p.minStock || 5)).length} shelf low
+              </div>
             </div>
           </div>
           <div className="flex items-center space-x-3">
@@ -461,6 +604,9 @@ const POS: React.FC = () => {
                 {products.filter((p) => p.stock === 0).length}
               </div>
               <div className="text-sm text-gray-600">Out of Stock</div>
+              <div className="text-xs text-gray-500">
+                {products.filter((p) => p.shelfStock !== undefined && p.shelfStock === 0).length} shelf empty
+              </div>
             </div>
           </div>
         </div>
@@ -549,21 +695,51 @@ const POS: React.FC = () => {
                           {product.category}
                         </p>
                         <div className="flex justify-between items-center mb-1">
-                          <span className="text-lg font-bold text-blue-600">
-                            ${product.price}
-                          </span>
-                          <span
-                            className={
-                              "text-xs font-semibold " +
-                              (isOutOfStock
-                                ? "text-red-600"
-                                : product.stock <= (product.minStock || 5)
-                                ? "text-yellow-600"
-                                : "text-green-600")
-                            }
-                          >
-                            {product.stock} in stock
-                          </span>
+                          <div className="flex flex-col">
+                            <span className="text-lg font-bold text-blue-600">
+                              #{product.price}
+                            </span>
+                            {product.unitPrice && product.unitPrice > 0 && (
+                              <span className="text-xs text-green-600 font-medium">
+                                #{product.unitPrice} per unit
+                              </span>
+                            )}
+                            {product.unitsPerPack && product.unitsPerPack > 1 && (
+                              <span className="text-xs text-gray-500">
+                                ({product.unitsPerPack} {product.units || 'units'} per pack)
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <div className="flex flex-col items-end space-y-1">
+                              <span
+                                className={
+                                  "text-xs font-semibold " +
+                                  (isOutOfStock
+                                    ? "text-red-600"
+                                    : product.stock <= (product.minStock || 5)
+                                    ? "text-yellow-600"
+                                    : "text-green-600")
+                                }
+                              >
+                                {product.stock} total stock
+                              </span>
+                              {product.shelfStock !== undefined && (
+                                <span
+                                  className={
+                                    "text-xs font-medium " +
+                                    (product.shelfStock === 0
+                                      ? "text-red-500"
+                                      : product.shelfStock <= (product.minStock || 5)
+                                      ? "text-yellow-500"
+                                      : "text-blue-600")
+                                  }
+                                >
+                                  {product.shelfStock} on shelf
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </div>
                         {expiryDisplay}
                         {product.stock > 0 &&
@@ -598,63 +774,111 @@ const POS: React.FC = () => {
               {cart.length === 0 ? (
                 <p className="text-gray-500 text-center py-4">Cart is empty</p>
               ) : (
-                cart.map((item) => (
-                  <div
-                    key={item._id}
-                    className="flex items-center justify-between border-b border-gray-100 pb-3"
-                  >
-                    <div className="flex-1">
-                      <h4 className="text-sm font-medium text-gray-900">
-                        {item.name}
-                      </h4>
-                      <p className="text-xs text-gray-500">
-                        ${item.price} each
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        Stock: {item.stock - item.quantity} remaining
-                      </p>
+                cart.map((item, index) => {
+                  const currentPrice = item.isUnitPurchase && item.unitPrice ? item.unitPrice : item.price;
+                  const priceLabel = item.isUnitPurchase ? "per unit" : "per pack";
+                  
+                  return (
+                    <div
+                      key={`${item._id}-${item.isUnitPurchase ? 'unit' : 'pack'}-${index}`}
+                      className="flex items-center justify-between border-b border-gray-100 pb-3"
+                    >
+                      <div className="flex-1">
+                        <h4 className="text-sm font-medium text-gray-900">
+                          {item.name}
+                        </h4>
+                        <p className="text-xs text-gray-500">
+                          #{currentPrice.toFixed(2)} {priceLabel}
+                        </p>
+                        {item.isUnitPurchase && (
+                          <p className="text-xs text-blue-600 font-medium">
+                            Unit Purchase
+                          </p>
+                        )}
+                        <div className="text-xs text-gray-400 space-y-1">
+                          <div>
+                            Total Stock: {item.stock - item.quantity} remaining
+                          </div>
+                          {item.shelfStock !== undefined && (
+                            <div className="text-blue-600">
+                              Shelf Stock: {item.shelfStock - (item.isUnitPurchase ? item.quantity : (item.quantity * (item.unitsPerPack || 1)))} remaining
+                            </div>
+                          )}
+                        </div>
+                        {/* Show units and packs breakdown */}
+                        <div className="text-xs text-gray-500 mt-1">
+                          {item.isUnitPurchase ? (
+                            <span>
+                              Units: {item.unitsSold || 0} | Packs: {item.packsSold || 0}
+                            </span>
+                          ) : (
+                            <span>
+                              Packs: {item.packsSold || 0} | Units: {item.unitsSold || 0}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() =>
+                            updateQuantity(item._id, item.quantity - 1, item.isUnitPurchase)
+                          }
+                          className="p-1 rounded-full hover:bg-gray-100"
+                        >
+                          <Minus className="h-3 w-3" />
+                        </button>
+                        <span className="text-sm font-medium w-8 text-center">
+                          {item.quantity}
+                        </span>
+                        <button
+                          onClick={() =>
+                            updateQuantity(item._id, item.quantity + 1, item.isUnitPurchase)
+                          }
+                          className="p-1 rounded-full hover:bg-gray-100"
+                          disabled={item.quantity >= item.stock}
+                        >
+                          <Plus className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={() => removeFromCart(item._id, item.isUnitPurchase)}
+                          className="p-1 rounded-full hover:bg-red-100 text-red-600"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() =>
-                          updateQuantity(item._id, item.quantity - 1)
-                        }
-                        className="p-1 rounded-full hover:bg-gray-100"
-                      >
-                        <Minus className="h-3 w-3" />
-                      </button>
-                      <span className="text-sm font-medium w-8 text-center">
-                        {item.quantity}
-                      </span>
-                      <button
-                        onClick={() =>
-                          updateQuantity(item._id, item.quantity + 1)
-                        }
-                        className="p-1 rounded-full hover:bg-gray-100"
-                        disabled={item.quantity >= item.stock}
-                      >
-                        <Plus className="h-3 w-3" />
-                      </button>
-                      <button
-                        onClick={() => removeFromCart(item._id)}
-                        className="p-1 rounded-full hover:bg-red-100 text-red-600"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
 
             {cart.length > 0 && (
               <div className="mt-4 pt-4 border-t border-gray-200">
+                {/* Units and Packs Summary */}
+                <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                  <div className="text-sm font-medium text-gray-700 mb-2">Sale Summary:</div>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Total Units:</span>
+                      <span className="font-semibold text-blue-600">
+                        {calculateTotalUnitsAndPacks().totalUnits}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Total Packs:</span>
+                      <span className="font-semibold text-green-600">
+                        {calculateTotalUnitsAndPacks().totalPacks}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
                 <div className="flex justify-between items-center mb-4">
                   <span className="text-lg font-medium text-gray-900">
                     Total:
                   </span>
                   <span className="text-xl font-bold text-blue-600">
-                    ${getTotalAmount().toFixed(2)}
+                    #{getTotalAmount().toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -824,30 +1048,49 @@ const POS: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {lastTransaction.items.map((item: any, index: number) => (
-                        <tr
-                          key={item._id || index}
-                          className="border-b border-gray-100"
-                        >
-                          <td className="py-2 text-gray-800">
-                            <div className="font-medium">{item.name}</div>
-                            {item.composition && (
-                              <div className="text-xs text-gray-500">
-                                {item.composition}
-                              </div>
-                            )}
-                          </td>
-                          <td className="text-right py-2 text-gray-700">
-                            ${item.price.toFixed(2)}
-                          </td>
-                          <td className="text-right py-2 text-gray-700">
-                            {item.quantity}
-                          </td>
-                          <td className="text-right py-2 font-medium text-gray-800">
-                            ${(item.price * item.quantity).toFixed(2)}
-                          </td>
-                        </tr>
-                      ))}
+                      {lastTransaction.items.map((item: any, index: number) => {
+                        const currentPrice = item.isUnitPurchase && item.unitPrice ? item.unitPrice : item.price;
+                        const priceLabel = item.isUnitPurchase ? " (per unit)" : " (per pack)";
+                        
+                        return (
+                          <tr
+                            key={item._id || index}
+                            className="border-b border-gray-100"
+                          >
+                            <td className="py-2 text-gray-800">
+                              <div className="font-medium">{item.name}</div>
+                              {item.isUnitPurchase && (
+                                <div className="text-xs text-blue-600 font-medium">
+                                  Unit Purchase
+                                </div>
+                              )}
+                              {item.unitsSold && item.packsSold && (
+                                <div className="text-xs text-gray-500">
+                                  {item.isUnitPurchase ? (
+                                    <span>Units: {item.unitsSold} | Packs: {item.packsSold}</span>
+                                  ) : (
+                                    <span>Packs: {item.packsSold} | Units: {item.unitsSold}</span>
+                                  )}
+                                </div>
+                              )}
+                              {item.composition && (
+                                <div className="text-xs text-gray-500">
+                                  {item.composition}
+                                </div>
+                              )}
+                            </td>
+                            <td className="text-right py-2 text-gray-700">
+                              #{currentPrice.toFixed(2)}{priceLabel}
+                            </td>
+                            <td className="text-right py-2 text-gray-700">
+                              {item.quantity}
+                            </td>
+                            <td className="text-right py-2 font-medium text-gray-800">
+                              #{(currentPrice * item.quantity).toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -857,7 +1100,7 @@ const POS: React.FC = () => {
                   <div className="flex justify-between items-center text-lg font-bold text-gray-800 mb-2">
                     <span>Total Amount:</span>
                     <span className="text-2xl text-blue-600">
-                      ${lastTransaction.total.toFixed(2)}
+                      #{lastTransaction.total.toFixed(2)}
                     </span>
                   </div>
                   <div className="text-sm text-gray-600 mb-1">
@@ -918,6 +1161,224 @@ const POS: React.FC = () => {
             </div>
           </div>
         </>
+      )}
+
+      {/* Purchase Type Selection Modal */}
+      {showPurchaseTypeModal && selectedProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-md">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Select Purchase Type
+              </h3>
+              <p className="text-sm text-gray-600 mb-6">
+                How would you like to purchase <strong>{selectedProduct.name}</strong>?
+                {!selectedProduct.unitPrice || selectedProduct.unitPrice === 0 ? (
+                  <span className="block text-xs text-gray-500 mt-1">
+                    (This product is only available as a full pack)
+                  </span>
+                ) : null}
+              </p>
+              
+              <div className="space-y-4">
+                {/* Full Pack Option */}
+                <button
+                  onClick={() => {
+                    addToCartDirect(selectedProduct, false, 1);
+                    setShowPurchaseTypeModal(false);
+                    setSelectedProduct(null);
+                  }}
+                  className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors text-left"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium text-gray-900">Full Pack</div>
+                      <div className="text-sm text-gray-600">
+                        #{selectedProduct.price.toFixed(2)} per pack
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {selectedProduct.stock} packs available
+                        {selectedProduct.unitsPerPack && selectedProduct.unitsPerPack > 1 && (
+                          <span className="block text-gray-400">
+                            ({selectedProduct.unitsPerPack} {selectedProduct.units || 'units'} per pack)
+                          </span>
+                        )}
+                        {selectedProduct.shelfStock !== undefined && selectedProduct.shelfStock > 0 && (
+                          <span className="block text-blue-600">
+                            {selectedProduct.shelfStock} on shelf
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-2xl">📦</div>
+                  </div>
+                </button>
+
+                {/* Unit Purchase Option - Only show if product has unitPrice */}
+                {selectedProduct.unitPrice && selectedProduct.unitPrice > 0 && (
+                  <button
+                    onClick={() => {
+                      setUnitQuantity(1);
+                      setShowPurchaseTypeModal(false);
+                      setShowUnitQuantityModal(true);
+                    }}
+                    className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition-colors text-left"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-gray-900">Individual Units</div>
+                        <div className="text-sm text-gray-600">
+                          #{selectedProduct.unitPrice.toFixed(2)} per unit
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {selectedProduct.shelfStock !== undefined ? selectedProduct.shelfStock : selectedProduct.stock} units available
+                          {selectedProduct.shelfStock !== undefined && selectedProduct.shelfStock !== selectedProduct.stock && (
+                            <span className="block text-gray-400">
+                              (Total stock: {selectedProduct.stock})
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-2xl">💊</div>
+                    </div>
+                  </button>
+                )}
+              </div>
+
+              <div className="flex justify-end mt-6">
+                <button
+                  onClick={() => {
+                    setShowPurchaseTypeModal(false);
+                    setSelectedProduct(null);
+                  }}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unit Quantity Selection Modal */}
+      {showUnitQuantityModal && selectedProduct && selectedProduct.unitPrice && selectedProduct.unitPrice > 0 && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-md">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Add Units to Cart
+              </h3>
+              <p className="text-sm text-gray-600 mb-6">
+                How many units of <strong>{selectedProduct.name}</strong> do you want to add?
+              </p>
+              
+              <div className="mb-6">
+                <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Unit Price:</span>
+                    <span className="font-semibold text-green-600">
+                      #{selectedProduct.unitPrice?.toFixed(2) || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center mt-2">
+                    <span className="text-sm text-gray-600">Available Stock:</span>
+                    <span className="font-semibold text-blue-600">
+                      {selectedProduct.shelfStock !== undefined ? selectedProduct.shelfStock : selectedProduct.stock} units
+                      {selectedProduct.shelfStock !== undefined && selectedProduct.shelfStock !== selectedProduct.stock && (
+                        <span className="text-xs text-gray-500 ml-1">
+                          (Shelf)
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  {selectedProduct.unitsPerPack && selectedProduct.unitsPerPack > 1 && (
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="text-sm text-gray-500">Units per Pack:</span>
+                      <span className="text-sm text-gray-500">
+                        {selectedProduct.unitsPerPack} {selectedProduct.units || 'units'}
+                      </span>
+                    </div>
+                  )}
+                  {selectedProduct.shelfStock !== undefined && selectedProduct.shelfStock !== selectedProduct.stock && (
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="text-sm text-gray-500">Total Stock:</span>
+                      <span className="text-sm text-gray-500">
+                        {selectedProduct.stock} units
+                      </span>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex items-center justify-center space-x-4">
+                  <button
+                    onClick={() => setUnitQuantity(Math.max(1, unitQuantity - 1))}
+                    className="w-10 h-10 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center"
+                    disabled={unitQuantity <= 1}
+                  >
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  
+                  <input
+                    type="number"
+                    min="1"
+                    max={selectedProduct.shelfStock !== undefined ? selectedProduct.shelfStock : selectedProduct.stock}
+                    value={unitQuantity}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value) || 1;
+                      const maxStock = selectedProduct.shelfStock !== undefined ? selectedProduct.shelfStock : selectedProduct.stock;
+                      setUnitQuantity(Math.max(1, Math.min(maxStock, value)));
+                    }}
+                    className="w-20 text-center text-lg font-semibold border border-gray-300 rounded-md py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  
+                  <button
+                    onClick={() => {
+                      const maxStock = selectedProduct.shelfStock !== undefined ? selectedProduct.shelfStock : selectedProduct.stock;
+                      setUnitQuantity(Math.min(maxStock, unitQuantity + 1));
+                    }}
+                    className="w-10 h-10 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center"
+                    disabled={unitQuantity >= (selectedProduct.shelfStock !== undefined ? selectedProduct.shelfStock : selectedProduct.stock)}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+                
+                <div className="text-center mt-4">
+                  <div className="text-sm text-gray-600">
+                    Total: <span className="font-semibold text-lg text-green-600">
+                      #{((selectedProduct.unitPrice || 0) * unitQuantity).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => {
+                    setShowUnitQuantityModal(false);
+                    setSelectedProduct(null);
+                    setUnitQuantity(1);
+                  }}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    addToCartDirect(selectedProduct, true, unitQuantity);
+                    setShowUnitQuantityModal(false);
+                    setSelectedProduct(null);
+                    setUnitQuantity(1);
+                  }}
+                  className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                >
+                  Add to Cart
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

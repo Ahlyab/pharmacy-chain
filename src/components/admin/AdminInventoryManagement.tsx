@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Building2, Plus, Search, Upload } from "lucide-react";
+import { Building2, Plus, Search, Upload, ChevronDown } from "lucide-react";
 import { apiEndpoints, api } from "../../utils/api";
 import Swal from "sweetalert2";
 
@@ -18,6 +18,18 @@ interface Branch {
   outOfStockCount?: number;
 }
 
+interface Supplier {
+  _id: string;
+  name: string;
+  contact: string;
+  address: string;
+  email?: string;
+  company?: string;
+  gst?: string;
+  status?: string;
+  notes?: string;
+}
+
 interface Product {
   _id?: string;
   id: string;
@@ -26,6 +38,10 @@ interface Product {
   stock: number;
   minStock: number;
   price: number;
+  unitPrice?: number;
+  units?: string;
+  unitsPerPack?: number;
+  shelfStock?: number;
   supplier: string;
   supplierId?: string;
   expiryDate: string;
@@ -51,7 +67,16 @@ const AdminInventoryManagement: React.FC = () => {
   const [showAddProductModal, setShowAddProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
+  // Dropdown states
+  const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
+  const [supplierSearch, setSupplierSearch] = useState("");
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const [productSearch, setProductSearch] = useState("");
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const supplierDropdownRef = useRef<HTMLDivElement>(null);
+  const productDropdownRef = useRef<HTMLDivElement>(null);
   const [sortField, setSortField] = useState<keyof Product>("name");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [formData, setFormData] = useState({
@@ -62,6 +87,10 @@ const AdminInventoryManagement: React.FC = () => {
     stock: 0,
     minStock: 0,
     price: 0,
+    unitPrice: 0,
+    units: "pieces",
+    unitsPerPack: 1,
+    shelfStock: 0,
     purchasePriceExclVAT: 0,
     retailPriceVATIncluded: 0,
     vat: 0,
@@ -69,6 +98,16 @@ const AdminInventoryManagement: React.FC = () => {
     series: "",
     reservedQuantity: 0,
   });
+
+  // Fetch suppliers from backend
+  const fetchSuppliers = async () => {
+    try {
+      const data = await apiEndpoints.getSuppliers();
+      setSuppliers(data);
+    } catch (err) {
+      console.error("Error fetching suppliers:", err);
+    }
+  };
 
   // Fetch branches with inventory statistics
   const fetchBranches = async () => {
@@ -170,6 +209,30 @@ const AdminInventoryManagement: React.FC = () => {
 
   useEffect(() => {
     fetchBranches();
+    fetchSuppliers();
+  }, []);
+
+  // Handle clicking outside dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        supplierDropdownRef.current &&
+        !supplierDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowSupplierDropdown(false);
+      }
+      if (
+        productDropdownRef.current &&
+        !productDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowProductDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
   }, []);
 
   // Handle branch selection
@@ -250,6 +313,114 @@ const AdminInventoryManagement: React.FC = () => {
     return sortDirection === "asc" ? "↑" : "↓";
   };
 
+  // Filter suppliers based on search
+  const filteredSuppliers = suppliers
+    .filter((supplier) =>
+      supplier.name.toLowerCase().includes(supplierSearch.toLowerCase())
+    )
+    .slice(0, 10); // Limit to 10 results for better performance
+
+  // Handle supplier selection
+  const handleSupplierSelect = (supplier: Supplier) => {
+    setFormData({ ...formData, supplier: supplier.name });
+    setShowSupplierDropdown(false);
+    setSupplierSearch(supplier.name);
+  };
+
+  // Handle supplier input change
+  const handleSupplierInputChange = (value: string) => {
+    setFormData({ ...formData, supplier: value });
+    setSupplierSearch(value);
+    if (value.trim() === "") {
+      setShowSupplierDropdown(false);
+    } else {
+      setShowSupplierDropdown(true);
+    }
+  };
+
+  // Handle supplier input focus
+  const handleSupplierFocus = () => {
+    setShowSupplierDropdown(true);
+  };
+
+  // Handle supplier input key down
+  const handleSupplierKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      setShowSupplierDropdown(false);
+      // If there's a search term and no exact match, use it as the supplier
+      if (
+        supplierSearch.trim() &&
+        !suppliers.some(
+          (s) => s.name.toLowerCase() === supplierSearch.toLowerCase()
+        )
+      ) {
+        setFormData({ ...formData, supplier: supplierSearch.trim() });
+      }
+    }
+  };
+
+  // Filter products based on search for dropdown
+  const filteredProductsForDropdown = products
+    .filter((product) =>
+      product.name.toLowerCase().includes(productSearch.toLowerCase())
+    )
+    .slice(0, 10); // Limit to 10 results for better performance
+
+  // Handle product selection from dropdown
+  const handleProductSelect = (product: Product) => {
+    setFormData({
+      ...formData,
+      name: product.name,
+      manufacturer: product.manufacturer || "",
+      composition: product.composition || "",
+      series: product.series || "",
+      supplier: product.supplier,
+      price: product.price,
+      unitPrice: product.unitPrice || 0,
+      units: product.units || "pieces",
+      unitsPerPack: product.unitsPerPack || 1,
+      shelfStock: product.shelfStock || 0,
+      purchasePriceExclVAT: product.purchasePriceExclVAT || 0,
+      retailPriceVATIncluded:
+        product.retailPriceVATIncluded || product.price || 0,
+      vat: product.vat || 0,
+    });
+    setShowProductDropdown(false);
+    setProductSearch(product.name);
+  };
+
+  // Handle product input change
+  const handleProductInputChange = (value: string) => {
+    setFormData({ ...formData, name: value });
+    setProductSearch(value);
+    if (value.trim() === "") {
+      setShowProductDropdown(false);
+    } else {
+      setShowProductDropdown(true);
+    }
+  };
+
+  // Handle product input focus
+  const handleProductFocus = () => {
+    setShowProductDropdown(true);
+  };
+
+  // Handle product input key down
+  const handleProductKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      setShowProductDropdown(false);
+      // If there's a search term and no exact match, use it as the product name
+      if (
+        productSearch.trim() &&
+        !products.some(
+          (p) => p.name.toLowerCase() === productSearch.toLowerCase()
+        )
+      ) {
+        setFormData({ ...formData, name: productSearch.trim() });
+      }
+    }
+  };
+
   // Handle add/edit product
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -261,6 +432,12 @@ const AdminInventoryManagement: React.FC = () => {
         branchId: selectedBranch._id,
         category: "",
       };
+
+      // Debug logging to verify unitPrice and units are included
+      console.log("AdminInventoryManagement - Form data:", formData);
+      console.log("AdminInventoryManagement - Submit data:", submitData);
+      console.log("AdminInventoryManagement - unitPrice:", submitData.unitPrice);
+      console.log("AdminInventoryManagement - units:", submitData.units);
 
       if (editingProduct) {
         // Update existing product
@@ -289,6 +466,10 @@ const AdminInventoryManagement: React.FC = () => {
         stock: 0,
         minStock: 0,
         price: 0,
+        unitPrice: 0,
+        units: "pieces",
+        unitsPerPack: 1,
+        shelfStock: 0,
         purchasePriceExclVAT: 0,
         retailPriceVATIncluded: 0,
         vat: 0,
@@ -296,6 +477,10 @@ const AdminInventoryManagement: React.FC = () => {
         series: "",
         reservedQuantity: 0,
       });
+      setShowSupplierDropdown(false);
+      setSupplierSearch("");
+      setShowProductDropdown(false);
+      setProductSearch("");
 
       // Refresh products
       fetchBranchProducts(selectedBranch._id);
@@ -324,6 +509,8 @@ const AdminInventoryManagement: React.FC = () => {
       stock: product.stock,
       minStock: product.minStock,
       price: product.price,
+      unitPrice: product.unitPrice || 0,
+      units: product.units || "pieces",
       purchasePriceExclVAT: product.purchasePriceExclVAT || 0,
       retailPriceVATIncluded: product.retailPriceVATIncluded || product.price,
       vat: product.vat || 0,
@@ -429,10 +616,10 @@ const AdminInventoryManagement: React.FC = () => {
               <p><strong>Categories:</strong> ${summary.categories.join(
                 ", "
               )}</p>
-              <p><strong>Total retail value:</strong> $${summary.totalRetailValue.toFixed(
+              <p><strong>Total retail value:</strong> #{summary.totalRetailValue.toFixed(
                 2
               )}</p>
-              <p><strong>Total purchase value:</strong> $${summary.totalPurchaseValue.toFixed(
+              <p><strong>Total purchase value:</strong> #{summary.totalPurchaseValue.toFixed(
                 2
               )}</p>
               <p><strong>Branch:</strong> ${selectedBranch.name}</p>
@@ -555,6 +742,8 @@ const AdminInventoryManagement: React.FC = () => {
                   stock: 0,
                   minStock: 0,
                   price: 0,
+                  unitPrice: 0,
+                  units: "pieces",
                   purchasePriceExclVAT: 0,
                   retailPriceVATIncluded: 0,
                   vat: 0,
@@ -797,7 +986,7 @@ const AdminInventoryManagement: React.FC = () => {
                           {product.minStock}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          ${product.price}
+                          #${product.price}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {product.supplier}
@@ -858,15 +1047,90 @@ const AdminInventoryManagement: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Product Name *
                   </label>
+                  <div className="relative" ref={productDropdownRef}>
                   <input
                     type="text"
                     required
                     value={formData.name}
-                    onChange={(e) =>
-                      setFormData({ ...formData, name: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                      onChange={(e) => handleProductInputChange(e.target.value)}
+                      onFocus={handleProductFocus}
+                      onKeyDown={handleProductKeyDown}
+                      placeholder="Search or enter product name..."
+                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowProductDropdown(!showProductDropdown);
+                        if (!showProductDropdown) {
+                          if (formData.name.trim() === "") {
+                            setProductSearch("");
+                          } else {
+                            setProductSearch(formData.name);
+                          }
+                        } else {
+                          setProductSearch("");
+                        }
+                      }}
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      title="Toggle product dropdown"
+                    >
+                      <ChevronDown
+                        className={`w-4 h-4 transition-transform ${
+                          showProductDropdown ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {/* Product Dropdown */}
+                    {showProductDropdown && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                        {filteredProductsForDropdown.length > 0 ? (
+                          filteredProductsForDropdown.map((product) => (
+                            <div
+                              key={product.id}
+                              className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                              onClick={() => handleProductSelect(product)}
+                            >
+                              <div className="font-medium">{product.name}</div>
+                              {product.manufacturer && (
+                                <div className="text-sm text-gray-500">
+                                  {product.manufacturer}
+                                </div>
+                              )}
+                              {product.composition && (
+                                <div className="text-sm text-gray-500">
+                                  {product.composition}
+                                </div>
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="px-3 py-2 text-gray-500">
+                            {productSearch
+                              ? "No products found"
+                              : "Type to search products"}
+                          </div>
+                        )}
+                        {productSearch &&
+                          productSearch.trim() !== formData.name && (
+                            <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                              Press Enter to add "{productSearch}" as new product
+                            </div>
+                          )}
+                        {!productSearch && products.length > 0 && (
+                          <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                            {products.length} products available
+                          </div>
+                        )}
+                        {products.length === 0 && (
+                          <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                            No products in system. Type to add new product.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div>
@@ -887,15 +1151,85 @@ const AdminInventoryManagement: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Supplier *
                   </label>
+                  <div className="relative" ref={supplierDropdownRef}>
                   <input
                     type="text"
                     required
                     value={formData.supplier}
-                    onChange={(e) =>
-                      setFormData({ ...formData, supplier: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                      onChange={(e) => handleSupplierInputChange(e.target.value)}
+                      onFocus={handleSupplierFocus}
+                      onKeyDown={handleSupplierKeyDown}
+                      placeholder="Search or enter supplier name..."
+                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowSupplierDropdown(!showSupplierDropdown);
+                        if (!showSupplierDropdown) {
+                          if (formData.supplier.trim() === "") {
+                            setSupplierSearch("");
+                          } else {
+                            setSupplierSearch(formData.supplier);
+                          }
+                        } else {
+                          setSupplierSearch("");
+                        }
+                      }}
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      title="Toggle supplier dropdown"
+                    >
+                      <ChevronDown
+                        className={`w-4 h-4 transition-transform ${
+                          showSupplierDropdown ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {/* Supplier Dropdown */}
+                    {showSupplierDropdown && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                        {filteredSuppliers.length > 0 ? (
+                          filteredSuppliers.map((supplier) => (
+                            <div
+                              key={supplier._id}
+                              className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                              onClick={() => handleSupplierSelect(supplier)}
+                            >
+                              <div className="font-medium">{supplier.name}</div>
+                              {supplier.company && (
+                                <div className="text-sm text-gray-500">
+                                  {supplier.company}
+                                </div>
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="px-3 py-2 text-gray-500">
+                            {supplierSearch
+                              ? "No suppliers found"
+                              : "Type to search suppliers"}
+                          </div>
+                        )}
+                        {supplierSearch &&
+                          supplierSearch.trim() !== formData.supplier && (
+                            <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                              Press Enter to add "{supplierSearch}" as new supplier
+                            </div>
+                          )}
+                        {!supplierSearch && suppliers.length > 0 && (
+                          <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                            {suppliers.length} suppliers available
+                          </div>
+                        )}
+                        {suppliers.length === 0 && (
+                          <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                            No suppliers in system. Type to add new supplier.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div>
@@ -970,6 +1304,61 @@ const AdminInventoryManagement: React.FC = () => {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Unit Price
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.unitPrice}
+                    onChange={(e) => setFormData({ ...formData, unitPrice: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Units
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.units}
+                    onChange={(e) => setFormData({ ...formData, units: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="pieces, tablets, bottles, etc."
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Units Per Pack
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.unitsPerPack}
+                    onChange={(e) => setFormData({ ...formData, unitsPerPack: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="1"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Shelf Stock
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.shelfStock}
+                    onChange={(e) => setFormData({ ...formData, shelfStock: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="0"
+                  />
+                </div>
+                
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Purchase Price
@@ -1087,6 +1476,10 @@ const AdminInventoryManagement: React.FC = () => {
                       stock: 0,
                       minStock: 0,
                       price: 0,
+                      unitPrice: 0,
+                      units: "pieces",
+                      unitsPerPack: 1,
+                      shelfStock: 0,
                       purchasePriceExclVAT: 0,
                       retailPriceVATIncluded: 0,
                       vat: 0,
@@ -1094,6 +1487,10 @@ const AdminInventoryManagement: React.FC = () => {
                       series: "",
                       reservedQuantity: 0,
                     });
+                    setShowSupplierDropdown(false);
+                    setSupplierSearch("");
+                    setShowProductDropdown(false);
+                    setProductSearch("");
                   }}
                   className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
                 >

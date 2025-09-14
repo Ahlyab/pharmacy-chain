@@ -165,6 +165,8 @@ export const bulkImportInventory = async (req, res) => {
       stock: Number(product.stock || product.Quantity || 0),
       minStock: Number(product.minStock || 0),
       price: Number(product.price || product["Retail price VAT included"] || 0),
+      unitPrice: Number(product.unitPrice || product["Unit Price"] || 0),
+      units: product.units || product.Units || "pieces",
       supplier: product.supplier || product["Supplier name"] || "",
       expiryDate: product.expiryDate
         ? new Date(product.expiryDate)

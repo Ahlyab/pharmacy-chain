@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Token Debug</title>
+</head>
+<body>
+    <h1>Token Debug</h1>
+    <div id="token-info"></div>
+    <button onclick="checkToken()">Check Token</button>
+    <button onclick="testAPI()">Test API</button>
+    <div id="api-result"></div>
+
+    <script>
+        function checkToken() {
+            const token = localStorage.getItem('token');
+            const tokenInfo = document.getElementById('token-info');
+            
+            if (token) {
+                tokenInfo.innerHTML = `
+                    <h3>Token Found:</h3>
+                    <p><strong>Length:</strong> ${token.length}</p>
+                    <p><strong>Preview:</strong> ${token.substring(0, 20)}...</p>
+                    <p><strong>Full Token:</strong> ${token}</p>
+                `;
+            } else {
+                tokenInfo.innerHTML = '<h3>No Token Found</h3>';
+            }
+        }
+
+        async function testAPI() {
+            const token = localStorage.getItem('token');
+            const resultDiv = document.getElementById('api-result');
+            
+            if (!token) {
+                resultDiv.innerHTML = '<p style="color: red;">No token found!</p>';
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:5000/api/supplier/507f1f77bcf86cd799439011/deliveries', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                resultDiv.innerHTML = `
+                    <h3>API Test Result:</h3>
+                    <p><strong>Status:</strong> ${response.status} ${response.statusText}</p>
+                    <p><strong>OK:</strong> ${response.ok}</p>
+                `;
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    resultDiv.innerHTML += `<p><strong>Data:</strong> ${JSON.stringify(data, null, 2)}</p>`;
+                } else {
+                    const error = await response.text();
+                    resultDiv.innerHTML += `<p><strong>Error:</strong> ${error}</p>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        }
+
+        // Check token on page load
+        checkToken();
+    </script>
+</body>
+</html>

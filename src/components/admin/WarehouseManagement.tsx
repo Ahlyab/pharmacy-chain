@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import Select from "react-select";
+import { ChevronDown } from "lucide-react";
 import { apiEndpoints, api } from "../../utils/api";
 import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
@@ -35,6 +36,10 @@ interface InventoryItem {
   stock: number;
   minStock: number;
   price: number;
+  unitPrice?: number;
+  units?: string;
+  unitsPerPack?: number;
+  shelfStock?: number;
   status: "in_stock" | "low_stock" | "out_of_stock";
   branchId: {
     _id: string;
@@ -112,6 +117,10 @@ const WarehouseManagement: React.FC = () => {
     stock: "",
     minStock: "",
     price: "",
+    unitPrice: "",
+    units: "pieces",
+    unitsPerPack: "1",
+    shelfStock: "",
     supplier: "",
     expiryDate: "",
     // Removed fields: store, storeAlt, supplierId, supplierEntity, supplierEntityName, purchaseInvoiceId, supplierPurchaseInvoiceId, purchaseInvoiceDate, sku, skuAlt, manufacturer, manufacturerName, composition, compositionName, series, reservedQuantity, purchasePriceExclVAT, vat, divider, dividerCustom
@@ -127,7 +136,13 @@ const WarehouseManagement: React.FC = () => {
     useState<InventoryItem | null>(null);
   const [showInventoryDetails, setShowInventoryDetails] = useState(false);
 
+  // Dropdown states
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const [productSearch, setProductSearch] = useState("");
+  const [allProducts, setAllProducts] = useState<InventoryItem[]>([]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const productDropdownRef = useRef<HTMLDivElement>(null);
 
   // Sorting handlers
   const handleSort = (column: string) => {
@@ -136,6 +151,59 @@ const WarehouseManagement: React.FC = () => {
     } else {
       setSortColumn(column);
       setSortDirection("asc");
+    }
+  };
+
+  // Filter products based on search for dropdown
+  const filteredProductsForDropdown = allProducts
+    .filter((product) =>
+      product.name.toLowerCase().includes(productSearch.toLowerCase())
+    )
+    .slice(0, 10); // Limit to 10 results for better performance
+
+  // Handle product selection from dropdown
+  const handleProductSelect = (product: InventoryItem) => {
+    setNewProduct({
+      ...newProduct,
+      name: product.name,
+      unitPrice: product.unitPrice?.toString() || "",
+      units: product.units || "pieces",
+      unitsPerPack: product.unitsPerPack?.toString() || "1",
+      shelfStock: product.shelfStock?.toString() || "",
+    });
+    setShowProductDropdown(false);
+    setProductSearch(product.name);
+  };
+
+  // Handle product input change
+  const handleProductInputChange = (value: string) => {
+    setNewProduct({ ...newProduct, name: value });
+    setProductSearch(value);
+    if (value.trim() === "") {
+      setShowProductDropdown(false);
+    } else {
+      setShowProductDropdown(true);
+    }
+  };
+
+  // Handle product input focus
+  const handleProductFocus = () => {
+    setShowProductDropdown(true);
+  };
+
+  // Handle product input key down
+  const handleProductKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      setShowProductDropdown(false);
+      // If there's a search term and no exact match, use it as the product name
+      if (
+        productSearch.trim() &&
+        !allProducts.some(
+          (p) => p.name.toLowerCase() === productSearch.toLowerCase()
+        )
+      ) {
+        setNewProduct({ ...newProduct, name: productSearch.trim() });
+      }
     }
   };
 
@@ -155,6 +223,24 @@ const WarehouseManagement: React.FC = () => {
     fetchSuppliers();
     fetchBranches();
     fetchAllInventory();
+    fetchAllProducts();
+  }, []);
+
+  // Handle clicking outside dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        productDropdownRef.current &&
+        !productDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowProductDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
   }, []);
 
   // Fetch all inventory across branches
@@ -310,6 +396,16 @@ const WarehouseManagement: React.FC = () => {
     }
   };
 
+  // Fetch all products for dropdown
+  const fetchAllProducts = async () => {
+    try {
+      const data = await apiEndpoints.getInventory();
+      setAllProducts(data);
+    } catch (err) {
+      console.error("Error fetching all products:", err);
+    }
+  };
+
   const handleAddStock = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -446,12 +542,15 @@ const WarehouseManagement: React.FC = () => {
       });
 
       // Map frontend fields to backend requirements
-      const { name, stock, minStock, price, expiryDate } = newProduct;
+      const { name, stock, minStock, price, unitPrice, units, unitsPerPack, shelfStock, expiryDate } = newProduct;
 
       // Additional validation
       const quantity = Number(stock);
       const minStockNum = minStock ? Number(minStock) : undefined;
       const priceNum = price ? Number(price) : undefined;
+      const unitPriceNum = unitPrice ? Number(unitPrice) : undefined;
+      const unitsPerPackNum = unitsPerPack ? Number(unitsPerPack) : undefined;
+      const shelfStockNum = shelfStock ? Number(shelfStock) : undefined;
 
       if (isNaN(quantity) || quantity <= 0) {
         Swal.fire({
@@ -615,6 +714,10 @@ const WarehouseManagement: React.FC = () => {
         quantity: quantity,
         minStock: minStockNum,
         price: priceNum,
+        unitPrice: unitPriceNum,
+        units: units || "pieces",
+        unitsPerPack: unitsPerPackNum || 1,
+        shelfStock: shelfStockNum,
         expiryDate: expiryDate || undefined,
         supplierId: newProduct.supplier,
         category: newProduct.category || undefined,
@@ -767,10 +870,10 @@ const WarehouseManagement: React.FC = () => {
               <p><strong>Categories:</strong> ${summary.categories.join(
                 ", "
               )}</p>
-              <p><strong>Total retail value:</strong> $${summary.totalRetailValue.toFixed(
+              <p><strong>Total retail value:</strong> #{summary.totalRetailValue.toFixed(
                 2
               )}</p>
-              <p><strong>Total purchase value:</strong> $${summary.totalPurchaseValue.toFixed(
+              <p><strong>Total purchase value:</strong> #{summary.totalPurchaseValue.toFixed(
                 2
               )}</p>
             </div>
@@ -1217,18 +1320,106 @@ const WarehouseManagement: React.FC = () => {
           <div className="bg-white p-6 rounded shadow-lg min-w-[400px] max-h-[90vh] overflow-y-auto">
             <h4 className="text-lg font-semibold mb-4">Add Product</h4>
             <form onSubmit={handleAddStock} className="flex flex-col gap-3">
-              {/* Fields before supplier */}
-              {["name", "category", "stock", "minStock"].map((field) => (
+              {/* Product Name with dropdown */}
+              <div className="flex flex-col mb-2">
+                <label className="font-semibold mb-1">Product Name *</label>
+                <div className="relative" ref={productDropdownRef}>
+                  <input
+                    type="text"
+                    name="name"
+                    value={newProduct.name || ""}
+                    onChange={(e) => handleProductInputChange(e.target.value)}
+                    onFocus={handleProductFocus}
+                    onKeyDown={handleProductKeyDown}
+                    placeholder="Search or enter product name..."
+                    className="border px-2 py-1 pr-8"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowProductDropdown(!showProductDropdown);
+                      if (!showProductDropdown) {
+                        if (newProduct.name.trim() === "") {
+                          setProductSearch("");
+                        } else {
+                          setProductSearch(newProduct.name);
+                        }
+                      } else {
+                        setProductSearch("");
+                      }
+                    }}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    title="Toggle product dropdown"
+                  >
+                    <ChevronDown
+                      className={`w-4 h-4 transition-transform ${
+                        showProductDropdown ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+
+                  {/* Product Dropdown */}
+                  {showProductDropdown && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                      {filteredProductsForDropdown.length > 0 ? (
+                        filteredProductsForDropdown.map((product) => (
+                          <div
+                            key={product._id}
+                            className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                            onClick={() => handleProductSelect(product)}
+                          >
+                            <div className="font-medium">{product.name}</div>
+                            {product.manufacturer && (
+                              <div className="text-sm text-gray-500">
+                                {product.manufacturer}
+                              </div>
+                            )}
+                            {product.composition && (
+                              <div className="text-sm text-gray-500">
+                                {product.composition}
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-gray-500">
+                          {productSearch
+                            ? "No products found"
+                            : "Type to search products"}
+                        </div>
+                      )}
+                      {productSearch &&
+                        productSearch.trim() !== newProduct.name && (
+                          <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                            Press Enter to add "{productSearch}" as new product
+                          </div>
+                        )}
+                      {!productSearch && allProducts.length > 0 && (
+                        <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                          {allProducts.length} products available
+                        </div>
+                      )}
+                      {allProducts.length === 0 && (
+                        <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                          No products in system. Type to add new product.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Other fields */}
+              {["category", "stock", "minStock"].map((field) => (
                 <div key={field} className="flex flex-col mb-2">
                   <label className="font-semibold mb-1">
-                    {field === "name"
-                      ? "Product Name"
-                      : field === "stock"
+                    {field === "stock"
                       ? "Stock Quantity"
                       : field === "minStock"
                       ? "Minimum Stock"
                       : field}
-                    {field === "name" || field === "stock" ? " *" : ""}
+                    {field === "stock" ? " *" : ""}
                   </label>
                   <input
                     type={
@@ -1245,7 +1436,7 @@ const WarehouseManagement: React.FC = () => {
                       })
                     }
                     className="border px-2 py-1"
-                    required={field === "name" || field === "stock"}
+                    required={field === "stock"}
                     min={
                       field === "stock" || field === "minStock"
                         ? "0"
@@ -1274,28 +1465,114 @@ const WarehouseManagement: React.FC = () => {
                   ))}
                 </select>
               </div>
-              {/* Remaining fields after supplier */}
-              {["price", "expiryDate"].map((field) => (
-                <div key={field} className="flex flex-col mb-2">
-                  <label className="font-semibold mb-1">
-                    {field === "price" ? "Price" : "Expiry Date"}
-                  </label>
-                  <input
-                    type={field === "expiryDate" ? "date" : "number"}
-                    name={field}
-                    value={newProduct[field] || ""}
-                    onChange={(e) =>
-                      setNewProduct({
-                        ...newProduct,
-                        [field]: e.target.value,
-                      })
-                    }
-                    className="border px-2 py-1"
-                    min={field === "price" ? "0" : undefined}
-                    step={field === "price" ? "0.01" : undefined}
-                  />
-                </div>
-              ))}
+              {/* Price field */}
+              <div className="flex flex-col mb-2">
+                <label className="font-semibold mb-1">Price</label>
+                <input
+                  type="number"
+                  name="price"
+                  value={newProduct.price || ""}
+                  onChange={(e) =>
+                    setNewProduct({
+                      ...newProduct,
+                      price: e.target.value,
+                    })
+                  }
+                  className="border px-2 py-1"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+
+              {/* Unit Price field */}
+              <div className="flex flex-col mb-2">
+                <label className="font-semibold mb-1">Unit Price</label>
+                <input
+                  type="number"
+                  name="unitPrice"
+                  value={newProduct.unitPrice || ""}
+                  onChange={(e) =>
+                    setNewProduct({
+                      ...newProduct,
+                      unitPrice: e.target.value,
+                    })
+                  }
+                  className="border px-2 py-1"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+
+              {/* Units field */}
+              <div className="flex flex-col mb-2">
+                <label className="font-semibold mb-1">Units</label>
+                <input
+                  type="text"
+                  name="units"
+                  value={newProduct.units || ""}
+                  onChange={(e) =>
+                    setNewProduct({
+                      ...newProduct,
+                      units: e.target.value,
+                    })
+                  }
+                  className="border px-2 py-1"
+                  placeholder="pieces, tablets, bottles, etc."
+                />
+              </div>
+
+              {/* Units Per Pack field */}
+              <div className="flex flex-col mb-2">
+                <label className="font-semibold mb-1">Units Per Pack</label>
+                <input
+                  type="number"
+                  name="unitsPerPack"
+                  value={newProduct.unitsPerPack || ""}
+                  onChange={(e) =>
+                    setNewProduct({
+                      ...newProduct,
+                      unitsPerPack: e.target.value,
+                    })
+                  }
+                  className="border px-2 py-1"
+                  min="1"
+                />
+              </div>
+
+              {/* Shelf Stock field */}
+              <div className="flex flex-col mb-2">
+                <label className="font-semibold mb-1">Shelf Stock</label>
+                <input
+                  type="number"
+                  name="shelfStock"
+                  value={newProduct.shelfStock || ""}
+                  onChange={(e) =>
+                    setNewProduct({
+                      ...newProduct,
+                      shelfStock: e.target.value,
+                    })
+                  }
+                  className="border px-2 py-1"
+                  min="0"
+                />
+              </div>
+
+              {/* Expiry Date field */}
+              <div className="flex flex-col mb-2">
+                <label className="font-semibold mb-1">Expiry Date</label>
+                <input
+                  type="date"
+                  name="expiryDate"
+                  value={newProduct.expiryDate || ""}
+                  onChange={(e) =>
+                    setNewProduct({
+                      ...newProduct,
+                      expiryDate: e.target.value,
+                    })
+                  }
+                  className="border px-2 py-1"
+                />
+              </div>
               <div className="flex gap-2 mt-2">
                 <button
                   type="submit"
@@ -1584,7 +1861,7 @@ const WarehouseManagement: React.FC = () => {
                         Total Value
                       </p>
                       <p className="text-2xl font-bold text-gray-900">
-                        $
+                        #
                         {allInventory
                           .reduce(
                             (sum, item) => sum + item.stock * item.price,
@@ -1926,7 +2203,7 @@ const WarehouseManagement: React.FC = () => {
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              ${item.price.toFixed(2)}
+                              #${item.price.toFixed(2)}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span
@@ -2089,7 +2366,7 @@ const WarehouseManagement: React.FC = () => {
                       Retail Price (VAT Included):
                     </span>
                     <span className="ml-2 text-gray-900">
-                      $
+                      #
                       {selectedInventoryItem.retailPriceVATIncluded?.toFixed(
                         2
                       ) || selectedInventoryItem.price.toFixed(2)}
@@ -2100,7 +2377,7 @@ const WarehouseManagement: React.FC = () => {
                       Purchase Price (Excl. VAT):
                     </span>
                     <span className="ml-2 text-gray-900">
-                      ${selectedInventoryItem.purchasePriceExclVAT.toFixed(2)}
+                      #${selectedInventoryItem.purchasePriceExclVAT.toFixed(2)}
                     </span>
                   </div>
                   <div>
@@ -2114,7 +2391,7 @@ const WarehouseManagement: React.FC = () => {
                       Total Value:
                     </span>
                     <span className="ml-2 text-gray-900">
-                      $
+                      #
                       {(
                         selectedInventoryItem.stock *
                         selectedInventoryItem.price
