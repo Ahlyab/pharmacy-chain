@@ -2575,4 +2575,8 @@ router.use("/warehouse", warehouseRoutes);
 // Audit routes
 router.use("/audit", auditRoutes);
 
+// Report routes
+import reportRoutes from "./report.js";
+router.use("/report", reportRoutes);
+
 export default router;

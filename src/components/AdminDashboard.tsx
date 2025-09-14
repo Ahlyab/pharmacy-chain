@@ -12,6 +12,7 @@ import Dashboard from './admin/Dashboard';
 import SupplierManagement from './admin/SupplierManagement';
 import WarehouseManagement from './admin/WarehouseManagement';
 import AuditManagement from './admin/AuditManagement';
+import Report from './admin/Report';
 import { useAuth } from '../contexts/AuthContext';
 
 const AdminDashboard: React.FC = () => {
@@ -31,6 +32,7 @@ const AdminDashboard: React.FC = () => {
       { name: 'Transactions', path: '/admin/transactions', icon: 'Receipt' },
       { name: 'Suppliers', path: '/admin/suppliers', icon: 'ShoppingCart' },
       { name: 'Warehouse', path: '/admin/warehouse', icon: 'FileText' },
+      { name: 'Report', path: '/admin/report', icon: 'BarChart3' },
       { name: 'Audit Logs', path: '/admin/audit', icon: 'Shield' },
     ];
 
@@ -83,6 +85,7 @@ const AdminDashboard: React.FC = () => {
               <Route path="/transactions" element={<TransactionHistory />} />
               <Route path="/suppliers" element={<SupplierManagement />} />
               <Route path="/warehouse" element={<WarehouseManagement />} />
+              <Route path="/report" element={<Report />} />
               <Route path="/audit" element={<AuditManagement />} />
               <Route path="*" element={<Navigate to="/admin" />} />
             </Routes>

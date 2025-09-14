@@ -6,7 +6,6 @@
     Package,
     ShoppingCart,
     DollarSign,
-    TrendingUp,
     AlertTriangle,
   } from "lucide-react";
   import GreenProgressBar from "../GreenProgressBar";
@@ -324,7 +323,7 @@
           <h3 className="text-lg font-medium text-gray-900 mb-4">
             Quick Actions
           </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <button className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-center">
               <ShoppingCart className="h-8 w-8 mx-auto mb-2 text-blue-600" />
               <span className="text-sm font-medium text-gray-900">New Sale</span>
@@ -333,12 +332,6 @@
               <Package className="h-8 w-8 mx-auto mb-2 text-green-600" />
               <span className="text-sm font-medium text-gray-900">
                 {getActualRole(user) === 'manager' ? 'Add Stock' : 'View Stock'}
-              </span>
-            </button>
-            <button className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-center">
-              <TrendingUp className="h-8 w-8 mx-auto mb-2 text-purple-600" />
-              <span className="text-sm font-medium text-gray-900">
-                View Reports
               </span>
             </button>
                       <button className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-center">

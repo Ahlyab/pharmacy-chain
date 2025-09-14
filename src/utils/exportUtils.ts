@@ -1,284 +1,427 @@
-import jsPDF from "jspdf";
-import "jspdf-autotable";
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+import * as XLSX from 'xlsx';
 
-// Extend jsPDF type to include autoTable
-declare module "jspdf" {
-  interface jsPDF {
-    autoTable: (options: any) => jsPDF;
-  }
-}
+export type ExportFormat = 'csv' | 'excel' | 'pdf';
 
+// Legacy exports for TransactionHistory.tsx compatibility
 export interface ExportData {
-  id: string;
-  date: string;
-  customer: string;
-  items: Array<{
-    name: string;
-    quantity: number;
-    price: number;
-  }>;
-  total: number;
-  paymentMethod: string;
-  status: string;
-  branchName?: string;
+  [key: string]: any;
 }
 
 export interface ExportFilters {
-  dateRange?: string;
-  selectedDate?: string;
-  customDateRange?: {
-    startDate: string;
-    endDate: string;
-  };
-  selectedStatus?: string;
-  selectedBranch?: string;
-  searchTerm?: string;
+  [key: string]: any;
 }
 
-export const formatDateTime = (dateString: string) => {
-  const date = new Date(dateString);
-  const hours = date.getHours();
-  const minutes = date.getMinutes();
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  const formattedHours = hours % 12 || 12;
-  const formattedMinutes = minutes.toString().padStart(2, '0');
-  const formattedDate = date.toLocaleDateString();
-  
-  return `${formattedDate} ${formattedHours}:${formattedMinutes} ${ampm}`;
+export const generateExcelReport = (data: ExportData[], filename: string) => {
+  const workbook = XLSX.utils.book_new();
+  const worksheet = XLSX.utils.json_to_sheet(data);
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Data');
+  XLSX.writeFile(workbook, filename);
 };
 
-export const getDateRangeDescription = (filters: ExportFilters) => {
-  const now = new Date();
-  
-  if (filters.selectedDate) {
-    return `Date: ${new Date(filters.selectedDate).toLocaleDateString()}`;
-  }
-  
-  if (filters.customDateRange?.startDate && filters.customDateRange?.endDate) {
-    return `Custom Range: ${new Date(filters.customDateRange.startDate).toLocaleDateString()} - ${new Date(filters.customDateRange.endDate).toLocaleDateString()}`;
-  }
-  
-  if (filters.dateRange === "today") {
-    return "Today";
-  }
-  
-  if (filters.dateRange && !isNaN(parseInt(filters.dateRange))) {
-    return `Last ${filters.dateRange} days`;
-  }
-  
-  return "All Time";
+export const downloadExcel = (data: ExportData[], filename: string) => {
+  generateExcelReport(data, filename);
 };
 
-export const generatePDFReport = (
-  data: ExportData[],
-  title: string,
-  filters: ExportFilters,
-  isAdmin: boolean = false
-) => {
-  const doc = new jsPDF();
-  
-  // Add header
-  doc.setFontSize(20);
-  doc.text(title, 14, 22);
-  
-  // Add report info
-  doc.setFontSize(10);
-  doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30);
-  doc.text(`Date Range: ${getDateRangeDescription(filters)}`, 14, 36);
-  
-  if (filters.selectedStatus && filters.selectedStatus !== "All") {
-    doc.text(`Status: ${filters.selectedStatus}`, 14, 42);
+export const generateReportFilename = (prefix: string, extension: string = 'xlsx') => {
+  const date = new Date().toISOString().split('T')[0];
+  return `${prefix}-${date}.${extension}`;
+};
+
+const formatCurrency = (num: number): string => {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(num);
+};
+
+const formatNumber = (num: number): string => {
+  if (num >= 1000000) {
+    return (num / 1000000).toFixed(1) + 'M';
+  } else if (num >= 1000) {
+    return (num / 1000).toFixed(1) + 'K';
   }
-  
-  if (filters.selectedBranch && filters.selectedBranch !== "All") {
-    doc.text(`Branch: ${filters.selectedBranch}`, 14, 48);
-  }
-  
-  if (filters.searchTerm) {
-    doc.text(`Search: ${filters.searchTerm}`, 14, 54);
-  }
-  
-  // Calculate summary
-  const totalAmount = data.reduce((sum, item) => sum + item.total, 0);
-  const completedCount = data.filter(item => item.status === "Completed" || item.status === "Paid").length;
-  const pendingCount = data.filter(item => item.status === "Pending").length;
-  
-  doc.text(`Total Records: ${data.length}`, 14, 60);
-  doc.text(`Total Amount: #${totalAmount.toFixed(2)}`, 14, 66);
-  doc.text(`Completed: ${completedCount}`, 14, 72);
-  doc.text(`Pending: ${pendingCount}`, 14, 78);
-  
-  // Prepare table data
-  const tableData = data.map(item => {
-    const itemsText = item.items.map(i => `${i.name} (${i.quantity})`).join(", ");
-    const truncatedItems = itemsText.length > 50 ? itemsText.substring(0, 50) + "..." : itemsText;
-    
-    const baseRow = [
-      item.id.substring(0, 12) + "...",
-      formatDateTime(item.date),
-      item.customer,
-      truncatedItems,
-      `#${item.total.toFixed(2)}`,
-      item.paymentMethod,
-      item.status
+  return num.toFixed(2);
+};
+
+export const exportRevenueData = {
+  toCSV: (data: any[], kpiData: any, filters: any) => {
+    console.log('Exporting revenue CSV:', { data, kpiData, filters });
+    const csvData = [
+      ['Revenue and Profit Report'],
+      [`Generated: ${new Date().toLocaleString()}`],
+      [`Period: ${filters.period}`],
+      [`Date Range: ${filters.startDate} to ${filters.endDate}`],
+      [`Branch: ${filters.includeAllBranches ? 'All Branches' : 'Selected Branch'}`],
+      [],
+      ['KPI Summary'],
+      ['Metric', 'Value', 'Change', 'Trend'],
+      ['Sales Count', kpiData.salesCount.value.toString(), kpiData.salesCount.change, kpiData.salesCount.trend],
+      ['Packs', kpiData.packs.value.toString(), kpiData.packs.change, kpiData.packs.trend],
+      ['Net Sales Amount', formatCurrency(kpiData.netSalesAmount.value), kpiData.netSalesAmount.change, kpiData.netSalesAmount.trend],
+      ['Gross Profit', formatCurrency(kpiData.grossProfit.value), kpiData.grossProfit.change, kpiData.grossProfit.trend],
+      ['Expenses', formatCurrency(kpiData.expenses.value), kpiData.expenses.change, kpiData.expenses.trend],
+      ['Operating Profit', formatCurrency(kpiData.operatingProfit.value), kpiData.operatingProfit.change, kpiData.operatingProfit.trend],
+      [],
+      ['Period Data'],
+      ['Period', 'Net Sales Amount', 'Gross Profit', 'Expenses', 'Operating Profit', 'Sales Count', 'Packs'],
+      ...data.map(item => [
+        item.period,
+        formatCurrency(item.netSalesAmount),
+        formatCurrency(item.grossProfit),
+        formatCurrency(item.expenses),
+        formatCurrency(item.operatingProfit),
+        item.salesCount.toString(),
+        item.packs.toString()
+      ])
     ];
+
+    const csvContent = csvData.map(row => row.join(',')).join('\n');
+    console.log('CSV content generated:', csvContent.substring(0, 200) + '...');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    console.log('Blob created:', blob);
+    const filename = `revenue-profit-report-${new Date().toISOString().split('T')[0]}.csv`;
+    console.log('Saving file:', filename);
     
-    if (isAdmin && item.branchName) {
-      baseRow.splice(3, 0, item.branchName);
+    // Use native download approach
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
+
+  toExcel: (data: any[], kpiData: any, filters: any) => {
+    const workbook = XLSX.utils.book_new();
+
+    const kpiSheetData = [
+      ['Revenue and Profit Report - KPI Summary'],
+      [`Generated: ${new Date().toLocaleString()}`],
+      [`Period: ${filters.period}`],
+      [`Date Range: ${filters.startDate} to ${filters.endDate}`],
+      [`Branch: ${filters.includeAllBranches ? 'All Branches' : 'Selected Branch'}`],
+      [],
+      ['Metric', 'Value', 'Change', 'Trend'],
+      ['Sales Count', kpiData.salesCount.value, kpiData.salesCount.change, kpiData.salesCount.trend],
+      ['Packs', kpiData.packs.value, kpiData.packs.change, kpiData.packs.trend],
+      ['Net Sales Amount', kpiData.netSalesAmount.value, kpiData.netSalesAmount.change, kpiData.netSalesAmount.trend],
+      ['Gross Profit', kpiData.grossProfit.value, kpiData.grossProfit.change, kpiData.grossProfit.trend],
+      ['Expenses', kpiData.expenses.value, kpiData.expenses.change, kpiData.expenses.trend],
+      ['Operating Profit', kpiData.operatingProfit.value, kpiData.operatingProfit.change, kpiData.operatingProfit.trend]
+    ];
+
+    const kpiSheet = XLSX.utils.aoa_to_sheet(kpiSheetData);
+    XLSX.utils.book_append_sheet(workbook, kpiSheet, 'KPI Summary');
+
+    const periodSheetData = [
+      ['Period', 'Net Sales Amount', 'Gross Profit', 'Expenses', 'Operating Profit', 'Sales Count', 'Packs'],
+      ...data.map(item => [
+        item.period,
+        item.netSalesAmount,
+        item.grossProfit,
+        item.expenses,
+        item.operatingProfit,
+        item.salesCount,
+        item.packs
+      ])
+    ];
+
+    const periodSheet = XLSX.utils.aoa_to_sheet(periodSheetData);
+    XLSX.utils.book_append_sheet(workbook, periodSheet, 'Period Data');
+
+    const filename = `revenue-profit-report-${new Date().toISOString().split('T')[0]}.xlsx`;
+    console.log('Saving Excel file:', filename);
+    XLSX.writeFile(workbook, filename);
+  },
+
+  toPDF: async (elementId: string, title: string) => {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    const canvas = await html2canvas(element, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true
+    });
+
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    
+    const imgWidth = 210;
+    const pageHeight = 295;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    let heightLeft = imgHeight;
+
+    let position = 0;
+
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+
+    while (heightLeft >= 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
     }
+
+    pdf.save(`${title}-${new Date().toISOString().split('T')[0]}.pdf`);
+  }
+};
+
+export const exportStockExpirationData = {
+  toCSV: (data: any[], kpiData: any, filters: any) => {
+    const csvData = [
+      ['Stock and Expiration Date Report'],
+      [`Generated: ${new Date().toLocaleString()}`],
+      [`Date Range: ${filters.startDate} to ${filters.endDate}`],
+      [`Branch: ${filters.includeAllBranches ? 'All Branches' : 'Selected Branch'}`],
+      [],
+      ['KPI Summary'],
+      ['Metric', 'Value'],
+      ['Items', kpiData.items.value.toString()],
+      ['Unique Compositions', kpiData.uniqueCompositions.value.toString()],
+      ['Unique SKUs', kpiData.uniqueSKUs.value.toString()],
+      ['Quantity', formatNumber(kpiData.quantity.value)],
+      ['Cost', formatCurrency(kpiData.cost.value)],
+      [],
+      ['Expiration Data'],
+      ['Days Until Expiry', 'Quantity', 'Cost', 'Items', 'Unique Compositions', 'Unique SKUs'],
+      ...data.map(item => [
+        item.day < 0 ? `${Math.abs(item.day)} days expired` : item.day === 0 ? 'Today' : `${item.day} days`,
+        formatNumber(item.quantity),
+        formatCurrency(item.cost),
+        item.items.toString(),
+        item.uniqueCompositions.toString(),
+        item.uniqueSKUs.toString()
+      ])
+    ];
+
+    const csvContent = csvData.map(row => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const filename = `stock-expiration-report-${new Date().toISOString().split('T')[0]}.csv`;
     
-    return baseRow;
-  });
-  
-  // Define columns
-  const columns = [
-    "ID",
-    "Date & Time",
-    "Customer",
-    ...(isAdmin ? ["Branch"] : []),
-    "Items",
-    "Total",
-    "Payment",
-    "Status"
-  ];
-  
-  // Add table
-  doc.autoTable({
-    head: [columns],
-    body: tableData,
-    startY: 85,
-    styles: {
-      fontSize: 8,
-      cellPadding: 3,
-    },
-    headStyles: {
-      fillColor: [66, 139, 202],
-      textColor: 255,
-      fontStyle: 'bold',
-    },
-    alternateRowStyles: {
-      fillColor: [245, 245, 245],
-    },
-    columnStyles: {
-      0: { cellWidth: 25 },
-      1: { cellWidth: 30 },
-      2: { cellWidth: 25 },
-      ...(isAdmin ? { 3: { cellWidth: 20 } } : {}),
-      [isAdmin ? 4 : 3]: { cellWidth: 40 },
-      [isAdmin ? 5 : 4]: { cellWidth: 20 },
-      [isAdmin ? 6 : 5]: { cellWidth: 20 },
-      [isAdmin ? 7 : 6]: { cellWidth: 20 },
-    },
-    margin: { top: 85, left: 14, right: 14 },
-  });
-  
-  // Add footer
-  const pageCount = doc.getNumberOfPages();
-  for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i);
-    doc.setFontSize(8);
-    doc.text(
-      `Page ${i} of ${pageCount}`,
-      doc.internal.pageSize.width - 30,
-      doc.internal.pageSize.height - 10
-    );
+    // Use native download approach
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
+
+  toExcel: (data: any[], kpiData: any, filters: any) => {
+    const workbook = XLSX.utils.book_new();
+
+    const kpiSheetData = [
+      ['Stock and Expiration Date Report - KPI Summary'],
+      [`Generated: ${new Date().toLocaleString()}`],
+      [`Date Range: ${filters.startDate} to ${filters.endDate}`],
+      [`Branch: ${filters.includeAllBranches ? 'All Branches' : 'Selected Branch'}`],
+      [],
+      ['Metric', 'Value'],
+      ['Items', kpiData.items.value],
+      ['Unique Compositions', kpiData.uniqueCompositions.value],
+      ['Unique SKUs', kpiData.uniqueSKUs.value],
+      ['Quantity', kpiData.quantity.value],
+      ['Cost', kpiData.cost.value]
+    ];
+
+    const kpiSheet = XLSX.utils.aoa_to_sheet(kpiSheetData);
+    XLSX.utils.book_append_sheet(workbook, kpiSheet, 'KPI Summary');
+
+    const expirationSheetData = [
+      ['Days Until Expiry', 'Quantity', 'Cost', 'Items', 'Unique Compositions', 'Unique SKUs'],
+      ...data.map(item => [
+        item.day < 0 ? `${Math.abs(item.day)} days expired` : item.day === 0 ? 'Today' : `${item.day} days`,
+        item.quantity,
+        item.cost,
+        item.items,
+        item.uniqueCompositions,
+        item.uniqueSKUs
+      ])
+    ];
+
+    const expirationSheet = XLSX.utils.aoa_to_sheet(expirationSheetData);
+    XLSX.utils.book_append_sheet(workbook, expirationSheet, 'Expiration Data');
+
+    XLSX.writeFile(workbook, `stock-expiration-report-${new Date().toISOString().split('T')[0]}.xlsx`);
+  },
+
+  toPDF: async (elementId: string, title: string) => {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    const canvas = await html2canvas(element, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true
+    });
+
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    
+    const imgWidth = 210;
+    const pageHeight = 295;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    let heightLeft = imgHeight;
+
+    let position = 0;
+
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+
+    while (heightLeft >= 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+    }
+
+    pdf.save(`${title}-${new Date().toISOString().split('T')[0]}.pdf`);
   }
-  
-  return doc;
 };
 
-export const generateExcelReport = (
-  data: ExportData[],
-  title: string,
-  filters: ExportFilters,
-  isAdmin: boolean = false
-) => {
-  // Create CSV content
-  const columns = [
-    "Transaction ID",
-    "Date & Time",
-    "Customer",
-    ...(isAdmin ? ["Branch"] : []),
-    "Items",
-    "Total Amount",
-    "Payment Method",
-    "Status"
-  ];
-  
-  const csvContent = [
-    columns.join(","),
-    ...data.map(item => {
-      const itemsText = item.items.map(i => `"${i.name} (Qty: ${i.quantity}, Price: #${i.price})"`).join("; ");
-      const baseRow = [
-        `"${item.id}"`,
-        `"${formatDateTime(item.date)}"`,
-        `"${item.customer}"`,
-        ...(isAdmin && item.branchName ? [`"${item.branchName}"`] : []),
-        `"${itemsText}"`,
-        `"#${item.total.toFixed(2)}"`,
-        `"${item.paymentMethod}"`,
-        `"${item.status}"`
-      ];
-      return baseRow.join(",");
-    })
-  ].join("\n");
-  
-  // Add metadata at the top
-  const metadata = [
-    `Report: ${title}`,
-    `Generated: ${new Date().toLocaleString()}`,
-    `Date Range: ${getDateRangeDescription(filters)}`,
-    ...(filters.selectedStatus && filters.selectedStatus !== "All" ? [`Status: ${filters.selectedStatus}`] : []),
-    ...(filters.selectedBranch && filters.selectedBranch !== "All" ? [`Branch: ${filters.selectedBranch}`] : []),
-    ...(filters.searchTerm ? [`Search: ${filters.searchTerm}`] : []),
-    `Total Records: ${data.length}`,
-    `Total Amount: #${data.reduce((sum, item) => sum + item.total, 0).toFixed(2)}`,
-    "",
-    ""
-  ].join("\n");
-  
-  return metadata + csvContent;
-};
+export const exportStockTurnoverData = {
+  toCSV: (data: any[], kpiData: any, totals: any, filters: any) => {
+    const csvData = [
+      ['Stock Turnover Report'],
+      [`Generated: ${new Date().toLocaleString()}`],
+      [`Date Range: ${filters.startDate} to ${filters.endDate}`],
+      [`Branch: ${filters.includeAllBranches ? 'All Branches' : 'Selected Branch'}`],
+      [`Segment: ${filters.segment || 'All Segments'}`],
+      [`Manufacturer: ${filters.manufacturer || 'All Manufacturers'}`],
+      [],
+      ['KPI Summary'],
+      ['Metric', 'Value', 'Change', 'Trend'],
+      ['Net Sales Quantity', kpiData.netSalesQuantity.value.toString(), kpiData.netSalesQuantity.change, kpiData.netSalesQuantity.trend],
+      ['Net Sales Retail Amount', formatCurrency(kpiData.netSalesRetailAmount.value), kpiData.netSalesRetailAmount.change, kpiData.netSalesRetailAmount.trend],
+      ['Gross Profit', formatCurrency(kpiData.grossProfit.value), kpiData.grossProfit.change, kpiData.grossProfit.trend],
+      [],
+      ['Grand Totals'],
+      ['Net Sales Quantity', totals.netSalesQuantity.toString()],
+      ['Stock Quantity', totals.stockQuantity.toString()],
+      ['Net Sales Retail Amount', formatCurrency(totals.netSalesRetailAmount)],
+      ['Stock Retail Amount', formatCurrency(totals.stockRetailAmount)],
+      ['Gross Profit', formatCurrency(totals.grossProfit)],
+      ['Stock Turnover Rate', `${totals.stockTurnoverRate.toFixed(2)}%`],
+      [],
+      ['Product Details'],
+      ['Segment', 'Product', 'Manufacturer', 'Net Sales Quantity', 'Stock Quantity', 'Net Sales Retail Amount', 'Stock Retail Amount', 'Gross Profit', 'Stock Turnover Rate'],
+      ...data.map(item => [
+        item.segment,
+        item.product,
+        item.manufacturer,
+        item.netSalesQuantity.toString(),
+        item.stockQuantity.toString(),
+        formatCurrency(item.netSalesRetailAmount),
+        formatCurrency(item.stockRetailAmount),
+        formatCurrency(item.grossProfit),
+        `${item.stockTurnoverRate.toFixed(2)}%`
+      ])
+    ];
 
-export const downloadFile = (content: string, filename: string, mimeType: string) => {
-  const blob = new Blob([content], { type: mimeType });
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  window.URL.revokeObjectURL(url);
-};
+    const csvContent = csvData.map(row => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const filename = `stock-turnover-report-${new Date().toISOString().split('T')[0]}.csv`;
+    
+    // Use native download approach
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
 
-export const downloadPDF = (doc: jsPDF, filename: string) => {
-  doc.save(filename);
-};
+  toExcel: (data: any[], kpiData: any, totals: any, filters: any) => {
+    const workbook = XLSX.utils.book_new();
 
-export const downloadExcel = (csvContent: string, filename: string) => {
-  downloadFile(csvContent, filename, "text/csv;charset=utf-8;");
-};
+    const kpiSheetData = [
+      ['Stock Turnover Report - KPI Summary'],
+      [`Generated: ${new Date().toLocaleString()}`],
+      [`Date Range: ${filters.startDate} to ${filters.endDate}`],
+      [`Branch: ${filters.includeAllBranches ? 'All Branches' : 'Selected Branch'}`],
+      [`Segment: ${filters.segment || 'All Segments'}`],
+      [`Manufacturer: ${filters.manufacturer || 'All Manufacturers'}`],
+      [],
+      ['Metric', 'Value', 'Change', 'Trend'],
+      ['Net Sales Quantity', kpiData.netSalesQuantity.value, kpiData.netSalesQuantity.change, kpiData.netSalesQuantity.trend],
+      ['Net Sales Retail Amount', kpiData.netSalesRetailAmount.value, kpiData.netSalesRetailAmount.change, kpiData.netSalesRetailAmount.trend],
+      ['Gross Profit', kpiData.grossProfit.value, kpiData.grossProfit.change, kpiData.grossProfit.trend],
+      [],
+      ['Grand Totals'],
+      ['Net Sales Quantity', totals.netSalesQuantity],
+      ['Stock Quantity', totals.stockQuantity],
+      ['Net Sales Retail Amount', totals.netSalesRetailAmount],
+      ['Stock Retail Amount', totals.stockRetailAmount],
+      ['Gross Profit', totals.grossProfit],
+      ['Stock Turnover Rate', totals.stockTurnoverRate]
+    ];
 
-export const generateReportFilename = (
-  baseName: string,
-  filters: ExportFilters,
-  format: "pdf" | "xlsx" = "pdf"
-) => {
-  const now = new Date();
-  const timestamp = now.toISOString().slice(0, 10);
-  
-  let dateSuffix = "";
-  if (filters.selectedDate) {
-    dateSuffix = `_${filters.selectedDate}`;
-  } else if (filters.customDateRange?.startDate && filters.customDateRange?.endDate) {
-    dateSuffix = `_${filters.customDateRange.startDate}_to_${filters.customDateRange.endDate}`;
-  } else if (filters.dateRange === "today") {
-    dateSuffix = `_today`;
-  } else if (filters.dateRange && !isNaN(parseInt(filters.dateRange))) {
-    dateSuffix = `_last_${filters.dateRange}_days`;
+    const kpiSheet = XLSX.utils.aoa_to_sheet(kpiSheetData);
+    XLSX.utils.book_append_sheet(workbook, kpiSheet, 'KPI Summary');
+
+    const productSheetData = [
+      ['Segment', 'Product', 'Manufacturer', 'Net Sales Quantity', 'Stock Quantity', 'Net Sales Retail Amount', 'Stock Retail Amount', 'Gross Profit', 'Stock Turnover Rate'],
+      ...data.map(item => [
+        item.segment,
+        item.product,
+        item.manufacturer,
+        item.netSalesQuantity,
+        item.stockQuantity,
+        item.netSalesRetailAmount,
+        item.stockRetailAmount,
+        item.grossProfit,
+        item.stockTurnoverRate
+      ])
+    ];
+
+    const productSheet = XLSX.utils.aoa_to_sheet(productSheetData);
+    XLSX.utils.book_append_sheet(workbook, productSheet, 'Product Details');
+
+    XLSX.writeFile(workbook, `stock-turnover-report-${new Date().toISOString().split('T')[0]}.xlsx`);
+  },
+
+  toPDF: async (elementId: string, title: string) => {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    const canvas = await html2canvas(element, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true
+    });
+
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    
+    const imgWidth = 210;
+    const pageHeight = 295;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    let heightLeft = imgHeight;
+
+    let position = 0;
+
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+
+    while (heightLeft >= 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+    }
+
+    pdf.save(`${title}-${new Date().toISOString().split('T')[0]}.pdf`);
   }
-  
-  const extension = format === "pdf" ? "pdf" : "csv";
-  return `${baseName}${dateSuffix}_${timestamp}.${extension}`;
 };
