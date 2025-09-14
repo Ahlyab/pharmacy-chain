@@ -9,7 +9,15 @@ import {
   DollarSign,
   Receipt,
   TrendingUp,
+  FileSpreadsheet,
 } from "lucide-react";
+import {
+  generateExcelReport,
+  downloadExcel,
+  generateReportFilename,
+  ExportData,
+  ExportFilters,
+} from "../../utils/exportUtils";
 
 interface Transaction {
   id: string;
@@ -41,6 +49,7 @@ const Transactions: React.FC = () => {
     key: string;
     direction: "asc" | "desc";
   } | null>(null);
+  const [exportLoading, setExportLoading] = useState(false);
 
   // Helper function to format date and time
   const formatDateTime = (dateString: string) => {
@@ -202,6 +211,40 @@ const Transactions: React.FC = () => {
     (t) => t.status === "Completed" && t.date.slice(0, 10) === todayStr
   ).length;
 
+  // Export functions
+  const handleExportExcel = async () => {
+    setExportLoading(true);
+    try {
+      const exportData: ExportData[] = sortedTransactions.map(transaction => ({
+        id: transaction.id,
+        date: transaction.date,
+        customer: transaction.customer,
+        items: transaction.items,
+        total: transaction.total,
+        paymentMethod: transaction.paymentMethod,
+        status: transaction.status,
+      }));
+
+      const filters: ExportFilters = {
+        dateRange,
+        customDateRange,
+        selectedStatus,
+        searchTerm,
+      };
+
+      const csvContent = generateExcelReport(exportData, "Transaction Report", filters, false);
+      const filename = generateReportFilename("transaction_report", filters, "xlsx");
+      downloadExcel(csvContent, filename);
+
+      // Show success message
+      alert('Excel report has been downloaded successfully!');
+    } catch (error: any) {
+      alert(`Error generating Excel: ${error.message}`);
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
   const stats = [
     {
       name: "Total Transactions",
@@ -211,13 +254,13 @@ const Transactions: React.FC = () => {
     },
     {
       name: "Total Revenue",
-      value: `$${totalRevenue.toFixed(2)}`,
+      value: `#${totalRevenue.toFixed(2)}`,
       icon: DollarSign,
       color: "bg-green-500",
     },
     {
       name: "Avg Transaction",
-      value: `$${avgTransaction.toFixed(2)}`,
+      value: `#${avgTransaction.toFixed(2)}`,
       icon: TrendingUp,
       color: "bg-purple-500",
     },
@@ -231,11 +274,23 @@ const Transactions: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">
-          Transaction History
-        </h2>
-        <p className="text-gray-600">View and manage all transactions</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">
+            Transaction History
+          </h2>
+          <p className="text-gray-600">View and manage all transactions</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={handleExportExcel}
+            disabled={exportLoading || sortedTransactions.length === 0}
+            className="w-full sm:w-auto bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center sm:justify-start space-x-2"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            <span>{exportLoading ? "Exporting..." : "Export Excel"}</span>
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -447,7 +502,7 @@ const Transactions: React.FC = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        ${transaction.total.toFixed(2)}
+                        #{transaction.total.toFixed(2)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span

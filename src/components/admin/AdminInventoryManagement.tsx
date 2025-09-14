@@ -616,10 +616,10 @@ const AdminInventoryManagement: React.FC = () => {
               <p><strong>Categories:</strong> ${summary.categories.join(
                 ", "
               )}</p>
-              <p><strong>Total retail value:</strong> $${summary.totalRetailValue.toFixed(
+              <p><strong>Total retail value:</strong> #{summary.totalRetailValue.toFixed(
                 2
               )}</p>
-              <p><strong>Total purchase value:</strong> $${summary.totalPurchaseValue.toFixed(
+              <p><strong>Total purchase value:</strong> #{summary.totalPurchaseValue.toFixed(
                 2
               )}</p>
               <p><strong>Branch:</strong> ${selectedBranch.name}</p>
@@ -986,7 +986,7 @@ const AdminInventoryManagement: React.FC = () => {
                           {product.minStock}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          ${product.price}
+                          #${product.price}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {product.supplier}

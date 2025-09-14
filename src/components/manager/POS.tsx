@@ -697,11 +697,11 @@ const POS: React.FC = () => {
                         <div className="flex justify-between items-center mb-1">
                           <div className="flex flex-col">
                             <span className="text-lg font-bold text-blue-600">
-                              ${product.price}
+                              #{product.price}
                             </span>
                             {product.unitPrice && product.unitPrice > 0 && (
                               <span className="text-xs text-green-600 font-medium">
-                                ${product.unitPrice} per unit
+                                #{product.unitPrice} per unit
                               </span>
                             )}
                             {product.unitsPerPack && product.unitsPerPack > 1 && (
@@ -788,7 +788,7 @@ const POS: React.FC = () => {
                           {item.name}
                         </h4>
                         <p className="text-xs text-gray-500">
-                          ${currentPrice.toFixed(2)} {priceLabel}
+                          #{currentPrice.toFixed(2)} {priceLabel}
                         </p>
                         {item.isUnitPurchase && (
                           <p className="text-xs text-blue-600 font-medium">
@@ -878,7 +878,7 @@ const POS: React.FC = () => {
                     Total:
                   </span>
                   <span className="text-xl font-bold text-blue-600">
-                    ${getTotalAmount().toFixed(2)}
+                    #{getTotalAmount().toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -1080,13 +1080,13 @@ const POS: React.FC = () => {
                               )}
                             </td>
                             <td className="text-right py-2 text-gray-700">
-                              ${currentPrice.toFixed(2)}{priceLabel}
+                              #{currentPrice.toFixed(2)}{priceLabel}
                             </td>
                             <td className="text-right py-2 text-gray-700">
                               {item.quantity}
                             </td>
                             <td className="text-right py-2 font-medium text-gray-800">
-                              ${(currentPrice * item.quantity).toFixed(2)}
+                              #{(currentPrice * item.quantity).toFixed(2)}
                             </td>
                           </tr>
                         );
@@ -1100,7 +1100,7 @@ const POS: React.FC = () => {
                   <div className="flex justify-between items-center text-lg font-bold text-gray-800 mb-2">
                     <span>Total Amount:</span>
                     <span className="text-2xl text-blue-600">
-                      ${lastTransaction.total.toFixed(2)}
+                      #{lastTransaction.total.toFixed(2)}
                     </span>
                   </div>
                   <div className="text-sm text-gray-600 mb-1">
@@ -1194,7 +1194,7 @@ const POS: React.FC = () => {
                     <div>
                       <div className="font-medium text-gray-900">Full Pack</div>
                       <div className="text-sm text-gray-600">
-                        ${selectedProduct.price.toFixed(2)} per pack
+                        #{selectedProduct.price.toFixed(2)} per pack
                       </div>
                       <div className="text-xs text-gray-500">
                         {selectedProduct.stock} packs available
@@ -1228,7 +1228,7 @@ const POS: React.FC = () => {
                       <div>
                         <div className="font-medium text-gray-900">Individual Units</div>
                         <div className="text-sm text-gray-600">
-                          ${selectedProduct.unitPrice.toFixed(2)} per unit
+                          #{selectedProduct.unitPrice.toFixed(2)} per unit
                         </div>
                         <div className="text-xs text-gray-500">
                           {selectedProduct.shelfStock !== undefined ? selectedProduct.shelfStock : selectedProduct.stock} units available
@@ -1278,7 +1278,7 @@ const POS: React.FC = () => {
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-600">Unit Price:</span>
                     <span className="font-semibold text-green-600">
-                      ${selectedProduct.unitPrice?.toFixed(2) || 'N/A'}
+                      #{selectedProduct.unitPrice?.toFixed(2) || 'N/A'}
                     </span>
                   </div>
                   <div className="flex justify-between items-center mt-2">
@@ -1347,7 +1347,7 @@ const POS: React.FC = () => {
                 <div className="text-center mt-4">
                   <div className="text-sm text-gray-600">
                     Total: <span className="font-semibold text-lg text-green-600">
-                      ${((selectedProduct.unitPrice || 0) * unitQuantity).toFixed(2)}
+                      #{((selectedProduct.unitPrice || 0) * unitQuantity).toFixed(2)}
                     </span>
                   </div>
                 </div>

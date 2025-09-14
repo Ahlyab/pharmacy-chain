@@ -522,7 +522,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
                           />
                         </td>
                         <td className="border border-gray-300 p-2 font-medium">
-                          ₦{product.totalPrice.toFixed(2)}
+                          #${product.totalPrice.toFixed(2)}
                         </td>
                         <td className="border border-gray-300 p-2">
                           <input
@@ -554,7 +554,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
               <div className="flex justify-between items-center">
                 <span className="text-lg font-semibold">Total Amount:</span>
                 <span className="text-2xl font-bold text-blue-600">
-                  ₦{calculateGrandTotal().toFixed(2)}
+                  #${calculateGrandTotal().toFixed(2)}
                 </span>
               </div>
             </div>

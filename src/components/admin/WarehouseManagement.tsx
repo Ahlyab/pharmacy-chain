@@ -870,10 +870,10 @@ const WarehouseManagement: React.FC = () => {
               <p><strong>Categories:</strong> ${summary.categories.join(
                 ", "
               )}</p>
-              <p><strong>Total retail value:</strong> $${summary.totalRetailValue.toFixed(
+              <p><strong>Total retail value:</strong> #{summary.totalRetailValue.toFixed(
                 2
               )}</p>
-              <p><strong>Total purchase value:</strong> $${summary.totalPurchaseValue.toFixed(
+              <p><strong>Total purchase value:</strong> #{summary.totalPurchaseValue.toFixed(
                 2
               )}</p>
             </div>
@@ -1861,7 +1861,7 @@ const WarehouseManagement: React.FC = () => {
                         Total Value
                       </p>
                       <p className="text-2xl font-bold text-gray-900">
-                        $
+                        #
                         {allInventory
                           .reduce(
                             (sum, item) => sum + item.stock * item.price,
@@ -2203,7 +2203,7 @@ const WarehouseManagement: React.FC = () => {
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              ${item.price.toFixed(2)}
+                              #${item.price.toFixed(2)}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span
@@ -2366,7 +2366,7 @@ const WarehouseManagement: React.FC = () => {
                       Retail Price (VAT Included):
                     </span>
                     <span className="ml-2 text-gray-900">
-                      $
+                      #
                       {selectedInventoryItem.retailPriceVATIncluded?.toFixed(
                         2
                       ) || selectedInventoryItem.price.toFixed(2)}
@@ -2377,7 +2377,7 @@ const WarehouseManagement: React.FC = () => {
                       Purchase Price (Excl. VAT):
                     </span>
                     <span className="ml-2 text-gray-900">
-                      ${selectedInventoryItem.purchasePriceExclVAT.toFixed(2)}
+                      #${selectedInventoryItem.purchasePriceExclVAT.toFixed(2)}
                     </span>
                   </div>
                   <div>
@@ -2391,7 +2391,7 @@ const WarehouseManagement: React.FC = () => {
                       Total Value:
                     </span>
                     <span className="ml-2 text-gray-900">
-                      $
+                      #
                       {(
                         selectedInventoryItem.stock *
                         selectedInventoryItem.price

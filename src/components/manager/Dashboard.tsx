@@ -130,7 +130,7 @@
       },
       {
         name: "24 Hours Revenue",
-        value: `$${totalRevenue24h.toFixed(2)}`,
+        value: `#${totalRevenue24h.toFixed(2)}`,
         icon: DollarSign,
         color: "bg-purple-500",
         change: `From ${totalSalesCount} sales`,
@@ -261,7 +261,7 @@
                         </div>
                         <div className="ml-4 text-right">
                           <span className="text-sm font-medium text-gray-900">
-                            ${sale.totalAmount.toFixed(2)}
+                            #{sale.totalAmount.toFixed(2)}
                           </span>
                           <p className="text-xs text-gray-400">
                             ID: {sale.transactionId.slice(-6)}

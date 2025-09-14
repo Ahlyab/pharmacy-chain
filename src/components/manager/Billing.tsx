@@ -1,27 +1,17 @@
 import GreenProgressBar from "../GreenProgressBar";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import jsPDF from "jspdf";
-import { Search, FileText, Download, Eye, RotateCcw } from "lucide-react";
-import { VITE_BASE_URL } from "../../data";
+import { Search, FileText, Download, Eye, RotateCcw, FileSpreadsheet } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { apiEndpoints } from "../../utils/api";
 import Swal from "sweetalert2";
 import {
-  Search as SearchIcon,
-  Filter,
-  Download as DownloadIcon,
-  Eye as EyeIcon,
-  RotateCcw as RotateCcwIcon,
-  Calendar,
-  DollarSign,
-  CreditCard,
-  User,
-  Package,
-  Clock,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-} from "lucide-react";
+  generateExcelReport,
+  downloadExcel,
+  generateReportFilename,
+  ExportData,
+  ExportFilters,
+} from "../../utils/exportUtils";
 
 interface Bill {
   id: string;
@@ -69,6 +59,7 @@ const Billing: React.FC = () => {
     key: string;
     direction: "asc" | "desc";
   } | null>(null);
+  const [exportLoading, setExportLoading] = useState(false);
 
   // Helper function to format date and time
   const formatDateTime = (dateString: string) => {
@@ -369,15 +360,58 @@ const Billing: React.FC = () => {
     y += 5;
     bill.items.forEach((item) => {
       doc.text(item.name, 10, y);
-      doc.text(`$${item.price.toFixed(2)}`, 70, y);
+      doc.text(`#${item.price.toFixed(2)}`, 70, y);
       doc.text(`${item.quantity}`, 110, y);
-      doc.text(`$${(item.price * item.quantity).toFixed(2)}`, 140, y);
+      doc.text(`#${(item.price * item.quantity).toFixed(2)}`, 140, y);
       y += 6;
     });
     y += 4;
     doc.setFontSize(12);
-    doc.text(`Total: $${bill.total.toFixed(2)}`, 10, y);
+    doc.text(`Total: #${bill.total.toFixed(2)}`, 10, y);
     doc.save(`Bill_${bill.id}.pdf`);
+  };
+
+  // Export functions
+  const handleExportExcel = async () => {
+    setExportLoading(true);
+    try {
+      const exportData: ExportData[] = sortedBills.map(bill => ({
+        id: bill.id,
+        date: bill.date,
+        customer: bill.customer,
+        items: bill.items,
+        total: bill.total,
+        paymentMethod: bill.paymentMethod,
+        status: bill.status,
+      }));
+
+      const filters: ExportFilters = {
+        dateRange,
+        selectedDate,
+        selectedStatus,
+        searchTerm,
+      };
+
+      const csvContent = generateExcelReport(exportData, "Billing Report", filters, false);
+      const filename = generateReportFilename("billing_report", filters, "xlsx");
+      downloadExcel(csvContent, filename);
+
+      Swal.fire({
+        title: 'Export Successful',
+        text: 'Excel report has been downloaded successfully!',
+        icon: 'success',
+        confirmButtonText: 'OK'
+      });
+    } catch (error: any) {
+      Swal.fire({
+        title: 'Export Failed',
+        text: `Error generating Excel: ${error.message}`,
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
+    } finally {
+      setExportLoading(false);
+    }
   };
 
   const totalRevenue = filteredBills
@@ -391,16 +425,28 @@ const Billing: React.FC = () => {
            <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Billing & Invoices</h2>
            <p className="text-sm sm:text-base text-gray-600">Manage customer bills and invoices</p>
          </div>
-         <button
-           onClick={() => {
-             setShowReturnHistory(true);
-             fetchReturnHistory();
-           }}
-           className="w-full sm:w-auto bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700 flex items-center justify-center sm:justify-start space-x-2"
-         >
-           <RotateCcw className="h-4 w-4" />
-           <span>Return History</span>
-         </button>
+         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+           <button
+             onClick={() => {
+               setShowReturnHistory(true);
+               fetchReturnHistory();
+             }}
+             className="w-full sm:w-auto bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700 flex items-center justify-center sm:justify-start space-x-2"
+           >
+             <RotateCcw className="h-4 w-4" />
+             <span>Return History</span>
+           </button>
+           <div className="flex gap-2">
+             <button
+               onClick={handleExportExcel}
+               disabled={exportLoading || sortedBills.length === 0}
+               className="w-full sm:w-auto bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center sm:justify-start space-x-2"
+             >
+               <FileSpreadsheet className="h-4 w-4" />
+               <span>{exportLoading ? "Exporting..." : "Export Excel"}</span>
+             </button>
+           </div>
+         </div>
        </div>
 
              {/* Stats */}
@@ -455,7 +501,7 @@ const Billing: React.FC = () => {
              <div className="ml-3 lg:ml-4">
                <p className="text-xs lg:text-sm font-medium text-gray-600">Total Revenue</p>
                <p className="text-xl lg:text-2xl font-bold text-gray-900">
-                 ${totalRevenue.toFixed(2)}
+                 #{totalRevenue.toFixed(2)}
                </p>
              </div>
            </div>
@@ -749,7 +795,7 @@ const Billing: React.FC = () => {
                          </div>
                        </td>
                        <td className="px-2 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm font-medium text-gray-900">
-                         ${bill.total.toFixed(2)}
+                         #{bill.total.toFixed(2)}
                        </td>
                        <td className="px-2 sm:px-6 py-4 whitespace-nowrap">
                          <span
@@ -839,10 +885,10 @@ const Billing: React.FC = () => {
                 {billToView.items.map((item, idx) => (
                   <tr key={idx}>
                     <td>{item.name}</td>
-                    <td className="text-right">${item.price.toFixed(2)}</td>
+                    <td className="text-right">#{item.price.toFixed(2)}</td>
                     <td className="text-right">{item.quantity}</td>
                     <td className="text-right">
-                      ${(item.price * item.quantity).toFixed(2)}
+                      #{(item.price * item.quantity).toFixed(2)}
                     </td>
                   </tr>
                 ))}
@@ -850,7 +896,7 @@ const Billing: React.FC = () => {
             </table>
             <div className="flex justify-between font-bold text-base mb-2">
               <span>Total:</span>
-              <span>${billToView.total.toFixed(2)}</span>
+              <span>#{billToView.total.toFixed(2)}</span>
             </div>
             <div className="mb-2 text-xs">
               Payment Method:{" "}
@@ -909,10 +955,10 @@ const Billing: React.FC = () => {
                 {billToDownload.items.map((item, idx) => (
                   <tr key={idx}>
                     <td>{item.name}</td>
-                    <td className="text-right">${item.price.toFixed(2)}</td>
+                    <td className="text-right">#{item.price.toFixed(2)}</td>
                     <td className="text-right">{item.quantity}</td>
                     <td className="text-right">
-                      ${(item.price * item.quantity).toFixed(2)}
+                      #{(item.price * item.quantity).toFixed(2)}
                     </td>
                   </tr>
                 ))}
@@ -920,7 +966,7 @@ const Billing: React.FC = () => {
             </table>
             <div className="flex justify-between font-bold text-base mb-2">
               <span>Total:</span>
-              <span>${billToDownload.total.toFixed(2)}</span>
+              <span>#{billToDownload.total.toFixed(2)}</span>
             </div>
             <div className="mb-2 text-xs">
               Payment Method:{" "}
@@ -979,7 +1025,7 @@ const Billing: React.FC = () => {
                    <span className="font-semibold">Date:</span> {formatDateTime(billToReturn.date)}
                  </div>
                  <div>
-                   <span className="font-semibold">Original Total:</span> ${billToReturn.total.toFixed(2)}
+                   <span className="font-semibold">Original Total:</span> #{billToReturn.total.toFixed(2)}
                  </div>
                </div>
              </div>
@@ -1036,7 +1082,7 @@ const Billing: React.FC = () => {
                     <div className="flex justify-between items-start mb-3">
                       <div className="flex-1">
                         <h4 className="font-semibold text-gray-900 text-lg">{item.name}</h4>
-                        <p className="text-sm text-gray-600">Unit Price: ${item.price.toFixed(2)}</p>
+                        <p className="text-sm text-gray-600">Unit Price: #{item.price.toFixed(2)}</p>
                       </div>
                       <div className="text-right">
                         <span className="text-xs font-medium text-gray-500 bg-white px-2 py-1 rounded-full border">
@@ -1106,7 +1152,7 @@ const Billing: React.FC = () => {
                              ? 'bg-orange-100 text-orange-800' 
                              : 'bg-gray-100 text-gray-500'
                          }`}>
-                           ${(item.returnQuantity * item.price).toFixed(2)}
+                           #{(item.returnQuantity * item.price).toFixed(2)}
                          </div>
                        </div>
                      </div>
@@ -1145,7 +1191,7 @@ const Billing: React.FC = () => {
               <div className="flex justify-between items-center">
                 <span className="font-semibold text-orange-800">Total Return Amount:</span>
                 <span className="text-xl font-bold text-orange-800">
-                  ${calculateReturnTotal().toFixed(2)}
+                  #{calculateReturnTotal().toFixed(2)}
                 </span>
               </div>
             </div>
@@ -1234,7 +1280,7 @@ const Billing: React.FC = () => {
                             {returnRecord.returnItems.length} items
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            ${returnRecord.totalReturnAmount.toFixed(2)}
+                            #{returnRecord.totalReturnAmount.toFixed(2)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {returnRecord.processedBy}

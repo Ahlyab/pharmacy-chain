@@ -459,10 +459,10 @@ const InventoryManagement: React.FC = () => {
               <p><strong>Categories:</strong> ${summary.categories.join(
                 ", "
               )}</p>
-              <p><strong>Total retail value:</strong> $${summary.totalRetailValue.toFixed(
+              <p><strong>Total retail value:</strong> #{summary.totalRetailValue.toFixed(
                 2
               )}</p>
-              <p><strong>Total purchase value:</strong> $${summary.totalPurchaseValue.toFixed(
+              <p><strong>Total purchase value:</strong> #{summary.totalPurchaseValue.toFixed(
                 2
               )}</p>
               <p><strong>Branch:</strong> ${user.branchId}</p>
@@ -596,10 +596,10 @@ const InventoryManagement: React.FC = () => {
                     <p style="margin: 5px 0;"><strong>Per Pack Unit:</strong> ${existingProduct.unitsPerPack || 1}</p>
                   </div>
                   <div>
-                    <p style="margin: 5px 0;"><strong>Selling Price:</strong> $${existingProduct.price}</p>
-                    <p style="margin: 5px 0;"><strong>Unit Price:</strong> $${existingProduct.unitPrice || 0}</p>
-                    <p style="margin: 5px 0;"><strong>Cost Price:</strong> $${existingProduct.purchasePriceExclVAT || 0}</p>
-                    <p style="margin: 5px 0;"><strong>Retail Price (VAT):</strong> $${existingProduct.retailPriceVATIncluded || existingProduct.price}</p>
+                    <p style="margin: 5px 0;"><strong>Selling Price:</strong> #{existingProduct.price}</p>
+                    <p style="margin: 5px 0;"><strong>Unit Price:</strong> #{existingProduct.unitPrice || 0}</p>
+                    <p style="margin: 5px 0;"><strong>Cost Price:</strong> #{existingProduct.purchasePriceExclVAT || 0}</p>
+                    <p style="margin: 5px 0;"><strong>Retail Price (VAT):</strong> #{existingProduct.retailPriceVATIncluded || existingProduct.price}</p>
                     <p style="margin: 5px 0;"><strong>VAT:</strong> ${existingProduct.vat || 0}%</p>
                   </div>
                 </div>
@@ -655,7 +655,7 @@ const InventoryManagement: React.FC = () => {
                     <div>
                       <p style="margin: 5px 0;"><strong>Units:</strong> ${existingProduct.units || "pieces"}</p>
                       <p style="margin: 5px 0;"><strong>Per Pack Unit:</strong> ${existingProduct.unitsPerPack || 1}</p>
-                      <p style="margin: 5px 0;"><strong>Price:</strong> $${existingProduct.price}</p>
+                      <p style="margin: 5px 0;"><strong>Price:</strong> #{existingProduct.price}</p>
                     </div>
                   </div>
                 </div>
@@ -1809,7 +1809,7 @@ const InventoryManagement: React.FC = () => {
                       <td className="px-4 py-2 text-left">
                         {product.minStock}
                       </td>
-                      <td className="px-4 py-2 text-left">${product.price}</td>
+                      <td className="px-4 py-2 text-left">#{product.price}</td>
                       <td className="px-4 py-2 text-left">
                         {product.supplier}
                       </td>

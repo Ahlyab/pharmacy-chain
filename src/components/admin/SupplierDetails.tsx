@@ -397,7 +397,7 @@ const SupplierDetails: React.FC<{ supplier: Supplier; onBack: () => void }> = ({
           <div><strong>Status:</strong> <span className={`px-2 py-1 rounded text-xs ${supplier.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{supplier.status || 'Active'}</span></div>
           <div className="sm:col-span-2 lg:col-span-1"><strong>Products Supplied:</strong> {supplier.productsSupplied.join(', ') || 'None specified'}</div>
           <div><strong>Total Deliveries:</strong> {deliveries.length} ({deliveries.reduce((sum, d) => sum + d.quantity, 0)} units)</div>
-          <div><strong>Total Amount:</strong> ₦{deliveries.reduce((sum, d) => sum + (d.totalAmount || 0), 0).toFixed(2)}</div>
+          <div><strong>Total Amount:</strong> #${deliveries.reduce((sum, d) => sum + (d.totalAmount || 0), 0).toFixed(2)}</div>
           <div><strong>Invoices:</strong> {invoices.length} files</div>
           {deliveries.length > 0 && (
             <div className="sm:col-span-2 lg:col-span-1"><strong>Last Delivery:</strong> {formatDate(deliveries[0]?.date)} ({deliveries[0]?.products})</div>
@@ -502,7 +502,7 @@ const SupplierDetails: React.FC<{ supplier: Supplier; onBack: () => void }> = ({
                         <td className="border px-2 sm:px-4 py-2 text-xs sm:text-sm">{delivery.deliveryTime}</td>
                         <td className="border px-2 sm:px-4 py-2 text-xs sm:text-sm max-w-32 truncate" title={delivery.products}>{delivery.products}</td>
                         <td className="border px-2 sm:px-4 py-2 text-xs sm:text-sm">{delivery.quantity}</td>
-                        <td className="border px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium">₦{(delivery.totalAmount || 0).toFixed(2)}</td>
+                        <td className="border px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium">#${(delivery.totalAmount || 0).toFixed(2)}</td>
                         <td className="border px-2 sm:px-4 py-2 text-xs sm:text-sm">{delivery.invoiceNumber || '-'}</td>
                         <td className="border px-2 sm:px-4 py-2 text-xs sm:text-sm hidden sm:table-cell max-w-32 truncate" title={delivery.notes || ''}>{delivery.notes || '-'}</td>
                         <td className="border px-2 sm:px-4 py-2 text-xs sm:text-sm">
@@ -592,7 +592,7 @@ const SupplierDetails: React.FC<{ supplier: Supplier; onBack: () => void }> = ({
                         <td className="border px-2 sm:px-4 py-2 text-xs sm:text-sm">{formatDate(invoice.issueDate)}</td>
                         <td className="border px-2 sm:px-4 py-2 text-xs sm:text-sm">{invoice.count || 0}</td>
                         <td className="border px-2 sm:px-4 py-2 text-xs sm:text-sm">{invoice.quantity || 0}</td>
-                        <td className="border px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium">₦{(invoice.amountOfProductInStock || 0).toFixed(2)}</td>
+                        <td className="border px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium">#${(invoice.amountOfProductInStock || 0).toFixed(2)}</td>
                         <td className="border px-2 sm:px-4 py-2 text-xs sm:text-sm">{invoice.createdBy || 'N/A'}</td>
                         <td className="border px-2 sm:px-4 py-2 text-xs sm:text-sm">{formatDate(invoice.createdAt)}</td>
                         <td className="border px-2 sm:px-4 py-2 text-xs sm:text-sm">
