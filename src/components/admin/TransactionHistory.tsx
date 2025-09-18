@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Calendar, DollarSign, Receipt, Search, FileSpreadsheet } from "lucide-react";
+import { Calendar, Receipt, Search, FileSpreadsheet } from "lucide-react";
 import GreenProgressBar from "../GreenProgressBar";
 import { apiEndpoints } from "../../utils/api";
 import { useAuth } from "../../contexts/AuthContext";
@@ -353,7 +353,7 @@ const TransactionHistory: React.FC = () => {
     {
       name: "Total Revenue",
       value: `#${totalRevenue.toFixed(2)}`,
-      icon: DollarSign,
+      icon: Receipt,
       color: "bg-green-500",
     },
     {
@@ -746,7 +746,7 @@ const TransactionHistory: React.FC = () => {
                         </div>
                       </td>
                       <td className="px-2 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm font-medium text-gray-900">
-                        #${transaction.total.toFixed(2)}
+                        #{transaction.total.toFixed(2)}
                       </td>
                       <td className="px-2 sm:px-6 py-4 whitespace-nowrap">
                         <span

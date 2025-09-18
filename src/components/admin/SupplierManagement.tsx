@@ -250,7 +250,7 @@ const SupplierManagement: React.FC = () => {
               <div><span className="font-semibold">Deliveries:</span> {supplier.deliveries?.length || 0}</div>
               <div><span className="font-semibold">Invoices:</span> {supplier.invoices?.length || 0}</div>
               {supplier.deliveries && supplier.deliveries.length > 0 && (
-                <div><span className="font-semibold">Total Supplied:</span> #${supplier.deliveries.reduce((total, delivery) => total + (delivery.totalAmount || 0), 0).toFixed(2)}</div>
+                <div><span className="font-semibold">Total Supplied:</span> #{supplier.deliveries.reduce((total, delivery) => total + (delivery.totalAmount || 0), 0).toFixed(2)}</div>
               )}
             </div>
             

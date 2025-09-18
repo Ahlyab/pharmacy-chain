@@ -178,11 +178,11 @@ const AuditDetail: React.FC<AuditDetailProps> = ({ auditLog, onBack }) => {
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Previous Price:</span>
-                  <span className="font-medium">#${changes.previousPrice}</span>
+                  <span className="font-medium">#{changes.previousPrice}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">New Price:</span>
-                  <span className="font-medium">#${changes.newPrice}</span>
+                  <span className="font-medium">#{changes.newPrice}</span>
                 </div>
               </div>
             </div>
@@ -227,7 +227,7 @@ const AuditDetail: React.FC<AuditDetailProps> = ({ auditLog, onBack }) => {
           {details.totalAmount && (
             <div className="bg-white p-3 rounded border">
               <h5 className="font-medium text-gray-900 mb-2">Total Amount</h5>
-              <p className="text-sm text-gray-600 font-medium">#${details.totalAmount}</p>
+              <p className="text-sm text-gray-600 font-medium">#{details.totalAmount}</p>
             </div>
           )}
           {details.paymentMethod && (
@@ -389,13 +389,13 @@ const AuditDetail: React.FC<AuditDetailProps> = ({ auditLog, onBack }) => {
                 {details.previousPrice !== undefined && (
                   <div className="bg-white p-3 rounded border">
                     <h5 className="font-medium text-gray-900 mb-2">Previous Price</h5>
-                    <p className="text-2xl font-bold text-gray-700">#${details.previousPrice}</p>
+                    <p className="text-2xl font-bold text-gray-700">#{details.previousPrice}</p>
                   </div>
                 )}
                 {details.newPrice !== undefined && (
                   <div className="bg-white p-3 rounded border">
                     <h5 className="font-medium text-gray-900 mb-2">New Price</h5>
-                    <p className="text-2xl font-bold text-green-600">#${details.newPrice}</p>
+                    <p className="text-2xl font-bold text-green-600">#{details.newPrice}</p>
                   </div>
                 )}
               </div>

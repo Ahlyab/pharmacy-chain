@@ -331,7 +331,7 @@ const InventoryOverview: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      #${item.price}
+                      #{item.price}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span

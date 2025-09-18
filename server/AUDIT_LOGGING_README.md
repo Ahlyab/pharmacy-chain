@@ -135,7 +135,7 @@ await logTransactionAction(
   req,
   "SALE_CREATED",
   transaction._id,
-  `Sale #${transaction.transactionId}`,
+  `Sale #{transaction.transactionId}`,
   {
     transactionId: transaction.transactionId,
     totalAmount: transaction.totalAmount,
