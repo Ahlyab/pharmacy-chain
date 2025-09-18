@@ -553,12 +553,10 @@ const RevenueProfitContent: React.FC<{ reportData: ReportData | null; period?: s
   };
 
   const formatCurrency = (num: number): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
+    return `#${num.toLocaleString('en-US', {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
-    }).format(num);
+    })}`;
   };
 
   const getTrendIcon = (trend: 'up' | 'down') => {
@@ -818,12 +816,10 @@ const StockExpirationContent: React.FC<{ stockExpirationData: StockExpirationRep
   };
 
   const formatCurrency = (num: number): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
+    return `#${num.toLocaleString('en-US', {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
-    }).format(num);
+    })}`;
   };
 
   return (
@@ -995,12 +991,10 @@ const StockTurnoverContent: React.FC<{ stockTurnoverData: StockTurnoverReportDat
   };
 
   const formatCurrency = (num: number): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
+    return `${num.toLocaleString('en-US', {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
-    }).format(num);
+    })}`;
   };
 
   const getTrendIcon = (trend: 'up' | 'down') => {

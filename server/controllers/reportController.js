@@ -351,7 +351,7 @@ const getStockTurnoverReport = async (req, res) => {
       branchId, 
       startDate, 
       endDate, 
-      includeAllBranches = false,
+      includeAllBranches = true,
       segment,
       manufacturer
     } = req.query;
@@ -462,34 +462,80 @@ const getStockTurnoverReport = async (req, res) => {
       totals.grossProfit += salesInfo.grossProfit;
     });
 
-    // Calculate overall turnover rate
-    const overallTurnoverRate = totals.stockQuantity > 0 ? 
-      (totals.netSalesQuantity / totals.stockQuantity) * 100 : 0;
+    // Calculate previous period for trend analysis
+    let previousStartDate, previousEndDate;
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const diff = end.getTime() - start.getTime();
+      previousEndDate = new Date(start.getTime() - 1);
+      previousStartDate = new Date(previousEndDate.getTime() - diff);
+    }
 
-    // Calculate KPI data with trends (mock data for now)
+    let previousTotals = {
+      netSalesQuantity: 0,
+      netSalesRetailAmount: 0,
+      grossProfit: 0
+    };
+
+    if (previousStartDate && previousEndDate) {
+      // Build previous period filters
+      const prevDateFilter = {
+        createdAt: {
+          $gte: previousStartDate,
+          $lte: previousEndDate
+        }
+      };
+      // Use same branch/segment/manufacturer filters
+      const prevTransactions = await Transaction.find({
+        ...prevDateFilter,
+        ...branchFilter,
+        status: 'completed'
+      }).populate('items.productId', 'name composition manufacturer category');
+
+      prevTransactions.forEach(transaction => {
+        transaction.items.forEach(item => {
+          previousTotals.netSalesQuantity += item.quantity;
+          previousTotals.netSalesRetailAmount += item.totalPrice;
+          previousTotals.grossProfit += (item.totalPrice - (item.costPrice * item.quantity));
+        });
+      });
+    }
+
+    function calcChange(current, previous) {
+      if (!previous || previous === 0) return '0.0';
+      return ((current - previous) / previous * 100).toFixed(1);
+    }
+    function calcTrend(current, previous) {
+      return current > previous ? 'up' : 'down';
+    }
+
     const kpiData = {
       netSalesQuantity: {
         value: totals.netSalesQuantity,
         label: 'Net sales quantity',
-        change: '-51.7%',
-        trend: 'down'
+        change: calcChange(totals.netSalesQuantity, previousTotals.netSalesQuantity),
+        trend: calcTrend(totals.netSalesQuantity, previousTotals.netSalesQuantity)
       },
       netSalesRetailAmount: {
         value: totals.netSalesRetailAmount,
         label: 'Net sales retail amount',
-        change: '-52.9%',
-        trend: 'down'
+        change: calcChange(totals.netSalesRetailAmount, previousTotals.netSalesRetailAmount),
+        trend: calcTrend(totals.netSalesRetailAmount, previousTotals.netSalesRetailAmount)
       },
       grossProfit: {
         value: totals.grossProfit,
         label: 'Gross profit',
-        change: '-55.3%',
-        trend: 'down'
+        change: calcChange(totals.grossProfit, previousTotals.grossProfit),
+        trend: calcTrend(totals.grossProfit, previousTotals.grossProfit)
       }
     };
 
     // Sort by stock turnover rate (descending)
     stockTurnoverData.sort((a, b) => b.stockTurnoverRate - a.stockTurnoverRate);
+
+    const overallTurnoverRate = totals.stockQuantity > 0 ? 
+      (totals.netSalesQuantity / totals.stockQuantity) * 100 : 0;
 
     res.json({
       success: true,

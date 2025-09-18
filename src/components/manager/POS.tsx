@@ -57,6 +57,7 @@ const POS: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showUnitQuantityModal, setShowUnitQuantityModal] = useState(false);
   const [unitQuantity, setUnitQuantity] = useState(1);
+  const [cumulativeUnitsSold, setCumulativeUnitsSold] = useState<{[productId: string]: number}>({});
 
   // Print styles for receipt
   const printStyles = `
@@ -98,6 +99,32 @@ const POS: React.FC = () => {
     return { ...product, status, id: product._id || product.id };
   };
 
+  // Helper function to calculate cumulative units and packs for a product
+  const calculateCumulativeUnitsAndPacks = (productId: string, additionalUnits: number = 0) => {
+    const product = products.find(p => p._id === productId);
+    if (!product) return { totalUnitsSold: 0, completePacksSold: 0, remainingUnits: 0 };
+    
+    const unitsPerPack = product.unitsPerPack || 1;
+    
+    // Get previously sold units from persistent state
+    const previouslySoldUnits = cumulativeUnitsSold[productId] || 0;
+    
+    // Calculate total units from current cart items for this product (unit purchases only)
+    let totalUnitsFromCart = 0;
+    cart.forEach(item => {
+      if (item._id === productId && item.isUnitPurchase) {
+        totalUnitsFromCart += item.quantity;
+      }
+    });
+    
+    // Add previously sold units + current cart units + additional units being considered
+    const totalUnitsSold = previouslySoldUnits + totalUnitsFromCart + additionalUnits;
+    const completePacksSold = Math.floor(totalUnitsSold / unitsPerPack);
+    const remainingUnits = totalUnitsSold % unitsPerPack;
+    
+    return { totalUnitsSold, completePacksSold, remainingUnits };
+  };
+
   // Helper function to calculate units and packs for a cart item
   const calculateUnitsAndPacks = (item: CartItem) => {
     const unitsPerPack = item.unitsPerPack || 1;
@@ -105,9 +132,10 @@ const POS: React.FC = () => {
     let packsSold = 0;
 
     if (item.isUnitPurchase) {
-      // Selling individual units
-      unitsSold = item.quantity;
-      packsSold = Math.floor(unitsSold / unitsPerPack);
+      // For unit purchases, show the current item's units and cumulative packs
+      const cumulative = calculateCumulativeUnitsAndPacks(item._id, item.quantity);
+      unitsSold = item.quantity; // Show only current item's units
+      packsSold = cumulative.completePacksSold; // Show cumulative complete packs
     } else {
       // Selling full packs
       packsSold = item.quantity;
@@ -196,49 +224,54 @@ const POS: React.FC = () => {
   const addToCartDirect = (product: Product, isUnitPurchase: boolean, quantity: number = 1) => {
     const existingItem = cart.find((item) => item._id === product._id && item.isUnitPurchase === isUnitPurchase);
     
-    // Determine available stock based on purchase type
-    const availableStock = isUnitPurchase 
-      ? (product.shelfStock !== undefined ? product.shelfStock : product.stock)
-      : product.stock;
-    
-    if (existingItem) {
-      if (existingItem.quantity + quantity <= availableStock) {
-        const updatedItem = { ...existingItem, quantity: existingItem.quantity + quantity };
-        const { unitsSold, packsSold } = calculateUnitsAndPacks(updatedItem);
-        updatedItem.unitsSold = unitsSold;
-        updatedItem.packsSold = packsSold;
-        
-        setCart(
-          cart.map((item) =>
-            item._id === product._id && item.isUnitPurchase === isUnitPurchase
-              ? updatedItem
-              : item
-          )
-        );
-      } else {
-        Swal.fire({
-          title: "Stock Limit Reached",
-          text: `Cannot add ${quantity} more ${product.name}. Only ${availableStock - existingItem.quantity} available in ${isUnitPurchase ? 'shelf' : 'total'} stock.`,
-          icon: "warning",
-          confirmButtonText: "OK",
-        });
-      }
-    } else {
-      if (availableStock >= quantity) {
-        const newItem: CartItem = { ...product, quantity: quantity, isUnitPurchase };
-        const { unitsSold, packsSold } = calculateUnitsAndPacks(newItem);
-        newItem.unitsSold = unitsSold;
-        newItem.packsSold = packsSold;
-        
-        setCart([...cart, newItem]);
-      } else {
+    if (isUnitPurchase) {
+      // For unit purchases, check cumulative units against available stock
+      const cumulative = calculateCumulativeUnitsAndPacks(product._id, quantity);
+      const availableUnits = product.shelfStock !== undefined ? product.shelfStock : product.stock;
+      
+      if (cumulative.totalUnitsSold > availableUnits) {
         Swal.fire({
           title: "Insufficient Stock",
-          text: `Cannot add ${quantity} ${product.name}. Only ${availableStock} available in ${isUnitPurchase ? 'shelf' : 'total'} stock.`,
+          text: `Cannot add ${quantity} units. Total units would be ${cumulative.totalUnitsSold} but only ${availableUnits} available.`,
           icon: "error",
           confirmButtonText: "OK",
         });
+        return;
       }
+    } else {
+      // For pack purchases, check available packs
+      const availableStock = product.stock;
+      if (quantity > availableStock) {
+        Swal.fire({
+          title: "Insufficient Stock",
+          text: `Cannot add ${quantity} packs. Only ${availableStock} packs available.`,
+          icon: "error",
+          confirmButtonText: "OK",
+        });
+        return;
+      }
+    }
+    
+    if (existingItem) {
+      const updatedItem = { ...existingItem, quantity: existingItem.quantity + quantity };
+      const { unitsSold, packsSold } = calculateUnitsAndPacks(updatedItem);
+      updatedItem.unitsSold = unitsSold;
+      updatedItem.packsSold = packsSold;
+      
+      setCart(
+        cart.map((item) =>
+          item._id === product._id && item.isUnitPurchase === isUnitPurchase
+            ? updatedItem
+            : item
+        )
+      );
+    } else {
+      const newItem: CartItem = { ...product, quantity: quantity, isUnitPurchase };
+      const { unitsSold, packsSold } = calculateUnitsAndPacks(newItem);
+      newItem.unitsSold = unitsSold;
+      newItem.packsSold = packsSold;
+      
+      setCart([...cart, newItem]);
     }
   };
 
@@ -248,32 +281,46 @@ const POS: React.FC = () => {
     } else {
       const product = products.find((p) => p._id === _id);
       if (product) {
-        // Determine available stock based on purchase type
-        const availableStock = isUnitPurchase 
-          ? (product.shelfStock !== undefined ? product.shelfStock : product.stock)
-          : product.stock;
+        if (isUnitPurchase) {
+          // For unit purchases, check cumulative units against available stock
+          const cumulative = calculateCumulativeUnitsAndPacks(_id, quantity);
+          const availableUnits = product.shelfStock !== undefined ? product.shelfStock : product.stock;
           
-        if (quantity <= availableStock) {
-          setCart(
-            cart.map((item) => {
-              if (item._id === _id && item.isUnitPurchase === isUnitPurchase) {
-                const updatedItem = { ...item, quantity };
-                const { unitsSold, packsSold } = calculateUnitsAndPacks(updatedItem);
-                updatedItem.unitsSold = unitsSold;
-                updatedItem.packsSold = packsSold;
-                return updatedItem;
-              }
-              return item;
-            })
-          );
+          if (cumulative.totalUnitsSold > availableUnits) {
+            Swal.fire({
+              title: "Stock Limit Exceeded",
+              text: `Cannot set quantity to ${quantity}. Total units would be ${cumulative.totalUnitsSold} but only ${availableUnits} available.`,
+              icon: "warning",
+              confirmButtonText: "OK",
+            });
+            return;
+          }
         } else {
-          Swal.fire({
-            title: "Stock Limit Exceeded",
-            text: `Cannot set quantity to ${quantity}. Only ${availableStock} available in ${isUnitPurchase ? 'shelf' : 'total'} stock.`,
-            icon: "warning",
-            confirmButtonText: "OK",
-          });
+          // For pack purchases, check available packs
+          const availableStock = product.stock;
+          if (quantity > availableStock) {
+            Swal.fire({
+              title: "Stock Limit Exceeded",
+              text: `Cannot set quantity to ${quantity}. Only ${availableStock} packs available.`,
+              icon: "warning",
+              confirmButtonText: "OK",
+            });
+            return;
+          }
         }
+        
+        setCart(
+          cart.map((item) => {
+            if (item._id === _id && item.isUnitPurchase === isUnitPurchase) {
+              const updatedItem = { ...item, quantity };
+              const { unitsSold, packsSold } = calculateUnitsAndPacks(updatedItem);
+              updatedItem.unitsSold = unitsSold;
+              updatedItem.packsSold = packsSold;
+              return updatedItem;
+            }
+            return item;
+          })
+        );
       }
     }
   };
@@ -391,6 +438,8 @@ const POS: React.FC = () => {
       setCart([]);
       setCustomerName("");
       setPaymentMethod("cash");
+      // DON'T clear cumulative units tracking - keep it across transactions
+      // setCumulativeUnitsSold({});
       // Refresh products in case stock changed
       fetchProducts();
     } catch (err: any) {
@@ -406,63 +455,141 @@ const POS: React.FC = () => {
   // Function to update stock quantities after sale
   const updateStockQuantities = async () => {
     try {
-      // Update stock for each item in cart
-      for (const item of cart) {
-        const { unitsSold, packsSold } = calculateUnitsAndPacks(item);
-        
-        // Calculate new stock based on what was actually sold
-        let newStock = item.stock;
-        let newShelfStock = item.shelfStock;
-        
+      // Group cart items by product to handle cumulative unit tracking
+      const productGroups: {[productId: string]: {unitItems: CartItem[], packItems: CartItem[]}} = {};
+      
+      cart.forEach(item => {
+        if (!productGroups[item._id]) {
+          productGroups[item._id] = { unitItems: [], packItems: [] };
+        }
         if (item.isUnitPurchase) {
-          // Selling individual units - reduce by units sold
-          newStock = item.stock - unitsSold;
-          if (item.shelfStock !== undefined) {
-            newShelfStock = Math.max(0, item.shelfStock - unitsSold);
-          }
+          productGroups[item._id].unitItems.push(item);
         } else {
-          // Selling full packs - reduce by packs sold
-          newStock = item.stock - packsSold;
-          // For pack sales, also reduce shelf stock by the units in those packs
-          if (item.shelfStock !== undefined) {
-            newShelfStock = Math.max(0, item.shelfStock - unitsSold);
-          }
+          productGroups[item._id].packItems.push(item);
+        }
+      });
+
+      // Process each product group
+      for (const [productId, group] of Object.entries(productGroups)) {
+        const product = products.find(p => p._id === productId);
+        if (!product) continue;
+
+        let totalUnitsSold = 0;
+        let totalPacksSold = 0;
+        let newStock = product.stock;
+        let newShelfStock = product.shelfStock;
+
+        // Calculate total units sold from unit items (cumulative across all transactions)
+        let cumulativeUnitsFromUnits = 0;
+        group.unitItems.forEach(item => {
+          cumulativeUnitsFromUnits += item.quantity;
+        });
+        
+        // Get previously sold units from persistent state
+        const previouslySoldUnits = cumulativeUnitsSold[productId] || 0;
+        const totalCumulativeUnits = previouslySoldUnits + cumulativeUnitsFromUnits;
+        
+        // Calculate complete packs from total cumulative units
+        const unitsPerPack = product.unitsPerPack || 1;
+        const completePacksFromUnits = Math.floor(totalCumulativeUnits / unitsPerPack);
+        const previouslyCompletePacks = Math.floor(previouslySoldUnits / unitsPerPack);
+        const newCompletePacks = completePacksFromUnits - previouslyCompletePacks;
+        
+        // Debug logging
+        console.log(`Product: ${product.name}`);
+        console.log(`Previously sold units: ${previouslySoldUnits}`);
+        console.log(`Current transaction units: ${cumulativeUnitsFromUnits}`);
+        console.log(`Total cumulative units: ${totalCumulativeUnits}`);
+        console.log(`Units per pack: ${unitsPerPack}`);
+        console.log(`Complete packs from units: ${completePacksFromUnits}`);
+        console.log(`Previously complete packs: ${previouslyCompletePacks}`);
+        console.log(`NEW complete packs: ${newCompletePacks}`);
+        
+        // Calculate packs and units from pack items
+        group.packItems.forEach(item => {
+          totalPacksSold += item.quantity;
+          totalUnitsSold += item.quantity * (item.unitsPerPack || 1);
+        });
+
+        // Add only NEW complete packs from unit sales
+        totalPacksSold += newCompletePacks;
+        totalUnitsSold += cumulativeUnitsFromUnits;
+
+        // Update stock based on complete packs only
+        newStock = product.stock - totalPacksSold;
+        if (product.shelfStock !== undefined) {
+          newShelfStock = Math.max(0, product.shelfStock - totalUnitsSold);
         }
 
         try {
           // Prepare update data
           const updateData: any = { stock: newStock };
-          if (item.shelfStock !== undefined) {
+          if (product.shelfStock !== undefined) {
             updateData.shelfStock = newShelfStock;
           }
 
-          await apiEndpoints.updateInventory(item._id, updateData);
+          await apiEndpoints.updateInventory(productId, updateData);
         } catch (error) {
           console.error(
-            `Failed to update stock for product ${item.name}:`,
+            `Failed to update stock for product ${product.name}:`,
             error
           );
-          // Log the error but don't fail the entire transaction
-          // The stock will be refreshed when fetchProducts() is called
         }
       }
+
+      // Update cumulative units sold state
+      const newCumulativeUnits = { ...cumulativeUnitsSold };
+      Object.keys(productGroups).forEach(productId => {
+        const group = productGroups[productId];
+        let currentTransactionUnits = 0;
+        group.unitItems.forEach(item => {
+          currentTransactionUnits += item.quantity;
+        });
+        newCumulativeUnits[productId] = (newCumulativeUnits[productId] || 0) + currentTransactionUnits;
+      });
+      setCumulativeUnitsSold(newCumulativeUnits);
 
       // Update local products state to reflect new stock quantities
       setProducts((prevProducts) =>
         prevProducts.map((product) => {
-          const cartItem = cart.find((item) => item._id === product._id);
-          if (cartItem) {
-            const { unitsSold, packsSold } = calculateUnitsAndPacks(cartItem);
+          const group = productGroups[product._id];
+          if (group) {
+            let totalUnitsSold = 0;
+            let totalPacksSold = 0;
+
+            // Calculate total units sold from unit items (cumulative)
+            let cumulativeUnitsFromUnits = 0;
+            group.unitItems.forEach(item => {
+              cumulativeUnitsFromUnits += item.quantity;
+            });
+            
+            // Get previously sold units from persistent state
+            const previouslySoldUnits = cumulativeUnitsSold[product._id] || 0;
+            const totalCumulativeUnits = previouslySoldUnits + cumulativeUnitsFromUnits;
+            
+            // Calculate complete packs from total cumulative units
+            const unitsPerPack = product.unitsPerPack || 1;
+            const completePacksFromUnits = Math.floor(totalCumulativeUnits / unitsPerPack);
+            const previouslyCompletePacks = Math.floor(previouslySoldUnits / unitsPerPack);
+            const newCompletePacks = completePacksFromUnits - previouslyCompletePacks;
+            
+            // Calculate packs and units from pack items
+            group.packItems.forEach(item => {
+              totalPacksSold += item.quantity;
+              totalUnitsSold += item.quantity * (item.unitsPerPack || 1);
+            });
+
+            // Add only NEW complete packs from unit sales
+            totalPacksSold += newCompletePacks;
+            totalUnitsSold += cumulativeUnitsFromUnits;
+
             const updatedProduct = {
               ...product,
-              stock: cartItem.isUnitPurchase 
-                ? product.stock - unitsSold 
-                : product.stock - packsSold,
+              stock: product.stock - totalPacksSold,
             };
             
-            // Update shelf stock for both unit and pack purchases
             if (product.shelfStock !== undefined) {
-              updatedProduct.shelfStock = Math.max(0, product.shelfStock - unitsSold);
+              updatedProduct.shelfStock = Math.max(0, product.shelfStock - totalUnitsSold);
             }
             
             return updatedProduct;
@@ -472,8 +599,6 @@ const POS: React.FC = () => {
       );
     } catch (error) {
       console.error("Error updating stock quantities:", error);
-      // Even if stock update fails, we don't want to fail the entire transaction
-      // The stock will be refreshed when fetchProducts() is called
     }
   };
 
@@ -498,6 +623,15 @@ const POS: React.FC = () => {
           <div className="text-xs text-gray-400 mt-1">
             This will remain until changed or cleared.
           </div>
+          <button
+            onClick={() => {
+              setCumulativeUnitsSold({});
+              console.log("Cumulative units reset");
+            }}
+            className="mt-2 px-3 py-1 text-xs bg-red-100 text-red-600 rounded hover:bg-red-200"
+          >
+            Reset Cumulative Units
+          </button>
         </div>
       </div>
 
@@ -801,16 +935,25 @@ const POS: React.FC = () => {
                           </div>
                           {item.shelfStock !== undefined && (
                             <div className="text-blue-600">
-                              Shelf Stock: {item.shelfStock - (item.isUnitPurchase ? item.quantity : (item.quantity * (item.unitsPerPack || 1)))} remaining
+                              Shelf Stock: {item.shelfStock - item.quantity} remaining
                             </div>
                           )}
                         </div>
                         {/* Show units and packs breakdown */}
                         <div className="text-xs text-gray-500 mt-1">
                           {item.isUnitPurchase ? (
-                            <span>
-                              Units: {item.unitsSold || 0} | Packs: {item.packsSold || 0}
-                            </span>
+                            <div>
+                              <div>Units: {item.unitsSold || 0} | Packs: {item.packsSold || 0}</div>
+                              {(() => {
+                                const cumulative = calculateCumulativeUnitsAndPacks(item._id, item.quantity);
+                                const remainingUnits = cumulative.remainingUnits;
+                                return remainingUnits > 0 && (
+                                  <div className="text-orange-600 font-medium">
+                                    Partial Pack: {remainingUnits} units remaining
+                                  </div>
+                                );
+                              })()}
+                            </div>
                           ) : (
                             <span>
                               Packs: {item.packsSold || 0} | Units: {item.unitsSold || 0}
