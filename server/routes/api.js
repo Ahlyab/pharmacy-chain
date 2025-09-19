@@ -847,7 +847,7 @@ router.post("/billing", authenticate, async (req, res) => {
       req,
       "INVOICE_CREATED",
       billing._id,
-      `Invoice #{billing.invoiceNumber || billing._id}`,
+      `Invoice #${billing.invoiceNumber || billing._id}`,
       {
         invoiceNumber: billing.invoiceNumber,
         totalAmount: billing.totalAmount,
@@ -1946,7 +1946,7 @@ router.post("/transaction", authenticate, async (req, res) => {
       req,
       "SALE_CREATED",
       transaction._id,
-      `Sale #{transaction.transactionId}`,
+      `Sale #${transaction.transactionId}`,
       {
         transactionId: transaction.transactionId,
         totalAmount: transaction.totalAmount,

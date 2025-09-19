@@ -191,6 +191,7 @@ const Report: React.FC = () => {
     segment: '',
     manufacturer: ''
   });
+  const [dateWarning, setDateWarning] = useState('');
 
   // Fetch branches for filter dropdown
   useEffect(() => {
@@ -245,6 +246,7 @@ const Report: React.FC = () => {
       if (filters.startDate) params.append('startDate', filters.startDate);
       if (filters.endDate) params.append('endDate', filters.endDate);
       params.append('includeAllBranches', filters.includeAllBranches.toString());
+      params.append('period', filters.period);
 
       const response = await api.get(`/api/report/stock-expiration?${params.toString()}`);
       console.log('Stock Expiration API Response:', response);
@@ -271,6 +273,7 @@ const Report: React.FC = () => {
       if (filters.segment) params.append('segment', filters.segment);
       if (filters.manufacturer) params.append('manufacturer', filters.manufacturer);
       params.append('includeAllBranches', filters.includeAllBranches.toString());
+      params.append('period', filters.period);
 
       const response = await api.get(`/api/report/stock-turnover?${params.toString()}`);
       console.log('Stock Turnover API Response:', response);
@@ -288,12 +291,20 @@ const Report: React.FC = () => {
 
   // Fetch data based on active tab
   useEffect(() => {
-    if (activeTab === 'revenue') {
-      fetchRevenueReportData();
-    } else if (activeTab === 'stock') {
-      fetchStockExpirationData();
-    } else if (activeTab === 'turnover') {
-      fetchStockTurnoverData();
+    // Only fetch if both dates are set or both are empty
+    const bothDatesSet = !!filters.startDate && !!filters.endDate;
+    const bothDatesEmpty = !filters.startDate && !filters.endDate;
+    if (bothDatesSet || bothDatesEmpty) {
+      setDateWarning('');
+      if (activeTab === 'revenue') {
+        fetchRevenueReportData();
+      } else if (activeTab === 'stock') {
+        fetchStockExpirationData();
+      } else if (activeTab === 'turnover') {
+        fetchStockTurnoverData();
+      }
+    } else {
+      setDateWarning('Please select both start and end date to filter by date.');
     }
   }, [filters, activeTab]);
 
@@ -429,8 +440,16 @@ const Report: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-1">Chain</label>
             <select
               value={filters.branchId}
-              onChange={(e) => handleFilterChange('branchId', e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                handleFilterChange('branchId', value);
+                if (value) {
+                  // Auto-uncheck 'All Branches' if a branch is selected
+                  handleFilterChange('includeAllBranches', false);
+                }
+              }}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={filters.includeAllBranches}
             >
               <option value="">All Branches</option>
               {branches.map((branch) => (
@@ -441,21 +460,19 @@ const Report: React.FC = () => {
             </select>
           </div>
 
-          {/* Period Filter - Only show for Revenue tab */}
-          {activeTab === 'revenue' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Period</label>
-              <select
-                value={filters.period}
-                onChange={(e) => handleFilterChange('period', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="day">Day</option>
-                <option value="week">Week</option>
-                <option value="month">Month</option>
-              </select>
-            </div>
-          )}
+          {/* Period Filter - Show for all tabs */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Period</label>
+            <select
+              value={filters.period}
+              onChange={(e) => handleFilterChange('period', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="day">Day</option>
+              <option value="week">Week</option>
+              <option value="month">Month</option>
+            </select>
+          </div>
 
           {/* Segment Filter - Only show for Stock Turnover tab */}
           {activeTab === 'turnover' && (
@@ -513,6 +530,9 @@ const Report: React.FC = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+          {dateWarning && (
+            <div className="col-span-full text-red-600 text-sm mt-2">{dateWarning}</div>
+          )}
 
           {/* Include All Branches Toggle */}
           <div className="flex items-end">
@@ -520,8 +540,15 @@ const Report: React.FC = () => {
               <input
                 type="checkbox"
                 checked={filters.includeAllBranches}
-                onChange={(e) => handleFilterChange('includeAllBranches', e.target.checked)}
+                onChange={(e) => {
+                  handleFilterChange('includeAllBranches', e.target.checked);
+                  if (e.target.checked) {
+                    // Clear branch selection if 'All Branches' is checked
+                    handleFilterChange('branchId', '');
+                  }
+                }}
                 className="mr-2"
+                disabled={!!filters.branchId}
               />
               <span className="text-sm font-medium text-gray-700">All Branches</span>
             </label>
@@ -531,18 +558,18 @@ const Report: React.FC = () => {
 
       {/* Tab Content */}
       {activeTab === 'revenue' ? (
-        <RevenueProfitContent reportData={reportData} period={filters.period} />
+        <RevenueProfitContent reportData={reportData} period={filters.period} filters={filters} stockExpirationData={stockExpirationData} stockTurnoverData={stockTurnoverData} />
       ) : activeTab === 'stock' ? (
-        <StockExpirationContent stockExpirationData={stockExpirationData} />
+        <StockExpirationContent stockExpirationData={stockExpirationData} filters={filters} reportData={reportData} stockTurnoverData={stockTurnoverData} />
       ) : (
-        <StockTurnoverContent stockTurnoverData={stockTurnoverData} />
+        <StockTurnoverContent stockTurnoverData={stockTurnoverData} filters={filters} reportData={reportData} stockExpirationData={stockExpirationData} />
       )}
     </div>
   );
 };
 
 // Revenue and Profit Content Component
-const RevenueProfitContent: React.FC<{ reportData: ReportData | null; period?: string }> = ({ reportData, period = 'week' }) => {
+const RevenueProfitContent: React.FC<{ reportData: ReportData | null; period?: string; filters: any; stockExpirationData: any; stockTurnoverData: any }> = ({ reportData, period = 'week', filters, stockExpirationData, stockTurnoverData }) => {
   const formatNumber = (num: number): string => {
     if (num >= 1000000) {
       return (num / 1000000).toFixed(1) + 'M';
@@ -800,12 +827,17 @@ const RevenueProfitContent: React.FC<{ reportData: ReportData | null; period?: s
           <p className="text-gray-600">No transaction data found for the selected filters.</p>
         </div>
       )}
+      {filters.branchId && !filters.includeAllBranches && ((reportData && reportData.chartData && reportData.chartData.length === 0) || (stockExpirationData && stockExpirationData.chartData && stockExpirationData.chartData.length === 0) || (stockTurnoverData && stockTurnoverData.tableData && stockTurnoverData.tableData.length === 0)) && (
+        <div className="col-span-full text-yellow-600 text-sm mt-2">
+          No data found for the selected branch. Try selecting 'All Branches' to see if data is available for other branches.
+        </div>
+      )}
     </>
   );
 };
 
 // Stock and Expiration Dates Content Component
-const StockExpirationContent: React.FC<{ stockExpirationData: StockExpirationReportData | null }> = ({ stockExpirationData }) => {
+const StockExpirationContent: React.FC<{ stockExpirationData: StockExpirationReportData | null; filters: any; reportData: any; stockTurnoverData: any }> = ({ stockExpirationData, filters, reportData, stockTurnoverData }) => {
   const formatNumber = (num: number): string => {
     if (num >= 1000000) {
       return (num / 1000000).toFixed(1) + 'M';
@@ -970,12 +1002,17 @@ const StockExpirationContent: React.FC<{ stockExpirationData: StockExpirationRep
           <p className="text-gray-600">No inventory data found for the selected filters.</p>
         </div>
       )}
+      {filters.branchId && !filters.includeAllBranches && ((reportData && reportData.chartData && reportData.chartData.length === 0) || (stockExpirationData && stockExpirationData.chartData && stockExpirationData.chartData.length === 0) || (stockTurnoverData && stockTurnoverData.tableData && stockTurnoverData.tableData.length === 0)) && (
+        <div className="col-span-full text-yellow-600 text-sm mt-2">
+          No data found for the selected branch. Try selecting 'All Branches' to see if data is available for other branches.
+        </div>
+      )}
     </>
   );
 };
 
 // Stock Turnover Content Component
-const StockTurnoverContent: React.FC<{ stockTurnoverData: StockTurnoverReportData | null }> = ({ stockTurnoverData }) => {
+const StockTurnoverContent: React.FC<{ stockTurnoverData: StockTurnoverReportData | null; filters: any; reportData: any; stockExpirationData: any }> = ({ stockTurnoverData, filters, reportData, stockExpirationData }) => {
   const [sortField, setSortField] = useState<keyof StockTurnoverTableData>('stockTurnoverRate');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(1);
@@ -1325,6 +1362,11 @@ const StockTurnoverContent: React.FC<{ stockTurnoverData: StockTurnoverReportDat
           <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No Data Available</h3>
           <p className="text-gray-600">No stock turnover data found for the selected filters.</p>
+        </div>
+      )}
+      {filters.branchId && !filters.includeAllBranches && ((reportData && reportData.chartData && reportData.chartData.length === 0) || (stockExpirationData && stockExpirationData.chartData && stockExpirationData.chartData.length === 0) || (stockTurnoverData && stockTurnoverData.tableData && stockTurnoverData.tableData.length === 0)) && (
+        <div className="col-span-full text-yellow-600 text-sm mt-2">
+          No data found for the selected branch. Try selecting 'All Branches' to see if data is available for other branches.
         </div>
       )}
     </>

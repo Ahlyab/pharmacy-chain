@@ -79,6 +79,7 @@ const AdminInventoryManagement: React.FC = () => {
   const productDropdownRef = useRef<HTMLDivElement>(null);
   const [sortField, setSortField] = useState<keyof Product>("name");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [isUnitsManuallyEdited, setIsUnitsManuallyEdited] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     manufacturer: "",
@@ -510,7 +511,9 @@ const AdminInventoryManagement: React.FC = () => {
       minStock: product.minStock,
       price: product.price,
       unitPrice: product.unitPrice || 0,
-      units: product.units || "pieces",
+      units: String((product.stock || 0) * (product.unitsPerPack || 1)),
+      unitsPerPack: product.unitsPerPack || 1,
+      shelfStock: product.shelfStock || 0,
       purchasePriceExclVAT: product.purchasePriceExclVAT || 0,
       retailPriceVATIncluded: product.retailPriceVATIncluded || product.price,
       vat: product.vat || 0,
@@ -520,8 +523,22 @@ const AdminInventoryManagement: React.FC = () => {
       series: product.series || "",
       reservedQuantity: product.reservedQuantity || 0,
     });
+    setIsUnitsManuallyEdited(false);
     setShowAddProductModal(true);
   };
+
+  // Auto-calculate units = stock × unitsPerPack while editing unless user overrides
+  useEffect(() => {
+    if (!editingProduct) return;
+    if (isUnitsManuallyEdited) return;
+    setFormData((prev) => {
+      const calculated = String((prev.stock || 0) * (prev.unitsPerPack || 1));
+      if (prev.units !== calculated) {
+        return { ...prev, units: calculated };
+      }
+      return prev;
+    });
+  }, [formData.stock, formData.unitsPerPack, editingProduct, isUnitsManuallyEdited]);
 
   // Handle file import for products
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -616,10 +633,10 @@ const AdminInventoryManagement: React.FC = () => {
               <p><strong>Categories:</strong> ${summary.categories.join(
                 ", "
               )}</p>
-              <p><strong>Total retail value:</strong> #{summary.totalRetailValue.toFixed(
+              <p><strong>Total retail value:</strong> #${summary.totalRetailValue.toFixed(
                 2
               )}</p>
-              <p><strong>Total purchase value:</strong> #{summary.totalPurchaseValue.toFixed(
+              <p><strong>Total purchase value:</strong> #${summary.totalPurchaseValue.toFixed(
                 2
               )}</p>
               <p><strong>Branch:</strong> ${selectedBranch.name}</p>
@@ -744,6 +761,8 @@ const AdminInventoryManagement: React.FC = () => {
                   price: 0,
                   unitPrice: 0,
                   units: "pieces",
+                  unitsPerPack: 1,
+                  shelfStock: 0,
                   purchasePriceExclVAT: 0,
                   retailPriceVATIncluded: 0,
                   vat: 0,
@@ -1320,19 +1339,6 @@ const AdminInventoryManagement: React.FC = () => {
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Units
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.units}
-                    onChange={(e) => setFormData({ ...formData, units: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="pieces, tablets, bottles, etc."
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Units Per Pack
                   </label>
                   <input
@@ -1342,6 +1348,22 @@ const AdminInventoryManagement: React.FC = () => {
                     onChange={(e) => setFormData({ ...formData, unitsPerPack: Number(e.target.value) })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="1"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Units
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.units}
+                    onChange={(e) => {
+                      setIsUnitsManuallyEdited(true);
+                      setFormData({ ...formData, units: e.target.value });
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Auto = stock × per pack, or override manually"
                   />
                 </div>
                 
@@ -1491,6 +1513,7 @@ const AdminInventoryManagement: React.FC = () => {
                     setSupplierSearch("");
                     setShowProductDropdown(false);
                     setProductSearch("");
+                  setIsUnitsManuallyEdited(false);
                   }}
                   className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
                 >

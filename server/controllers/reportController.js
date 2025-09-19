@@ -13,6 +13,13 @@ const getRevenueProfitReport = async (req, res) => {
       includeAllBranches = false 
     } = req.query;
 
+    console.log('Revenue Report Filter:', { branchId, includeAllBranches });
+
+    // Coerce includeAllBranches to boolean (query params are strings)
+    const includeAll = typeof includeAllBranches === 'string' 
+      ? includeAllBranches === 'true' 
+      : !!includeAllBranches;
+
     // Build date filter
     const dateFilter = {};
     if (startDate && endDate) {
@@ -24,7 +31,7 @@ const getRevenueProfitReport = async (req, res) => {
 
     // Build branch filter
     const branchFilter = {};
-    if (branchId && !includeAllBranches) {
+    if (branchId && !includeAll) {
       branchFilter.branchId = branchId;
     }
 
@@ -169,7 +176,7 @@ const getRevenueProfitReport = async (req, res) => {
           startDate,
           endDate,
           period,
-          includeAllBranches
+          includeAllBranches: includeAll
         }
       }
     });
@@ -212,6 +219,13 @@ const getStockExpirationReport = async (req, res) => {
       includeAllBranches = false 
     } = req.query;
 
+    console.log('Stock Expiration Report Filter:', { branchId, includeAllBranches });
+
+    // Coerce includeAllBranches to boolean
+    const includeAll = typeof includeAllBranches === 'string' 
+      ? includeAllBranches === 'true' 
+      : !!includeAllBranches;
+
     // Build date filter for expiry dates
     const dateFilter = {};
     if (startDate && endDate) {
@@ -223,7 +237,7 @@ const getStockExpirationReport = async (req, res) => {
 
     // Build branch filter
     const branchFilter = {};
-    if (branchId && !includeAllBranches) {
+    if (branchId && !includeAll) {
       branchFilter.branchId = branchId;
     }
 
@@ -329,7 +343,7 @@ const getStockExpirationReport = async (req, res) => {
           branchId,
           startDate,
           endDate,
-          includeAllBranches
+          includeAllBranches: includeAll
         }
       }
     });
@@ -356,10 +370,17 @@ const getStockTurnoverReport = async (req, res) => {
       manufacturer
     } = req.query;
 
+    console.log('Stock Turnover Report Filter:', { branchId, includeAllBranches });
+
+    // Coerce includeAllBranches to boolean
+    const includeAll = typeof includeAllBranches === 'string' 
+      ? includeAllBranches === 'true' 
+      : !!includeAllBranches;
+
     // Build date filter for transaction dates
     const dateFilter = {};
     if (startDate && endDate) {
-      dateFilter.createdAt = {
+      dateFilter.date = {
         $gte: new Date(startDate),
         $lte: new Date(endDate)
       };
@@ -367,7 +388,7 @@ const getStockTurnoverReport = async (req, res) => {
 
     // Build branch filter
     const branchFilter = {};
-    if (branchId && !includeAllBranches) {
+    if (branchId && !includeAll) {
       branchFilter.branchId = branchId;
     }
 
@@ -375,12 +396,12 @@ const getStockTurnoverReport = async (req, res) => {
     const transactions = await Transaction.find({
       ...dateFilter,
       ...branchFilter,
-      status: 'completed'
-    }).populate('items.productId', 'name composition manufacturer category');
+      status: 'Completed'
+    }).populate('items.productId', 'name composition manufacturer category purchasePriceExclVAT unitPrice price unitsPerPack');
 
     // Get inventory for stock data
     const inventoryFilter = {};
-    if (branchId && !includeAllBranches) {
+    if (branchId && !includeAll) {
       inventoryFilter.branchId = branchId;
     }
     if (segment) {
@@ -398,6 +419,7 @@ const getStockTurnoverReport = async (req, res) => {
     const salesData = {};
     transactions.forEach(transaction => {
       transaction.items.forEach(item => {
+        if (!item.productId) return;
         const productId = item.productId._id.toString();
         if (!salesData[productId]) {
           salesData[productId] = {
@@ -411,9 +433,14 @@ const getStockTurnoverReport = async (req, res) => {
             grossProfit: 0
           };
         }
-        salesData[productId].netSalesQuantity += item.quantity;
-        salesData[productId].netSalesRetailAmount += item.totalPrice;
-        salesData[productId].grossProfit += (item.totalPrice - (item.costPrice * item.quantity));
+
+        const qty = item.quantity || 0;
+        const sellUnitPrice = typeof item.price === 'number' ? item.price : (item.productId.price || 0);
+        const costUnitPrice = typeof item.costPrice === 'number' ? item.costPrice : (item.productId.purchasePriceExclVAT || 0);
+
+        salesData[productId].netSalesQuantity += qty;
+        salesData[productId].netSalesRetailAmount += sellUnitPrice * qty;
+        salesData[productId].grossProfit += (sellUnitPrice - costUnitPrice) * qty;
       });
     });
 
@@ -435,7 +462,7 @@ const getStockTurnoverReport = async (req, res) => {
         grossProfit: 0
       };
 
-      const stockRetailAmount = item.stock * (item.unitPrice || 0);
+      const stockRetailAmount = item.stock * (item.price || item.unitPrice || 0);
       const turnoverRate = item.stock > 0 ? (salesInfo.netSalesQuantity / item.stock) * 100 : 0;
 
       const productData = {
@@ -481,7 +508,7 @@ const getStockTurnoverReport = async (req, res) => {
     if (previousStartDate && previousEndDate) {
       // Build previous period filters
       const prevDateFilter = {
-        createdAt: {
+        date: {
           $gte: previousStartDate,
           $lte: previousEndDate
         }
@@ -490,14 +517,18 @@ const getStockTurnoverReport = async (req, res) => {
       const prevTransactions = await Transaction.find({
         ...prevDateFilter,
         ...branchFilter,
-        status: 'completed'
-      }).populate('items.productId', 'name composition manufacturer category');
+        status: 'Completed'
+      }).populate('items.productId', 'name composition manufacturer category purchasePriceExclVAT unitPrice price unitsPerPack');
 
       prevTransactions.forEach(transaction => {
         transaction.items.forEach(item => {
-          previousTotals.netSalesQuantity += item.quantity;
-          previousTotals.netSalesRetailAmount += item.totalPrice;
-          previousTotals.grossProfit += (item.totalPrice - (item.costPrice * item.quantity));
+          if (!item.productId) return;
+          const qty = item.quantity || 0;
+          const sellUnitPrice = typeof item.price === 'number' ? item.price : (item.productId.price || 0);
+          const costUnitPrice = typeof item.costPrice === 'number' ? item.costPrice : (item.productId.purchasePriceExclVAT || 0);
+          previousTotals.netSalesQuantity += qty;
+          previousTotals.netSalesRetailAmount += sellUnitPrice * qty;
+          previousTotals.grossProfit += (sellUnitPrice - costUnitPrice) * qty;
         });
       });
     }
@@ -550,7 +581,7 @@ const getStockTurnoverReport = async (req, res) => {
           branchId,
           startDate,
           endDate,
-          includeAllBranches,
+          includeAllBranches: includeAll,
           segment,
           manufacturer
         }
