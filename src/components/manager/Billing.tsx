@@ -360,14 +360,14 @@ const Billing: React.FC = () => {
     y += 5;
     bill.items.forEach((item) => {
       doc.text(item.name, 10, y);
-      doc.text(`#{item.price.toFixed(2)}`, 70, y);
+      doc.text(`#${item.price.toFixed(2)}`, 70, y);
       doc.text(`${item.quantity}`, 110, y);
-      doc.text(`#{(item.price * item.quantity).toFixed(2)}`, 140, y);
+      doc.text(`#${(item.price * item.quantity).toFixed(2)}`, 140, y);
       y += 6;
     });
     y += 4;
     doc.setFontSize(12);
-    doc.text(`Total: #{bill.total.toFixed(2)}`, 10, y);
+    doc.text(`Total: #${bill.total.toFixed(2)}`, 10, y);
     doc.save(`Bill_${bill.id}.pdf`);
   };
 
