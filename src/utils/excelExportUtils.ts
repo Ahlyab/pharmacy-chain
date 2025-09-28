@@ -30,17 +30,17 @@ export const exportRevenueData = {
       const kpiSheetData = [
         ['Revenue and Profit Report - KPI Summary'],
         [`Generated: ${new Date().toLocaleString()}`],
-        [`Period: ${filters.period}`],
-        [`Date Range: ${filters.startDate} to ${filters.endDate}`],
-        [`Branch: ${filters.includeAllBranches ? 'All Branches' : 'Selected Branch'}`],
+        [`Period: ${filters?.period || 'N/A'}`],
+        [`Date Range: ${filters?.startDate || 'N/A'} to ${filters?.endDate || 'N/A'}`],
+        [`Branch: ${filters?.includeAllBranches ? 'All Branches' : 'Selected Branch'}`],
         [],
         ['Metric', 'Value', 'Change', 'Trend'],
-        ['Sales Count', kpiData.salesCount.value, kpiData.salesCount.change, kpiData.salesCount.trend],
-        ['Packs', kpiData.packs.value, kpiData.packs.change, kpiData.packs.trend],
-        ['Net Sales Amount', formatCurrency(kpiData.netSalesAmount.value), kpiData.netSalesAmount.change, kpiData.netSalesAmount.trend],
-        ['Gross Profit', formatCurrency(kpiData.grossProfit.value), kpiData.grossProfit.change, kpiData.grossProfit.trend],
-        ['Expenses', formatCurrency(kpiData.expenses.value), kpiData.expenses.change, kpiData.expenses.trend],
-        ['Operating Profit', formatCurrency(kpiData.operatingProfit.value), kpiData.operatingProfit.change, kpiData.operatingProfit.trend]
+        ['Sales Count', kpiData?.salesCount?.value || 0, kpiData?.salesCount?.change || 'N/A', kpiData?.salesCount?.trend || 'N/A'],
+        ['Packs', kpiData?.packs?.value || 0, kpiData?.packs?.change || 'N/A', kpiData?.packs?.trend || 'N/A'],
+        ['Net Sales Amount', formatCurrency(kpiData?.netSalesAmount?.value || 0), kpiData?.netSalesAmount?.change || 'N/A', kpiData?.netSalesAmount?.trend || 'N/A'],
+        ['Gross Profit', formatCurrency(kpiData?.grossProfit?.value || 0), kpiData?.grossProfit?.change || 'N/A', kpiData?.grossProfit?.trend || 'N/A'],
+        ['Expenses', formatCurrency(kpiData?.expenses?.value || 0), kpiData?.expenses?.change || 'N/A', kpiData?.expenses?.trend || 'N/A'],
+        ['Operating Profit', formatCurrency(kpiData?.operatingProfit?.value || 0), kpiData?.operatingProfit?.change || 'N/A', kpiData?.operatingProfit?.trend || 'N/A']
       ];
 
       const kpiSheet = XLSX.utils.aoa_to_sheet(kpiSheetData);
@@ -49,14 +49,14 @@ export const exportRevenueData = {
       // Period Data Sheet
       const periodSheetData = [
         ['Period', 'Net Sales Amount', 'Gross Profit', 'Expenses', 'Operating Profit', 'Sales Count', 'Packs'],
-        ...data.map(item => [
-          item.period,
-          item.netSalesAmount,
-          item.grossProfit,
-          item.expenses,
-          item.operatingProfit,
-          item.salesCount,
-          item.packs
+        ...(data || []).map(item => [
+          item?.period || 'N/A',
+          item?.netSalesAmount || 0,
+          item?.grossProfit || 0,
+          item?.expenses || 0,
+          item?.operatingProfit || 0,
+          item?.salesCount || 0,
+          item?.packs || 0
         ])
       ];
 
@@ -86,16 +86,16 @@ export const exportStockExpirationData = {
       const kpiSheetData = [
         ['Stock and Expiration Date Report - KPI Summary'],
         [`Generated: ${new Date().toLocaleString()}`],
-        [`Date Range: ${filters.startDate} to ${filters.endDate}`],
-        [`Branch: ${filters.includeAllBranches ? 'All Branches' : 'Selected Branch'}`],
+        [`Date Range: ${filters?.startDate || 'N/A'} to ${filters?.endDate || 'N/A'}`],
+        [`Branch: ${filters?.includeAllBranches ? 'All Branches' : 'Selected Branch'}`],
         [],
         ['Metric', 'Value', 'Change', 'Trend'],
-        ['Total SKUs', kpiData.totalSKUs.value, kpiData.totalSKUs.change, kpiData.totalSKUs.trend],
-        ['Total Stock Value', formatCurrency(kpiData.totalStockValue.value), kpiData.totalStockValue.change, kpiData.totalStockValue.trend],
-        ['Expiring Soon (30 days)', kpiData.expiringSoon.value, kpiData.expiringSoon.change, kpiData.expiringSoon.trend],
-        ['Expired Items', kpiData.expiredItems.value, kpiData.expiredItems.change, kpiData.expiredItems.trend],
-        ['Unique Compositions', kpiData.uniqueCompositions.value, kpiData.uniqueCompositions.change, kpiData.uniqueCompositions.trend],
-        ['Unique SKUs', kpiData.uniqueSKUs.value, kpiData.uniqueSKUs.change, kpiData.uniqueSKUs.trend]
+        ['Total SKUs', kpiData?.totalSKUs?.value || 0, kpiData?.totalSKUs?.change || 'N/A', kpiData?.totalSKUs?.trend || 'N/A'],
+        ['Total Stock Value', formatCurrency(kpiData?.totalStockValue?.value || 0), kpiData?.totalStockValue?.change || 'N/A', kpiData?.totalStockValue?.trend || 'N/A'],
+        ['Expiring Soon (30 days)', kpiData?.expiringSoon?.value || 0, kpiData?.expiringSoon?.change || 'N/A', kpiData?.expiringSoon?.trend || 'N/A'],
+        ['Expired Items', kpiData?.expiredItems?.value || 0, kpiData?.expiredItems?.change || 'N/A', kpiData?.expiredItems?.trend || 'N/A'],
+        ['Unique Compositions', kpiData?.uniqueCompositions?.value || 0, kpiData?.uniqueCompositions?.change || 'N/A', kpiData?.uniqueCompositions?.trend || 'N/A'],
+        ['Unique SKUs', kpiData?.uniqueSKUs?.value || 0, kpiData?.uniqueSKUs?.change || 'N/A', kpiData?.uniqueSKUs?.trend || 'N/A']
       ];
 
       const kpiSheet = XLSX.utils.aoa_to_sheet(kpiSheetData);
@@ -104,14 +104,14 @@ export const exportStockExpirationData = {
       // Chart Data Sheet
       const chartSheetData = [
         ['Period', 'Total SKUs', 'Total Stock Value', 'Expiring Soon', 'Expired Items', 'Unique Compositions', 'Unique SKUs'],
-        ...data.map(item => [
-          item.period,
-          item.totalSKUs,
-          item.totalStockValue,
-          item.expiringSoon,
-          item.expiredItems,
-          item.uniqueCompositions,
-          item.uniqueSKUs
+        ...(data || []).map(item => [
+          item?.period || 'N/A',
+          item?.totalSKUs || 0,
+          item?.totalStockValue || 0,
+          item?.expiringSoon || 0,
+          item?.expiredItems || 0,
+          item?.uniqueCompositions || 0,
+          item?.uniqueSKUs || 0
         ])
       ];
 
@@ -141,14 +141,14 @@ export const exportStockTurnoverData = {
       const kpiSheetData = [
         ['Stock Turnover Report - KPI Summary'],
         [`Generated: ${new Date().toLocaleString()}`],
-        [`Date Range: ${filters.startDate} to ${filters.endDate}`],
-        [`Branch: ${filters.includeAllBranches ? 'All Branches' : 'Selected Branch'}`],
+        [`Date Range: ${filters?.startDate || 'N/A'} to ${filters?.endDate || 'N/A'}`],
+        [`Branch: ${filters?.includeAllBranches ? 'All Branches' : 'Selected Branch'}`],
         [],
         ['Metric', 'Value', 'Change', 'Trend'],
-        ['Total Products', kpiData.totalProducts.value, kpiData.totalProducts.change, kpiData.totalProducts.trend],
-        ['Total Sales Value', formatCurrency(kpiData.totalSalesValue.value), kpiData.totalSalesValue.change, kpiData.totalSalesValue.trend],
-        ['Total Gross Profit', formatCurrency(kpiData.totalGrossProfit.value), kpiData.totalGrossProfit.change, kpiData.totalGrossProfit.trend],
-        ['Average Turnover Rate', `${kpiData.averageTurnoverRate.value}%`, kpiData.averageTurnoverRate.change, kpiData.averageTurnoverRate.trend]
+        ['Total Products', kpiData?.totalProducts?.value || 0, kpiData?.totalProducts?.change || 'N/A', kpiData?.totalProducts?.trend || 'N/A'],
+        ['Total Sales Value', formatCurrency(kpiData?.totalSalesValue?.value || 0), kpiData?.totalSalesValue?.change || 'N/A', kpiData?.totalSalesValue?.trend || 'N/A'],
+        ['Total Gross Profit', formatCurrency(kpiData?.totalGrossProfit?.value || 0), kpiData?.totalGrossProfit?.change || 'N/A', kpiData?.totalGrossProfit?.trend || 'N/A'],
+        ['Average Turnover Rate', `${kpiData?.averageTurnoverRate?.value || 0}%`, kpiData?.averageTurnoverRate?.change || 'N/A', kpiData?.averageTurnoverRate?.trend || 'N/A']
       ];
 
       const kpiSheet = XLSX.utils.aoa_to_sheet(kpiSheetData);
@@ -157,16 +157,16 @@ export const exportStockTurnoverData = {
       // Table Data Sheet
       const tableSheetData = [
         ['Product Name', 'Composition', 'SKU', 'Manufacturer', 'Segment', 'Sales Count', 'Sales Value', 'Gross Profit', 'Stock Turnover Rate'],
-        ...data.map(item => [
-          item.productName,
-          item.composition,
-          item.sku,
-          item.manufacturer,
-          item.segment,
-          item.salesCount,
-          formatCurrency(item.salesValue),
-          formatCurrency(item.grossProfit),
-          `${item.stockTurnoverRate.toFixed(2)}%`
+        ...(data || []).map(item => [
+          item?.productName || 'N/A',
+          item?.composition || 'N/A',
+          item?.sku || 'N/A',
+          item?.manufacturer || 'N/A',
+          item?.segment || 'N/A',
+          item?.salesCount || 0,
+          formatCurrency(item?.salesValue || 0),
+          formatCurrency(item?.grossProfit || 0),
+          `${(item?.stockTurnoverRate || 0).toFixed(2)}%`
         ])
       ];
 
@@ -178,10 +178,10 @@ export const exportStockTurnoverData = {
         ['Summary Totals'],
         [],
         ['Metric', 'Value'],
-        ['Total Sales Count', totals.totalSalesCount],
-        ['Total Sales Value', formatCurrency(totals.totalSalesValue)],
-        ['Total Gross Profit', formatCurrency(totals.totalGrossProfit)],
-        ['Average Turnover Rate', `${totals.averageTurnoverRate.toFixed(2)}%`]
+        ['Total Sales Count', totals?.totalSalesCount || 0],
+        ['Total Sales Value', formatCurrency(totals?.totalSalesValue || 0)],
+        ['Total Gross Profit', formatCurrency(totals?.totalGrossProfit || 0)],
+        ['Average Turnover Rate', `${(totals?.averageTurnoverRate || 0).toFixed(2)}%`]
       ];
 
       const totalsSheet = XLSX.utils.aoa_to_sheet(totalsSheetData);
