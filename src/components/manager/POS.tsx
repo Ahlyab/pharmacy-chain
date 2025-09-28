@@ -57,7 +57,9 @@ const POS: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showUnitQuantityModal, setShowUnitQuantityModal] = useState(false);
   const [unitQuantity, setUnitQuantity] = useState(1);
-  const [cumulativeUnitsSold, setCumulativeUnitsSold] = useState<{[productId: string]: number}>({});
+  const [cumulativeUnitsSold, setCumulativeUnitsSold] = useState<{
+    [productId: string]: number;
+  }>({});
 
   // Print styles for receipt
   const printStyles = `
@@ -99,30 +101,58 @@ const POS: React.FC = () => {
     return { ...product, status, id: product._id || product.id };
   };
 
-  // Helper function to calculate cumulative units and packs for a product
-  const calculateCumulativeUnitsAndPacks = (productId: string, additionalUnits: number = 0) => {
-    const product = products.find(p => p._id === productId);
-    if (!product) return { totalUnitsSold: 0, completePacksSold: 0, remainingUnits: 0 };
-    
-    const unitsPerPack = product.unitsPerPack || 1;
-    
+  // Helper function to calculate total units sold for a product (from all transactions)
+  const getTotalUnitsSold = (productId: string) => {
+    const product = products.find((p) => p._id === productId);
+    if (!product) return 0;
+
     // Get previously sold units from persistent state
     const previouslySoldUnits = cumulativeUnitsSold[productId] || 0;
-    
+
     // Calculate total units from current cart items for this product (unit purchases only)
-    let totalUnitsFromCart = 0;
-    cart.forEach(item => {
+    let currentCartUnits = 0;
+    cart.forEach((item) => {
       if (item._id === productId && item.isUnitPurchase) {
-        totalUnitsFromCart += item.quantity;
+        currentCartUnits += item.quantity;
       }
     });
-    
-    // Add previously sold units + current cart units + additional units being considered
-    const totalUnitsSold = previouslySoldUnits + totalUnitsFromCart + additionalUnits;
-    const completePacksSold = Math.floor(totalUnitsSold / unitsPerPack);
-    const remainingUnits = totalUnitsSold % unitsPerPack;
-    
-    return { totalUnitsSold, completePacksSold, remainingUnits };
+
+    return previouslySoldUnits + currentCartUnits;
+  };
+
+  // Helper function to calculate remaining stock after unit sales
+  const calculateRemainingStock = (productId: string) => {
+    const product = products.find((p) => p._id === productId);
+    if (!product)
+      return {
+        totalUnits: 0,
+        shelfUnits: 0,
+        completePacks: 0,
+        remainingUnits: 0,
+      };
+
+    const unitsPerPack = product.unitsPerPack || 1;
+    const totalUnitsSold = getTotalUnitsSold(productId);
+
+    // Calculate remaining units after all unit sales
+    const remainingTotalUnits = product.stock * unitsPerPack - totalUnitsSold;
+    const completePacks = Math.floor(remainingTotalUnits / unitsPerPack);
+    const remainingUnits = remainingTotalUnits % unitsPerPack;
+
+    // Calculate remaining shelf units
+    // After fetchProducts(), product.shelfStock should already be updated
+    // So we don't need to subtract totalUnitsSold again
+    const shelfUnits =
+      product.shelfStock !== undefined
+        ? product.shelfStock
+        : remainingTotalUnits;
+
+    return {
+      totalUnits: remainingTotalUnits,
+      shelfUnits: shelfUnits,
+      completePacks: completePacks,
+      remainingUnits: remainingUnits,
+    };
   };
 
   // Helper function to calculate units and packs for a cart item
@@ -132,10 +162,11 @@ const POS: React.FC = () => {
     let packsSold = 0;
 
     if (item.isUnitPurchase) {
-      // For unit purchases, show the current item's units and cumulative packs
-      const cumulative = calculateCumulativeUnitsAndPacks(item._id, item.quantity);
-      unitsSold = item.quantity; // Show only current item's units
-      packsSold = cumulative.completePacksSold; // Show cumulative complete packs
+      // For unit purchases, show the current item's units
+      unitsSold = item.quantity;
+      // Packs sold is calculated from total cumulative units sold
+      const totalUnitsSold = getTotalUnitsSold(item._id);
+      packsSold = Math.floor(totalUnitsSold / unitsPerPack);
     } else {
       // Selling full packs
       packsSold = item.quantity;
@@ -150,7 +181,7 @@ const POS: React.FC = () => {
     let totalUnits = 0;
     let totalPacks = 0;
 
-    cart.forEach(item => {
+    cart.forEach((item) => {
       const { unitsSold, packsSold } = calculateUnitsAndPacks(item);
       totalUnits += unitsSold;
       totalPacks += packsSold;
@@ -221,43 +252,58 @@ const POS: React.FC = () => {
     setShowPurchaseTypeModal(true);
   };
 
-  const addToCartDirect = (product: Product, isUnitPurchase: boolean, quantity: number = 1) => {
-    const existingItem = cart.find((item) => item._id === product._id && item.isUnitPurchase === isUnitPurchase);
-    
+  const addToCartDirect = (
+    product: Product,
+    isUnitPurchase: boolean,
+    quantity: number = 1
+  ) => {
+    const existingItem = cart.find(
+      (item) =>
+        item._id === product._id && item.isUnitPurchase === isUnitPurchase
+    );
+
     if (isUnitPurchase) {
-      // For unit purchases, check cumulative units against available stock
-      const cumulative = calculateCumulativeUnitsAndPacks(product._id, quantity);
-      const availableUnits = product.shelfStock !== undefined ? product.shelfStock : product.stock;
-      
-      if (cumulative.totalUnitsSold > availableUnits) {
+      // For unit purchases, check against available shelf units
+      const availableUnits =
+        product.shelfStock !== undefined
+          ? product.shelfStock
+          : product.stock * (product.unitsPerPack || 1);
+
+      const totalUnitsSold = getTotalUnitsSold(product._id);
+      const remainingUnits = availableUnits - totalUnitsSold;
+
+      if (quantity > remainingUnits) {
         Swal.fire({
           title: "Insufficient Stock",
-          text: `Cannot add ${quantity} units. Total units would be ${cumulative.totalUnitsSold} but only ${availableUnits} available.`,
+          text: `Cannot add ${quantity} units. Only ${remainingUnits} units available on shelf.`,
           icon: "error",
           confirmButtonText: "OK",
         });
         return;
       }
     } else {
-      // For pack purchases, check available packs
-      const availableStock = product.stock;
-      if (quantity > availableStock) {
+      // For pack purchases, check available complete packs
+      const remainingStock = calculateRemainingStock(product._id);
+      if (quantity > remainingStock.completePacks) {
         Swal.fire({
           title: "Insufficient Stock",
-          text: `Cannot add ${quantity} packs. Only ${availableStock} packs available.`,
+          text: `Cannot add ${quantity} packs. Only ${remainingStock.completePacks} complete packs available.`,
           icon: "error",
           confirmButtonText: "OK",
         });
         return;
       }
     }
-    
+
     if (existingItem) {
-      const updatedItem = { ...existingItem, quantity: existingItem.quantity + quantity };
+      const updatedItem = {
+        ...existingItem,
+        quantity: existingItem.quantity + quantity,
+      };
       const { unitsSold, packsSold } = calculateUnitsAndPacks(updatedItem);
       updatedItem.unitsSold = unitsSold;
       updatedItem.packsSold = packsSold;
-      
+
       setCart(
         cart.map((item) =>
           item._id === product._id && item.isUnitPurchase === isUnitPurchase
@@ -266,54 +312,73 @@ const POS: React.FC = () => {
         )
       );
     } else {
-      const newItem: CartItem = { ...product, quantity: quantity, isUnitPurchase };
+      const newItem: CartItem = {
+        ...product,
+        quantity: quantity,
+        isUnitPurchase,
+      };
       const { unitsSold, packsSold } = calculateUnitsAndPacks(newItem);
       newItem.unitsSold = unitsSold;
       newItem.packsSold = packsSold;
-      
+
       setCart([...cart, newItem]);
     }
   };
 
-  const updateQuantity = (_id: string, quantity: number, isUnitPurchase?: boolean) => {
+  const updateQuantity = (
+    _id: string,
+    quantity: number,
+    isUnitPurchase?: boolean
+  ) => {
     if (quantity === 0) {
-      setCart(cart.filter((item) => !(item._id === _id && item.isUnitPurchase === isUnitPurchase)));
+      setCart(
+        cart.filter(
+          (item) =>
+            !(item._id === _id && item.isUnitPurchase === isUnitPurchase)
+        )
+      );
     } else {
       const product = products.find((p) => p._id === _id);
       if (product) {
         if (isUnitPurchase) {
-          // For unit purchases, check cumulative units against available stock
-          const cumulative = calculateCumulativeUnitsAndPacks(_id, quantity);
-          const availableUnits = product.shelfStock !== undefined ? product.shelfStock : product.stock;
-          
-          if (cumulative.totalUnitsSold > availableUnits) {
+          // For unit purchases, check against available shelf units
+          const availableUnits =
+            product.shelfStock !== undefined
+              ? product.shelfStock
+              : product.stock * (product.unitsPerPack || 1);
+
+          const totalUnitsSold = getTotalUnitsSold(_id);
+          const remainingUnits = availableUnits - totalUnitsSold;
+
+          if (quantity > remainingUnits) {
             Swal.fire({
               title: "Stock Limit Exceeded",
-              text: `Cannot set quantity to ${quantity}. Total units would be ${cumulative.totalUnitsSold} but only ${availableUnits} available.`,
+              text: `Cannot set quantity to ${quantity}. Only ${remainingUnits} units available on shelf.`,
               icon: "warning",
               confirmButtonText: "OK",
             });
             return;
           }
         } else {
-          // For pack purchases, check available packs
-          const availableStock = product.stock;
-          if (quantity > availableStock) {
+          // For pack purchases, check available complete packs
+          const remainingStock = calculateRemainingStock(_id);
+          if (quantity > remainingStock.completePacks) {
             Swal.fire({
               title: "Stock Limit Exceeded",
-              text: `Cannot set quantity to ${quantity}. Only ${availableStock} packs available.`,
+              text: `Cannot set quantity to ${quantity}. Only ${remainingStock.completePacks} complete packs available.`,
               icon: "warning",
               confirmButtonText: "OK",
             });
             return;
           }
         }
-        
+
         setCart(
           cart.map((item) => {
             if (item._id === _id && item.isUnitPurchase === isUnitPurchase) {
               const updatedItem = { ...item, quantity };
-              const { unitsSold, packsSold } = calculateUnitsAndPacks(updatedItem);
+              const { unitsSold, packsSold } =
+                calculateUnitsAndPacks(updatedItem);
               updatedItem.unitsSold = unitsSold;
               updatedItem.packsSold = packsSold;
               return updatedItem;
@@ -326,12 +391,17 @@ const POS: React.FC = () => {
   };
 
   const removeFromCart = (_id: string, isUnitPurchase?: boolean) => {
-    setCart(cart.filter((item) => !(item._id === _id && item.isUnitPurchase === isUnitPurchase)));
+    setCart(
+      cart.filter(
+        (item) => !(item._id === _id && item.isUnitPurchase === isUnitPurchase)
+      )
+    );
   };
 
   const getTotalAmount = () => {
     return cart.reduce((total, item) => {
-      const price = item.isUnitPurchase && item.unitPrice ? item.unitPrice : item.price;
+      const price =
+        item.isUnitPurchase && item.unitPrice ? item.unitPrice : item.price;
       return total + price * item.quantity;
     }, 0);
   };
@@ -368,14 +438,20 @@ const POS: React.FC = () => {
 
     // Validate stock quantities before proceeding
     for (const item of cart) {
-      const availableStock = item.isUnitPurchase 
-        ? (item.shelfStock !== undefined ? item.shelfStock : item.stock)
+      const availableStock = item.isUnitPurchase
+        ? item.shelfStock !== undefined
+          ? item.shelfStock
+          : item.stock
         : item.stock;
-        
+
       if (item.quantity > availableStock) {
         Swal.fire({
           title: "Stock Validation Failed",
-          text: `Cannot complete transaction: ${item.name} quantity (${item.quantity}) exceeds available ${item.isUnitPurchase ? 'shelf' : 'total'} stock (${availableStock})`,
+          text: `Cannot complete transaction: ${item.name} quantity (${
+            item.quantity
+          }) exceeds available ${
+            item.isUnitPurchase ? "shelf" : "total"
+          } stock (${availableStock})`,
           icon: "error",
           confirmButtonText: "OK",
         });
@@ -399,7 +475,8 @@ const POS: React.FC = () => {
         return {
           productId: item._id,
           quantity: item.quantity,
-          price: item.isUnitPurchase && item.unitPrice ? item.unitPrice : item.price,
+          price:
+            item.isUnitPurchase && item.unitPrice ? item.unitPrice : item.price,
           isUnitPurchase: item.isUnitPurchase || false,
           unitsSold: unitsSold,
           packsSold: packsSold,
@@ -456,9 +533,11 @@ const POS: React.FC = () => {
   const updateStockQuantities = async () => {
     try {
       // Group cart items by product to handle cumulative unit tracking
-      const productGroups: {[productId: string]: {unitItems: CartItem[], packItems: CartItem[]}} = {};
-      
-      cart.forEach(item => {
+      const productGroups: {
+        [productId: string]: { unitItems: CartItem[]; packItems: CartItem[] };
+      } = {};
+
+      cart.forEach((item) => {
         if (!productGroups[item._id]) {
           productGroups[item._id] = { unitItems: [], packItems: [] };
         }
@@ -471,55 +550,69 @@ const POS: React.FC = () => {
 
       // Process each product group
       for (const [productId, group] of Object.entries(productGroups)) {
-        const product = products.find(p => p._id === productId);
+        const product = products.find((p) => p._id === productId);
         if (!product) continue;
 
-        let totalUnitsSold = 0;
-        let totalPacksSold = 0;
-        let newStock = product.stock;
-        let newShelfStock = product.shelfStock;
+        const unitsPerPack = product.unitsPerPack || 1;
 
-        // Calculate total units sold from unit items (cumulative across all transactions)
-        let cumulativeUnitsFromUnits = 0;
-        group.unitItems.forEach(item => {
-          cumulativeUnitsFromUnits += item.quantity;
+        // Calculate total units sold from unit items in this transaction
+        let currentTransactionUnits = 0;
+        group.unitItems.forEach((item) => {
+          currentTransactionUnits += item.quantity;
         });
-        
+
+        // Calculate total packs sold from pack items in this transaction
+        let currentTransactionPacks = 0;
+        group.packItems.forEach((item) => {
+          currentTransactionPacks += item.quantity;
+        });
+
         // Get previously sold units from persistent state
         const previouslySoldUnits = cumulativeUnitsSold[productId] || 0;
-        const totalCumulativeUnits = previouslySoldUnits + cumulativeUnitsFromUnits;
-        
-        // Calculate complete packs from total cumulative units
-        const unitsPerPack = product.unitsPerPack || 1;
-        const completePacksFromUnits = Math.floor(totalCumulativeUnits / unitsPerPack);
-        const previouslyCompletePacks = Math.floor(previouslySoldUnits / unitsPerPack);
-        const newCompletePacks = completePacksFromUnits - previouslyCompletePacks;
-        
+        const newTotalUnitsSold = previouslySoldUnits + currentTransactionUnits;
+
+        // Calculate how many complete packs are now sold due to unit sales
+        const newCompletePacksFromUnits = Math.floor(
+          newTotalUnitsSold / unitsPerPack
+        );
+        const previousCompletePacksFromUnits = Math.floor(
+          previouslySoldUnits / unitsPerPack
+        );
+        const additionalCompletePacksFromUnits =
+          newCompletePacksFromUnits - previousCompletePacksFromUnits;
+
+        // Total packs to deduct from stock
+        const totalPacksToDeduct =
+          currentTransactionPacks + additionalCompletePacksFromUnits;
+
+        // Calculate new stock values
+        const newStock = product.stock - totalPacksToDeduct;
+        let newShelfStock = product.shelfStock;
+
+        if (product.shelfStock !== undefined) {
+          // For shelf stock: deduct unit sales directly
+          newShelfStock = Math.max(
+            0,
+            product.shelfStock - currentTransactionUnits
+          );
+
+          // For pack sales: we don't deduct from shelf stock because packs are taken from warehouse
+          // The shelf stock remains as is (minus any unit sales)
+        }
+
         // Debug logging
         console.log(`Product: ${product.name}`);
         console.log(`Previously sold units: ${previouslySoldUnits}`);
-        console.log(`Current transaction units: ${cumulativeUnitsFromUnits}`);
-        console.log(`Total cumulative units: ${totalCumulativeUnits}`);
-        console.log(`Units per pack: ${unitsPerPack}`);
-        console.log(`Complete packs from units: ${completePacksFromUnits}`);
-        console.log(`Previously complete packs: ${previouslyCompletePacks}`);
-        console.log(`NEW complete packs: ${newCompletePacks}`);
-        
-        // Calculate packs and units from pack items
-        group.packItems.forEach(item => {
-          totalPacksSold += item.quantity;
-          totalUnitsSold += item.quantity * (item.unitsPerPack || 1);
-        });
-
-        // Add only NEW complete packs from unit sales
-        totalPacksSold += newCompletePacks;
-        totalUnitsSold += cumulativeUnitsFromUnits;
-
-        // Update stock based on complete packs only
-        newStock = product.stock - totalPacksSold;
-        if (product.shelfStock !== undefined) {
-          newShelfStock = Math.max(0, product.shelfStock - totalUnitsSold);
-        }
+        console.log(`Current transaction units: ${currentTransactionUnits}`);
+        console.log(`Current transaction packs: ${currentTransactionPacks}`);
+        console.log(`New total units sold: ${newTotalUnitsSold}`);
+        console.log(
+          `Additional complete packs from units: ${additionalCompletePacksFromUnits}`
+        );
+        console.log(`Total packs to deduct: ${totalPacksToDeduct}`);
+        console.log(
+          `New stock: ${newStock}, New shelf stock: ${newShelfStock}`
+        );
 
         try {
           // Prepare update data
@@ -539,64 +632,19 @@ const POS: React.FC = () => {
 
       // Update cumulative units sold state
       const newCumulativeUnits = { ...cumulativeUnitsSold };
-      Object.keys(productGroups).forEach(productId => {
+      Object.keys(productGroups).forEach((productId) => {
         const group = productGroups[productId];
         let currentTransactionUnits = 0;
-        group.unitItems.forEach(item => {
+        group.unitItems.forEach((item) => {
           currentTransactionUnits += item.quantity;
         });
-        newCumulativeUnits[productId] = (newCumulativeUnits[productId] || 0) + currentTransactionUnits;
+        newCumulativeUnits[productId] =
+          (newCumulativeUnits[productId] || 0) + currentTransactionUnits;
       });
       setCumulativeUnitsSold(newCumulativeUnits);
 
-      // Update local products state to reflect new stock quantities
-      setProducts((prevProducts) =>
-        prevProducts.map((product) => {
-          const group = productGroups[product._id];
-          if (group) {
-            let totalUnitsSold = 0;
-            let totalPacksSold = 0;
-
-            // Calculate total units sold from unit items (cumulative)
-            let cumulativeUnitsFromUnits = 0;
-            group.unitItems.forEach(item => {
-              cumulativeUnitsFromUnits += item.quantity;
-            });
-            
-            // Get previously sold units from persistent state
-            const previouslySoldUnits = cumulativeUnitsSold[product._id] || 0;
-            const totalCumulativeUnits = previouslySoldUnits + cumulativeUnitsFromUnits;
-            
-            // Calculate complete packs from total cumulative units
-            const unitsPerPack = product.unitsPerPack || 1;
-            const completePacksFromUnits = Math.floor(totalCumulativeUnits / unitsPerPack);
-            const previouslyCompletePacks = Math.floor(previouslySoldUnits / unitsPerPack);
-            const newCompletePacks = completePacksFromUnits - previouslyCompletePacks;
-            
-            // Calculate packs and units from pack items
-            group.packItems.forEach(item => {
-              totalPacksSold += item.quantity;
-              totalUnitsSold += item.quantity * (item.unitsPerPack || 1);
-            });
-
-            // Add only NEW complete packs from unit sales
-            totalPacksSold += newCompletePacks;
-            totalUnitsSold += cumulativeUnitsFromUnits;
-
-            const updatedProduct = {
-              ...product,
-              stock: product.stock - totalPacksSold,
-            };
-            
-            if (product.shelfStock !== undefined) {
-              updatedProduct.shelfStock = Math.max(0, product.shelfStock - totalUnitsSold);
-            }
-            
-            return updatedProduct;
-          }
-          return product;
-        })
-      );
+      // Refresh products from API to get updated stock values
+      await fetchProducts();
     } catch (error) {
       console.error("Error updating stock quantities:", error);
     }
@@ -631,6 +679,51 @@ const POS: React.FC = () => {
             className="mt-2 px-3 py-1 text-xs bg-red-100 text-red-600 rounded hover:bg-red-200"
           >
             Reset Cumulative Units
+          </button>
+          <button
+            onClick={() => {
+              // Test scenario: 5 packs, 5 units each = 25 total, 10 on shelf
+              console.log("=== TEST SCENARIO ===");
+              console.log(
+                "Initial: 5 packs (25 units total), 10 units on shelf"
+              );
+              console.log("After selling 1 unit:");
+              console.log("- 9 units on shelf (10 - 1)");
+              console.log("- 24 total units (25 - 1)");
+              console.log("- 4 complete packs (24 ÷ 5 = 4 with remainder 4)");
+              console.log("- 4 remaining units (24 % 5 = 4)");
+
+              // Test the calculation functions
+              const testProduct = {
+                _id: "test",
+                stock: 5,
+                shelfStock: 10,
+                unitsPerPack: 5,
+              };
+
+              // Simulate selling 1 unit
+              const totalUnitsSold = 1;
+              const remainingTotalUnits =
+                testProduct.stock * testProduct.unitsPerPack - totalUnitsSold;
+              const completePacks = Math.floor(
+                remainingTotalUnits / testProduct.unitsPerPack
+              );
+              const remainingUnits =
+                remainingTotalUnits % testProduct.unitsPerPack;
+              const shelfUnits = Math.max(
+                0,
+                testProduct.shelfStock - totalUnitsSold
+              );
+
+              console.log("Calculated results:");
+              console.log(`- Total units remaining: ${remainingTotalUnits}`);
+              console.log(`- Complete packs: ${completePacks}`);
+              console.log(`- Remaining units: ${remainingUnits}`);
+              console.log(`- Shelf units: ${shelfUnits}`);
+            }}
+            className="mt-2 px-3 py-1 text-xs bg-blue-100 text-blue-600 rounded hover:bg-blue-200"
+          >
+            Test Logic
           </button>
         </div>
       </div>
@@ -679,11 +772,24 @@ const POS: React.FC = () => {
             </div>
             <div>
               <div className="text-2xl font-bold text-gray-900">
-                {products.filter((p) => p.stock > (p.minStock || 5)).length}
+                {
+                  products.filter((p) => {
+                    const remaining = calculateRemainingStock(p._id);
+                    return remaining.totalUnits > (p.minStock || 5);
+                  }).length
+                }
               </div>
               <div className="text-sm text-gray-600">In Stock</div>
               <div className="text-xs text-gray-500">
-                {products.filter((p) => p.shelfStock !== undefined && p.shelfStock > 0).length} on shelf
+                {
+                  products.filter((p) => {
+                    const remaining = calculateRemainingStock(p._id);
+                    return (
+                      p.shelfStock !== undefined && remaining.shelfUnits > 0
+                    );
+                  }).length
+                }{" "}
+                on shelf
               </div>
             </div>
           </div>
@@ -706,14 +812,28 @@ const POS: React.FC = () => {
             <div>
               <div className="text-2xl font-bold text-gray-900">
                 {
-                  products.filter(
-                    (p) => p.stock > 0 && p.stock <= (p.minStock || 5)
-                  ).length
+                  products.filter((p) => {
+                    const remaining = calculateRemainingStock(p._id);
+                    return (
+                      remaining.totalUnits > 0 &&
+                      remaining.totalUnits <= (p.minStock || 5)
+                    );
+                  }).length
                 }
               </div>
               <div className="text-sm text-gray-600">Low Stock</div>
               <div className="text-xs text-gray-500">
-                {products.filter((p) => p.shelfStock !== undefined && p.shelfStock > 0 && p.shelfStock <= (p.minStock || 5)).length} shelf low
+                {
+                  products.filter((p) => {
+                    const remaining = calculateRemainingStock(p._id);
+                    return (
+                      p.shelfStock !== undefined &&
+                      remaining.shelfUnits > 0 &&
+                      remaining.shelfUnits <= (p.minStock || 5)
+                    );
+                  }).length
+                }{" "}
+                shelf low
               </div>
             </div>
           </div>
@@ -735,11 +855,24 @@ const POS: React.FC = () => {
             </div>
             <div>
               <div className="text-2xl font-bold text-gray-900">
-                {products.filter((p) => p.stock === 0).length}
+                {
+                  products.filter((p) => {
+                    const remaining = calculateRemainingStock(p._id);
+                    return remaining.totalUnits === 0;
+                  }).length
+                }
               </div>
               <div className="text-sm text-gray-600">Out of Stock</div>
               <div className="text-xs text-gray-500">
-                {products.filter((p) => p.shelfStock !== undefined && p.shelfStock === 0).length} shelf empty
+                {
+                  products.filter((p) => {
+                    const remaining = calculateRemainingStock(p._id);
+                    return (
+                      p.shelfStock !== undefined && remaining.shelfUnits === 0
+                    );
+                  }).length
+                }{" "}
+                shelf empty
               </div>
             </div>
           </div>
@@ -797,16 +930,19 @@ const POS: React.FC = () => {
                         </span>
                       );
                     }
-                    const isOutOfStock = product.stock === 0;
+                    const remainingStock = calculateRemainingStock(product._id);
+                    const isOutOfStock = remainingStock.totalUnits === 0;
                     return (
                       <div
                         key={product._id}
                         className={
                           "border border-gray-200 rounded-lg p-4 transition-shadow " +
                           (isExpired ? "bg-red-100 " : "") +
-                          (product.stock === 0 ? "bg-gray-100 " : "") +
-                          (product.stock > 0 &&
-                          product.stock <= (product.minStock || 5)
+                          (remainingStock.totalUnits === 0
+                            ? "bg-gray-100 "
+                            : "") +
+                          (remainingStock.totalUnits > 0 &&
+                          remainingStock.totalUnits <= (product.minStock || 5)
                             ? "bg-yellow-100 "
                             : "") +
                           (!isOutOfStock && !isExpired
@@ -838,46 +974,79 @@ const POS: React.FC = () => {
                                 #{product.unitPrice} per unit
                               </span>
                             )}
-                            {product.unitsPerPack && product.unitsPerPack > 1 && (
-                              <span className="text-xs text-gray-500">
-                                ({product.unitsPerPack} {product.units || 'units'} per pack)
-                              </span>
-                            )}
+                            {product.unitsPerPack &&
+                              product.unitsPerPack > 1 && (
+                                <span className="text-xs text-gray-500">
+                                  ({product.unitsPerPack} per pack)
+                                </span>
+                              )}
                           </div>
                           <div className="text-right">
                             <div className="flex flex-col items-end space-y-1">
-                              <span
-                                className={
-                                  "text-xs font-semibold " +
-                                  (isOutOfStock
-                                    ? "text-red-600"
-                                    : product.stock <= (product.minStock || 5)
-                                    ? "text-yellow-600"
-                                    : "text-green-600")
-                                }
-                              >
-                                {product.stock} total stock
-                              </span>
-                              {product.shelfStock !== undefined && (
-                                <span
-                                  className={
-                                    "text-xs font-medium " +
-                                    (product.shelfStock === 0
-                                      ? "text-red-500"
-                                      : product.shelfStock <= (product.minStock || 5)
-                                      ? "text-yellow-500"
-                                      : "text-blue-600")
-                                  }
-                                >
-                                  {product.shelfStock} on shelf
-                                </span>
-                              )}
+                              {(() => {
+                                const remainingStock = calculateRemainingStock(
+                                  product._id
+                                );
+                                return (
+                                  <>
+                                    <span
+                                      className={
+                                        "text-xs font-semibold " +
+                                        (remainingStock.totalUnits === 0
+                                          ? "text-red-600"
+                                          : remainingStock.totalUnits <=
+                                            (product.minStock || 5)
+                                          ? "text-yellow-600"
+                                          : "text-green-600")
+                                      }
+                                    >
+                                      {remainingStock.totalUnits} total units
+                                    </span>
+                                    <span
+                                      className={
+                                        "text-xs font-medium " +
+                                        (remainingStock.completePacks === 0
+                                          ? "text-red-500"
+                                          : remainingStock.completePacks <=
+                                            (product.minStock || 5)
+                                          ? "text-yellow-500"
+                                          : "text-green-500")
+                                      }
+                                    >
+                                      {remainingStock.completePacks} complete
+                                      packs
+                                    </span>
+                                    {product.shelfStock !== undefined && (
+                                      <span
+                                        className={
+                                          "text-xs font-medium " +
+                                          (remainingStock.shelfUnits === 0
+                                            ? "text-red-500"
+                                            : remainingStock.shelfUnits <=
+                                              (product.minStock || 5)
+                                            ? "text-yellow-500"
+                                            : "text-blue-600")
+                                        }
+                                      >
+                                        {remainingStock.shelfUnits} on shelf
+                                      </span>
+                                    )}
+                                    {remainingStock.remainingUnits > 0 && (
+                                      <span className="text-xs text-orange-600 font-medium">
+                                        {remainingStock.remainingUnits} partial
+                                        pack
+                                      </span>
+                                    )}
+                                  </>
+                                );
+                              })()}
                             </div>
                           </div>
                         </div>
                         {expiryDisplay}
-                        {product.stock > 0 &&
-                          product.stock <= (product.minStock || 5) && (
+                        {remainingStock.totalUnits > 0 &&
+                          remainingStock.totalUnits <=
+                            (product.minStock || 5) && (
                             <div className="text-xs text-yellow-600 font-semibold mt-1">
                               ⚠️ Low Stock Alert
                             </div>
@@ -909,12 +1078,19 @@ const POS: React.FC = () => {
                 <p className="text-gray-500 text-center py-4">Cart is empty</p>
               ) : (
                 cart.map((item, index) => {
-                  const currentPrice = item.isUnitPurchase && item.unitPrice ? item.unitPrice : item.price;
-                  const priceLabel = item.isUnitPurchase ? "per unit" : "per pack";
-                  
+                  const currentPrice =
+                    item.isUnitPurchase && item.unitPrice
+                      ? item.unitPrice
+                      : item.price;
+                  const priceLabel = item.isUnitPurchase
+                    ? "per unit"
+                    : "per pack";
+
                   return (
                     <div
-                      key={`${item._id}-${item.isUnitPurchase ? 'unit' : 'pack'}-${index}`}
+                      key={`${item._id}-${
+                        item.isUnitPurchase ? "unit" : "pack"
+                      }-${index}`}
                       className="flex items-center justify-between border-b border-gray-100 pb-3"
                     >
                       <div className="flex-1">
@@ -930,33 +1106,49 @@ const POS: React.FC = () => {
                           </p>
                         )}
                         <div className="text-xs text-gray-400 space-y-1">
-                          <div>
-                            Total Stock: {item.stock - item.quantity} remaining
-                          </div>
-                          {item.shelfStock !== undefined && (
-                            <div className="text-blue-600">
-                              Shelf Stock: {item.shelfStock - item.quantity} remaining
-                            </div>
-                          )}
+                          {(() => {
+                            const remainingStock = calculateRemainingStock(
+                              item._id
+                            );
+                            return (
+                              <>
+                                <div>
+                                  Total Stock: {remainingStock.totalUnits} units
+                                  remaining
+                                </div>
+                                <div>
+                                  Complete Packs: {remainingStock.completePacks}{" "}
+                                  remaining
+                                </div>
+                                {item.shelfStock !== undefined && (
+                                  <div className="text-blue-600">
+                                    Shelf Stock: {remainingStock.shelfUnits}{" "}
+                                    units remaining
+                                  </div>
+                                )}
+                                {remainingStock.remainingUnits > 0 && (
+                                  <div className="text-orange-600 font-medium">
+                                    Partial Pack:{" "}
+                                    {remainingStock.remainingUnits} units
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                         {/* Show units and packs breakdown */}
                         <div className="text-xs text-gray-500 mt-1">
                           {item.isUnitPurchase ? (
                             <div>
-                              <div>Units: {item.unitsSold || 0} | Packs: {item.packsSold || 0}</div>
-                              {(() => {
-                                const cumulative = calculateCumulativeUnitsAndPacks(item._id, item.quantity);
-                                const remainingUnits = cumulative.remainingUnits;
-                                return remainingUnits > 0 && (
-                                  <div className="text-orange-600 font-medium">
-                                    Partial Pack: {remainingUnits} units remaining
-                                  </div>
-                                );
-                              })()}
+                              <div>
+                                Current Units: {item.unitsSold || 0} | Total
+                                Packs Sold: {item.packsSold || 0}
+                              </div>
                             </div>
                           ) : (
                             <span>
-                              Packs: {item.packsSold || 0} | Units: {item.unitsSold || 0}
+                              Packs: {item.packsSold || 0} | Units:{" "}
+                              {item.unitsSold || 0}
                             </span>
                           )}
                         </div>
@@ -964,7 +1156,11 @@ const POS: React.FC = () => {
                       <div className="flex items-center space-x-2">
                         <button
                           onClick={() =>
-                            updateQuantity(item._id, item.quantity - 1, item.isUnitPurchase)
+                            updateQuantity(
+                              item._id,
+                              item.quantity - 1,
+                              item.isUnitPurchase
+                            )
                           }
                           className="p-1 rounded-full hover:bg-gray-100"
                         >
@@ -975,7 +1171,11 @@ const POS: React.FC = () => {
                         </span>
                         <button
                           onClick={() =>
-                            updateQuantity(item._id, item.quantity + 1, item.isUnitPurchase)
+                            updateQuantity(
+                              item._id,
+                              item.quantity + 1,
+                              item.isUnitPurchase
+                            )
                           }
                           className="p-1 rounded-full hover:bg-gray-100"
                           disabled={item.quantity >= item.stock}
@@ -983,7 +1183,9 @@ const POS: React.FC = () => {
                           <Plus className="h-3 w-3" />
                         </button>
                         <button
-                          onClick={() => removeFromCart(item._id, item.isUnitPurchase)}
+                          onClick={() =>
+                            removeFromCart(item._id, item.isUnitPurchase)
+                          }
                           className="p-1 rounded-full hover:bg-red-100 text-red-600"
                         >
                           <Trash2 className="h-3 w-3" />
@@ -999,7 +1201,9 @@ const POS: React.FC = () => {
               <div className="mt-4 pt-4 border-t border-gray-200">
                 {/* Units and Packs Summary */}
                 <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                  <div className="text-sm font-medium text-gray-700 mb-2">Sale Summary:</div>
+                  <div className="text-sm font-medium text-gray-700 mb-2">
+                    Sale Summary:
+                  </div>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div className="flex justify-between">
                       <span className="text-gray-600">Total Units:</span>
@@ -1015,7 +1219,7 @@ const POS: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="flex justify-between items-center mb-4">
                   <span className="text-lg font-medium text-gray-900">
                     Total:
@@ -1192,9 +1396,14 @@ const POS: React.FC = () => {
                     </thead>
                     <tbody>
                       {lastTransaction.items.map((item: any, index: number) => {
-                        const currentPrice = item.isUnitPurchase && item.unitPrice ? item.unitPrice : item.price;
-                        const priceLabel = item.isUnitPurchase ? " (per unit)" : " (per pack)";
-                        
+                        const currentPrice =
+                          item.isUnitPurchase && item.unitPrice
+                            ? item.unitPrice
+                            : item.price;
+                        const priceLabel = item.isUnitPurchase
+                          ? " (per unit)"
+                          : " (per pack)";
+
                         return (
                           <tr
                             key={item._id || index}
@@ -1210,9 +1419,15 @@ const POS: React.FC = () => {
                               {item.unitsSold && item.packsSold && (
                                 <div className="text-xs text-gray-500">
                                   {item.isUnitPurchase ? (
-                                    <span>Units: {item.unitsSold} | Packs: {item.packsSold}</span>
+                                    <span>
+                                      Units: {item.unitsSold} | Packs:{" "}
+                                      {item.packsSold}
+                                    </span>
                                   ) : (
-                                    <span>Packs: {item.packsSold} | Units: {item.unitsSold}</span>
+                                    <span>
+                                      Packs: {item.packsSold} | Units:{" "}
+                                      {item.unitsSold}
+                                    </span>
                                   )}
                                 </div>
                               )}
@@ -1223,7 +1438,8 @@ const POS: React.FC = () => {
                               )}
                             </td>
                             <td className="text-right py-2 text-gray-700">
-                              #{currentPrice.toFixed(2)}{priceLabel}
+                              #{currentPrice.toFixed(2)}
+                              {priceLabel}
                             </td>
                             <td className="text-right py-2 text-gray-700">
                               {item.quantity}
@@ -1315,14 +1531,16 @@ const POS: React.FC = () => {
                 Select Purchase Type
               </h3>
               <p className="text-sm text-gray-600 mb-6">
-                How would you like to purchase <strong>{selectedProduct.name}</strong>?
-                {!selectedProduct.unitPrice || selectedProduct.unitPrice === 0 ? (
+                How would you like to purchase{" "}
+                <strong>{selectedProduct.name}</strong>?
+                {!selectedProduct.unitPrice ||
+                selectedProduct.unitPrice === 0 ? (
                   <span className="block text-xs text-gray-500 mt-1">
                     (This product is only available as a full pack)
                   </span>
                 ) : null}
               </p>
-              
+
               <div className="space-y-4">
                 {/* Full Pack Option */}
                 <button
@@ -1340,17 +1558,32 @@ const POS: React.FC = () => {
                         #{selectedProduct.price.toFixed(2)} per pack
                       </div>
                       <div className="text-xs text-gray-500">
-                        {selectedProduct.stock} packs available
-                        {selectedProduct.unitsPerPack && selectedProduct.unitsPerPack > 1 && (
-                          <span className="block text-gray-400">
-                            ({selectedProduct.unitsPerPack} {selectedProduct.units || 'units'} per pack)
-                          </span>
-                        )}
-                        {selectedProduct.shelfStock !== undefined && selectedProduct.shelfStock > 0 && (
-                          <span className="block text-blue-600">
-                            {selectedProduct.shelfStock} on shelf
-                          </span>
-                        )}
+                        {(() => {
+                          const remaining = calculateRemainingStock(
+                            selectedProduct._id
+                          );
+                          return remaining.completePacks;
+                        })()}{" "}
+                        packs available
+                        {selectedProduct.unitsPerPack &&
+                          selectedProduct.unitsPerPack > 1 && (
+                            <span className="block text-gray-400">
+                              ({selectedProduct.unitsPerPack} per pack)
+                            </span>
+                          )}
+                        {selectedProduct.shelfStock !== undefined &&
+                          (() => {
+                            const remaining = calculateRemainingStock(
+                              selectedProduct._id
+                            );
+                            return (
+                              remaining.shelfUnits > 0 && (
+                                <span className="block text-blue-600">
+                                  {remaining.shelfUnits} on shelf
+                                </span>
+                              )
+                            );
+                          })()}
                       </div>
                     </div>
                     <div className="text-2xl">📦</div>
@@ -1369,17 +1602,34 @@ const POS: React.FC = () => {
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <div className="font-medium text-gray-900">Individual Units</div>
+                        <div className="font-medium text-gray-900">
+                          Individual Units
+                        </div>
                         <div className="text-sm text-gray-600">
                           #{selectedProduct.unitPrice.toFixed(2)} per unit
                         </div>
                         <div className="text-xs text-gray-500">
-                          {selectedProduct.shelfStock !== undefined ? selectedProduct.shelfStock : selectedProduct.stock} units available
-                          {selectedProduct.shelfStock !== undefined && selectedProduct.shelfStock !== selectedProduct.stock && (
-                            <span className="block text-gray-400">
-                              (Total stock: {selectedProduct.stock})
-                            </span>
-                          )}
+                          {(() => {
+                            const remaining = calculateRemainingStock(
+                              selectedProduct._id
+                            );
+                            return remaining.shelfUnits;
+                          })()}{" "}
+                          units available
+                          {selectedProduct.shelfStock !== undefined &&
+                            (() => {
+                              const remaining = calculateRemainingStock(
+                                selectedProduct._id
+                              );
+                              return (
+                                remaining.totalUnits !==
+                                  remaining.shelfUnits && (
+                                  <span className="block text-gray-400">
+                                    (Total stock: {remaining.totalUnits})
+                                  </span>
+                                )
+                              );
+                            })()}
                         </div>
                       </div>
                       <div className="text-2xl">💊</div>
@@ -1405,124 +1655,167 @@ const POS: React.FC = () => {
       )}
 
       {/* Unit Quantity Selection Modal */}
-      {showUnitQuantityModal && selectedProduct && selectedProduct.unitPrice && selectedProduct.unitPrice > 0 && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-md">
-            <div className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Add Units to Cart
-              </h3>
-              <p className="text-sm text-gray-600 mb-6">
-                How many units of <strong>{selectedProduct.name}</strong> do you want to add?
-              </p>
-              
-              <div className="mb-6">
-                <div className="bg-gray-50 p-4 rounded-lg mb-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Unit Price:</span>
-                    <span className="font-semibold text-green-600">
-                      #{selectedProduct.unitPrice?.toFixed(2) || 'N/A'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center mt-2">
-                    <span className="text-sm text-gray-600">Available Stock:</span>
-                    <span className="font-semibold text-blue-600">
-                      {selectedProduct.shelfStock !== undefined ? selectedProduct.shelfStock : selectedProduct.stock} units
-                      {selectedProduct.shelfStock !== undefined && selectedProduct.shelfStock !== selectedProduct.stock && (
-                        <span className="text-xs text-gray-500 ml-1">
-                          (Shelf)
-                        </span>
+      {showUnitQuantityModal &&
+        selectedProduct &&
+        selectedProduct.unitPrice &&
+        selectedProduct.unitPrice > 0 && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-lg w-full max-w-md">
+              <div className="p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  Add Units to Cart
+                </h3>
+                <p className="text-sm text-gray-600 mb-6">
+                  How many units of <strong>{selectedProduct.name}</strong> do
+                  you want to add?
+                </p>
+
+                <div className="mb-6">
+                  <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Unit Price:</span>
+                      <span className="font-semibold text-green-600">
+                        #{selectedProduct.unitPrice?.toFixed(2) || "N/A"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center mt-2">
+                      <span className="text-sm text-gray-600">
+                        Available Stock:
+                      </span>
+                      <span className="font-semibold text-blue-600">
+                        {(() => {
+                          const remaining = calculateRemainingStock(
+                            selectedProduct._id
+                          );
+                          return remaining.shelfUnits;
+                        })()}{" "}
+                        units
+                        {selectedProduct.shelfStock !== undefined && (
+                          <span className="text-xs text-gray-500 ml-1">
+                            (Shelf)
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    {selectedProduct.unitsPerPack &&
+                      selectedProduct.unitsPerPack > 1 && (
+                        <div className="flex justify-between items-center mt-1">
+                          <span className="text-sm text-gray-500">
+                            Units per Pack:
+                          </span>
+                          <span className="text-sm text-gray-500">
+                            {selectedProduct.unitsPerPack}{" "}
+                          </span>
+                        </div>
                       )}
-                    </span>
+                    {selectedProduct.shelfStock !== undefined &&
+                      selectedProduct.shelfStock !== selectedProduct.stock && (
+                        <div className="flex justify-between items-center mt-1">
+                          <span className="text-sm text-gray-500">
+                            Total Stock:
+                          </span>
+                          <span className="text-sm text-gray-500">
+                            {selectedProduct.stock} units
+                          </span>
+                        </div>
+                      )}
                   </div>
-                  {selectedProduct.unitsPerPack && selectedProduct.unitsPerPack > 1 && (
-                    <div className="flex justify-between items-center mt-1">
-                      <span className="text-sm text-gray-500">Units per Pack:</span>
-                      <span className="text-sm text-gray-500">
-                        {selectedProduct.unitsPerPack} {selectedProduct.units || 'units'}
+
+                  <div className="flex items-center justify-center space-x-4">
+                    <button
+                      onClick={() =>
+                        setUnitQuantity(Math.max(1, unitQuantity - 1))
+                      }
+                      className="w-10 h-10 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center"
+                      disabled={unitQuantity <= 1}
+                    >
+                      <Minus className="h-4 w-4" />
+                    </button>
+
+                    <input
+                      type="number"
+                      min="1"
+                      max={(() => {
+                        const remaining = calculateRemainingStock(
+                          selectedProduct._id
+                        );
+                        return remaining.shelfUnits;
+                      })()}
+                      value={unitQuantity}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value) || 1;
+                        const remaining = calculateRemainingStock(
+                          selectedProduct._id
+                        );
+                        const maxStock = remaining.shelfUnits;
+                        setUnitQuantity(Math.max(1, Math.min(maxStock, value)));
+                      }}
+                      className="w-20 text-center text-lg font-semibold border border-gray-300 rounded-md py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+
+                    <button
+                      onClick={() => {
+                        const remaining = calculateRemainingStock(
+                          selectedProduct._id
+                        );
+                        const maxStock = remaining.shelfUnits;
+                        setUnitQuantity(Math.min(maxStock, unitQuantity + 1));
+                      }}
+                      className="w-10 h-10 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center"
+                      disabled={
+                        unitQuantity >=
+                        (() => {
+                          const remaining = calculateRemainingStock(
+                            selectedProduct._id
+                          );
+                          return remaining.shelfUnits;
+                        })()
+                      }
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="text-center mt-4">
+                    <div className="text-sm text-gray-600">
+                      Total:{" "}
+                      <span className="font-semibold text-lg text-green-600">
+                        #
+                        {(
+                          (selectedProduct.unitPrice || 0) * unitQuantity
+                        ).toFixed(2)}
                       </span>
                     </div>
-                  )}
-                  {selectedProduct.shelfStock !== undefined && selectedProduct.shelfStock !== selectedProduct.stock && (
-                    <div className="flex justify-between items-center mt-1">
-                      <span className="text-sm text-gray-500">Total Stock:</span>
-                      <span className="text-sm text-gray-500">
-                        {selectedProduct.stock} units
-                      </span>
-                    </div>
-                  )}
+                  </div>
                 </div>
-                
-                <div className="flex items-center justify-center space-x-4">
-                  <button
-                    onClick={() => setUnitQuantity(Math.max(1, unitQuantity - 1))}
-                    className="w-10 h-10 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center"
-                    disabled={unitQuantity <= 1}
-                  >
-                    <Minus className="h-4 w-4" />
-                  </button>
-                  
-                  <input
-                    type="number"
-                    min="1"
-                    max={selectedProduct.shelfStock !== undefined ? selectedProduct.shelfStock : selectedProduct.stock}
-                    value={unitQuantity}
-                    onChange={(e) => {
-                      const value = parseInt(e.target.value) || 1;
-                      const maxStock = selectedProduct.shelfStock !== undefined ? selectedProduct.shelfStock : selectedProduct.stock;
-                      setUnitQuantity(Math.max(1, Math.min(maxStock, value)));
-                    }}
-                    className="w-20 text-center text-lg font-semibold border border-gray-300 rounded-md py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  
+
+                <div className="flex justify-end space-x-3">
                   <button
                     onClick={() => {
-                      const maxStock = selectedProduct.shelfStock !== undefined ? selectedProduct.shelfStock : selectedProduct.stock;
-                      setUnitQuantity(Math.min(maxStock, unitQuantity + 1));
+                      setShowUnitQuantityModal(false);
+                      setSelectedProduct(null);
+                      setUnitQuantity(1);
                     }}
-                    className="w-10 h-10 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center"
-                    disabled={unitQuantity >= (selectedProduct.shelfStock !== undefined ? selectedProduct.shelfStock : selectedProduct.stock)}
+                    className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
                   >
-                    <Plus className="h-4 w-4" />
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      addToCartDirect(selectedProduct, true, unitQuantity);
+                      setShowUnitQuantityModal(false);
+                      setSelectedProduct(null);
+                      setUnitQuantity(1);
+                    }}
+                    className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                  >
+                    Add to Cart
                   </button>
                 </div>
-                
-                <div className="text-center mt-4">
-                  <div className="text-sm text-gray-600">
-                    Total: <span className="font-semibold text-lg text-green-600">
-                      #{((selectedProduct.unitPrice || 0) * unitQuantity).toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => {
-                    setShowUnitQuantityModal(false);
-                    setSelectedProduct(null);
-                    setUnitQuantity(1);
-                  }}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    addToCartDirect(selectedProduct, true, unitQuantity);
-                    setShowUnitQuantityModal(false);
-                    setSelectedProduct(null);
-                    setUnitQuantity(1);
-                  }}
-                  className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-                >
-                  Add to Cart
-                </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
     </div>
   );
 };

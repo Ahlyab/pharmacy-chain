@@ -2579,4 +2579,8 @@ router.use("/audit", auditRoutes);
 import reportRoutes from "./report.js";
 router.use("/report", reportRoutes);
 
+// Stock-taking routes
+import stockTakingRoutes from "./stockTaking.js";
+router.use("/stock-taking", stockTakingRoutes);
+
 export default router;

@@ -310,33 +310,33 @@ const TransactionHistory: React.FC = () => {
   const handleExportExcel = async () => {
     setExportLoading(true);
     try {
+      // Check if we have transactions to export
+      if (!sortedTransactions || sortedTransactions.length === 0) {
+        alert('No transactions to export');
+        return;
+      }
+
       const exportData: ExportData[] = sortedTransactions.map(transaction => ({
-        id: transaction.id,
-        date: transaction.date,
-        customer: transaction.customer,
-        items: transaction.items,
-        total: transaction.total,
-        paymentMethod: transaction.paymentMethod,
-        status: transaction.status,
-        branchName: transaction.branchName,
+        'Transaction ID': transaction.id,
+        'Date & Time': new Date(transaction.date).toLocaleString(),
+        'Customer': transaction.customer || 'N/A',
+        'Branch': transaction.branchName || 'N/A',
+        'Items Count': transaction.items.length,
+        'Items': transaction.items.map(item => `${item.name} (Qty: ${item.quantity})`).join(', '),
+        'Total Amount': `#${transaction.total.toFixed(2)}`,
+        'Payment Method': transaction.paymentMethod,
+        'Status': transaction.status,
       }));
 
-      const filters: ExportFilters = {
-        dateRange,
-        selectedDate,
-        customDateRange,
-        selectedStatus,
-        selectedBranch,
-        searchTerm,
-      };
-
-      const csvContent = generateExcelReport(exportData, "Transaction History Report", filters, true);
-      const filename = generateReportFilename("transaction_history_report", filters, "xlsx");
-      downloadExcel(csvContent, filename);
+      const filename = `transaction_history_report_${new Date().toISOString().split('T')[0]}.xlsx`;
+      
+      // Use the correct function signature
+      generateExcelReport(exportData, filename);
 
       // Show success message
       alert('Excel report has been downloaded successfully!');
     } catch (error: any) {
+      console.error('Export error:', error);
       alert(`Error generating Excel: ${error.message}`);
     } finally {
       setExportLoading(false);

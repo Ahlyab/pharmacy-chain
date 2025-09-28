@@ -375,26 +375,32 @@ const Billing: React.FC = () => {
   const handleExportExcel = async () => {
     setExportLoading(true);
     try {
+      // Check if we have bills to export
+      if (!sortedBills || sortedBills.length === 0) {
+        Swal.fire({
+          title: 'No Data',
+          text: 'No bills to export',
+          icon: 'warning',
+          confirmButtonText: 'OK'
+        });
+        return;
+      }
+
       const exportData: ExportData[] = sortedBills.map(bill => ({
-        id: bill.id,
-        date: bill.date,
-        customer: bill.customer,
-        items: bill.items,
-        total: bill.total,
-        paymentMethod: bill.paymentMethod,
-        status: bill.status,
+        'Bill ID': bill.id,
+        'Date': new Date(bill.date).toLocaleDateString(),
+        'Customer': bill.customer || 'N/A',
+        'Items Count': bill.items.length,
+        'Items': bill.items.map(item => `${item.name} (Qty: ${item.quantity})`).join(', '),
+        'Total Amount': `#${bill.total.toFixed(2)}`,
+        'Payment Method': bill.paymentMethod,
+        'Status': bill.status,
       }));
 
-      const filters: ExportFilters = {
-        dateRange,
-        selectedDate,
-        selectedStatus,
-        searchTerm,
-      };
-
-      const csvContent = generateExcelReport(exportData, "Billing Report", filters, false);
-      const filename = generateReportFilename("billing_report", filters, "xlsx");
-      downloadExcel(csvContent, filename);
+      const filename = `billing_report_${new Date().toISOString().split('T')[0]}.xlsx`;
+      
+      // Use the correct function signature
+      generateExcelReport(exportData, filename);
 
       Swal.fire({
         title: 'Export Successful',
@@ -403,6 +409,7 @@ const Billing: React.FC = () => {
         confirmButtonText: 'OK'
       });
     } catch (error: any) {
+      console.error('Export error:', error);
       Swal.fire({
         title: 'Export Failed',
         text: `Error generating Excel: ${error.message}`,

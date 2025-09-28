@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Pencil, Trash2, ChevronDown, Shield } from "lucide-react";
+import { ChevronDown, Shield, Package, Save, XCircle } from "lucide-react";
 import { VITE_BASE_URL } from "../../data";
 import Swal from "sweetalert2";
 import { useAuth } from "../../contexts/AuthContext";
@@ -140,6 +140,26 @@ const InventoryManagement: React.FC = () => {
   const [sortColumn, setSortColumn] = useState<string>("name");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
+  // Stock-taking state variables
+  const [showStockTakingModal, setShowStockTakingModal] = useState(false);
+  const [stockTakingData, setStockTakingData] = useState<{
+    [key: string]: {
+      actualStock: number;
+      status: "IN_STOCK" | "MISSING" | "PART" | "SHRINKAGE";
+      notes?: string;
+    };
+  }>({});
+  const [isSubmittingStockTaking, setIsSubmittingStockTaking] = useState(false);
+  const [stockTakingRecords, setStockTakingRecords] = useState<{
+    [key: string]: {
+      actualStock: number;
+      status: string;
+      notes?: string;
+      recordedAt: string;
+      recordedBy: string;
+    };
+  }>({});
+
   // Helper to add status to a product
   const addStatus = (product: any): Product => {
     let status: "In Stock" | "Low Stock" | "Out of Stock";
@@ -188,6 +208,49 @@ const InventoryManagement: React.FC = () => {
     }
   };
 
+  // Fetch stock-taking records from backend
+  const fetchStockTakingRecords = async () => {
+    try {
+      const response = await fetch(`${BASE_URL}/stock-taking/records`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (response.ok) {
+        const responseData = await response.json();
+        console.log("Stock taking API response:", responseData);
+
+        // Handle the nested data structure from the API
+        const data =
+          responseData.data?.records || responseData.records || responseData;
+
+        if (!Array.isArray(data)) {
+          console.error("Stock taking data is not an array:", data);
+          return;
+        }
+
+        console.log("Stock taking data:", data);
+
+        // Convert array to object keyed by productId for easy lookup
+        const recordsMap: { [key: string]: any } = {};
+        data.forEach((record: any) => {
+          recordsMap[record.productId._id] = {
+            actualStock: record.actualStock,
+            status: record.status,
+            notes: record.notes,
+            recordedAt: record.recordedAt,
+            recordedBy: record.recordedBy,
+          };
+        });
+
+        console.log("Stock taking records:", recordsMap);
+        setStockTakingRecords(recordsMap);
+      }
+    } catch (err) {
+      console.error("Error fetching stock-taking records:", err);
+    }
+  };
+
   useEffect(() => {
     const fetchProducts = async () => {
       try {
@@ -210,12 +273,15 @@ const InventoryManagement: React.FC = () => {
     fetchProducts();
     fetchSuppliers();
     fetchBranches();
+    fetchStockTakingRecords();
   }, [BASE_URL, user?.branchId]);
 
   // Set branch filter to manager's assigned branch when branches are loaded
   useEffect(() => {
     if (user?.branchId && branches.length > 0) {
-      const managerBranch = branches.find(branch => branch._id === user.branchId);
+      const managerBranch = branches.find(
+        (branch) => branch._id === user.branchId
+      );
       if (managerBranch) {
         setBranchFilter(managerBranch.name);
       }
@@ -486,7 +552,9 @@ const InventoryManagement: React.FC = () => {
           // Refresh branches and set correct branch filter
           await fetchBranches();
           if (user?.branchId && branches.length > 0) {
-            const managerBranch = branches.find(branch => branch._id === user.branchId);
+            const managerBranch = branches.find(
+              (branch) => branch._id === user.branchId
+            );
             if (managerBranch) {
               setBranchFilter(managerBranch.name);
             }
@@ -563,7 +631,9 @@ const InventoryManagement: React.FC = () => {
           purchasePriceExclVAT: existingProduct.purchasePriceExclVAT || 0,
           vat: existingProduct.vat || 0,
           retailPriceVATIncluded:
-            existingProduct.retailPriceVATIncluded || existingProduct.price || 0,
+            existingProduct.retailPriceVATIncluded ||
+            existingProduct.price ||
+            0,
         });
 
         setSupplierSearch(existingProduct.supplier);
@@ -579,38 +649,68 @@ const InventoryManagement: React.FC = () => {
             <div class="text-left">
               <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
                 <h4 style="margin: 0 0 10px 0; color: #2c3e50;">📦 Product Details</h4>
-                <p style="margin: 5px 0;"><strong>Product Name:</strong> ${existingProduct.name}</p>
-                <p style="margin: 5px 0;"><strong>Manufacturer:</strong> ${existingProduct.manufacturer || "N/A"}</p>
-                <p style="margin: 5px 0;"><strong>Composition:</strong> ${existingProduct.composition || "N/A"}</p>
-                <p style="margin: 5px 0;"><strong>Series:</strong> ${existingProduct.series || "N/A"}</p>
+                <p style="margin: 5px 0;"><strong>Product Name:</strong> ${
+                  existingProduct.name
+                }</p>
+                <p style="margin: 5px 0;"><strong>Manufacturer:</strong> ${
+                  existingProduct.manufacturer || "N/A"
+                }</p>
+                <p style="margin: 5px 0;"><strong>Composition:</strong> ${
+                  existingProduct.composition || "N/A"
+                }</p>
+                <p style="margin: 5px 0;"><strong>Series:</strong> ${
+                  existingProduct.series || "N/A"
+                }</p>
               </div>
               
               <div style="background: #e8f4fd; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
                 <h4 style="margin: 0 0 10px 0; color: #2c3e50;">📊 Stock & Pricing</h4>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                   <div>
-                    <p style="margin: 5px 0;"><strong>Current Stock:</strong> ${existingProduct.stock}</p>
-                    <p style="margin: 5px 0;"><strong>Shelf Stock:</strong> ${existingProduct.shelfStock || 0}</p>
-                    <p style="margin: 5px 0;"><strong>Min Stock:</strong> ${existingProduct.minStock}</p>
-                    <p style="margin: 5px 0;"><strong>Units:</strong> ${existingProduct.units || "pieces"}</p>
-                    <p style="margin: 5px 0;"><strong>Per Pack Unit:</strong> ${existingProduct.unitsPerPack || 1}</p>
+                    <p style="margin: 5px 0;"><strong>Current Stock:</strong> ${
+                      existingProduct.stock
+                    }</p>
+                    <p style="margin: 5px 0;"><strong>Shelf Stock:</strong> ${
+                      existingProduct.shelfStock || 0
+                    }</p>
+                    <p style="margin: 5px 0;"><strong>Min Stock:</strong> ${
+                      existingProduct.minStock
+                    }</p>
+                    <p style="margin: 5px 0;"><strong>Units:</strong> ${
+                      existingProduct.units || "pieces"
+                    }</p>
+                    <p style="margin: 5px 0;"><strong>Per Pack Unit:</strong> ${
+                      existingProduct.unitsPerPack || 1
+                    }</p>
                   </div>
                   <div>
                     <p style="margin: 5px 0;"><strong>Selling Price:</strong> #{existingProduct.price}</p>
                     <p style="margin: 5px 0;"><strong>Unit Price:</strong> #{existingProduct.unitPrice || 0}</p>
                     <p style="margin: 5px 0;"><strong>Cost Price:</strong> #{existingProduct.purchasePriceExclVAT || 0}</p>
                     <p style="margin: 5px 0;"><strong>Retail Price (VAT):</strong> #{existingProduct.retailPriceVATIncluded || existingProduct.price}</p>
-                    <p style="margin: 5px 0;"><strong>VAT:</strong> ${existingProduct.vat || 0}%</p>
+                    <p style="margin: 5px 0;"><strong>VAT:</strong> ${
+                      existingProduct.vat || 0
+                    }%</p>
                   </div>
                 </div>
               </div>
               
               <div style="background: #f0f8f0; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
                 <h4 style="margin: 0 0 10px 0; color: #2c3e50;">🏢 Supplier & Dates</h4>
-                <p style="margin: 5px 0;"><strong>Supplier:</strong> ${existingProduct.supplier}</p>
-                <p style="margin: 5px 0;"><strong>Expiry Date:</strong> ${existingProduct.expiryDate ? new Date(existingProduct.expiryDate).toLocaleDateString() : "N/A"}</p>
-                <p style="margin: 5px 0;"><strong>Reserved Quantity:</strong> ${existingProduct.reservedQuantity || 0}</p>
-                <p style="margin: 5px 0;"><strong>Store:</strong> ${existingProduct.store || "N/A"}</p>
+                <p style="margin: 5px 0;"><strong>Supplier:</strong> ${
+                  existingProduct.supplier
+                }</p>
+                <p style="margin: 5px 0;"><strong>Expiry Date:</strong> ${
+                  existingProduct.expiryDate
+                    ? new Date(existingProduct.expiryDate).toLocaleDateString()
+                    : "N/A"
+                }</p>
+                <p style="margin: 5px 0;"><strong>Reserved Quantity:</strong> ${
+                  existingProduct.reservedQuantity || 0
+                }</p>
+                <p style="margin: 5px 0;"><strong>Store:</strong> ${
+                  existingProduct.store || "N/A"
+                }</p>
               </div>
               
               <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107;">
@@ -639,22 +739,38 @@ const InventoryManagement: React.FC = () => {
               <div class="text-left">
                 <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
                   <h4 style="margin: 0 0 10px 0; color: #2c3e50;">📦 Product Information</h4>
-                  <p style="margin: 5px 0;"><strong>Product:</strong> ${existingProduct.name}</p>
-                  <p style="margin: 5px 0;"><strong>Manufacturer:</strong> ${existingProduct.manufacturer || "N/A"}</p>
-                  <p style="margin: 5px 0;"><strong>Supplier:</strong> ${existingProduct.supplier}</p>
+                  <p style="margin: 5px 0;"><strong>Product:</strong> ${
+                    existingProduct.name
+                  }</p>
+                  <p style="margin: 5px 0;"><strong>Manufacturer:</strong> ${
+                    existingProduct.manufacturer || "N/A"
+                  }</p>
+                  <p style="margin: 5px 0;"><strong>Supplier:</strong> ${
+                    existingProduct.supplier
+                  }</p>
                 </div>
                 
                 <div style="background: #e8f4fd; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
                   <h4 style="margin: 0 0 10px 0; color: #2c3e50;">📊 Current Stock Details</h4>
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                     <div>
-                      <p style="margin: 5px 0;"><strong>Current Stock:</strong> ${existingProduct.stock}</p>
-                      <p style="margin: 5px 0;"><strong>Shelf Stock:</strong> ${existingProduct.shelfStock || 0}</p>
-                      <p style="margin: 5px 0;"><strong>Min Stock:</strong> ${existingProduct.minStock}</p>
+                      <p style="margin: 5px 0;"><strong>Current Stock:</strong> ${
+                        existingProduct.stock
+                      }</p>
+                      <p style="margin: 5px 0;"><strong>Shelf Stock:</strong> ${
+                        existingProduct.shelfStock || 0
+                      }</p>
+                      <p style="margin: 5px 0;"><strong>Min Stock:</strong> ${
+                        existingProduct.minStock
+                      }</p>
                     </div>
                     <div>
-                      <p style="margin: 5px 0;"><strong>Units:</strong> ${existingProduct.units || "pieces"}</p>
-                      <p style="margin: 5px 0;"><strong>Per Pack Unit:</strong> ${existingProduct.unitsPerPack || 1}</p>
+                      <p style="margin: 5px 0;"><strong>Units:</strong> ${
+                        existingProduct.units || "pieces"
+                      }</p>
+                      <p style="margin: 5px 0;"><strong>Per Pack Unit:</strong> ${
+                        existingProduct.unitsPerPack || 1
+                      }</p>
                       <p style="margin: 5px 0;"><strong>Price:</strong> #{existingProduct.price}</p>
                     </div>
                   </div>
@@ -663,7 +779,9 @@ const InventoryManagement: React.FC = () => {
                 <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107;">
                   <h4 style="margin: 0 0 10px 0; color: #856404;">➕ Add Stock</h4>
                   <p style="margin: 5px 0; color: #856404;">Enter the amount of stock to add to this product:</p>
-                  <input type="number" id="stockToAdd" class="swal2-input" placeholder="Enter stock to add" min="1" value="${formData.stock}" style="margin-top: 10px;">
+                  <input type="number" id="stockToAdd" class="swal2-input" placeholder="Enter stock to add" min="1" value="${
+                    formData.stock
+                  }" style="margin-top: 10px;">
                 </div>
               </div>
             `,
@@ -675,14 +793,16 @@ const InventoryManagement: React.FC = () => {
             cancelButtonColor: "#d33",
             width: "500px",
             preConfirm: () => {
-              const stockToAdd = document.getElementById('stockToAdd') as HTMLInputElement;
+              const stockToAdd = document.getElementById(
+                "stockToAdd"
+              ) as HTMLInputElement;
               const stockValue = parseInt(stockToAdd.value);
               if (!stockValue || stockValue <= 0) {
-                Swal.showValidationMessage('Please enter a valid stock amount');
+                Swal.showValidationMessage("Please enter a valid stock amount");
                 return false;
               }
               return stockValue;
-            }
+            },
           });
 
           if (stockResult.isConfirmed) {
@@ -1083,8 +1203,11 @@ const InventoryManagement: React.FC = () => {
           Object.entries(submitData)
             .filter(
               ([key, value]) =>
-                value !== undefined && value !== null && value !== "" ||
-                key === "unitPrice" || key === "units" || key === "shelfStock" || key === "unitsPerPack" // Always include unitPrice, units, shelfStock, and unitsPerPack
+                (value !== undefined && value !== null && value !== "") ||
+                key === "unitPrice" ||
+                key === "units" ||
+                key === "shelfStock" ||
+                key === "unitsPerPack" // Always include unitPrice, units, shelfStock, and unitsPerPack
             )
             .map(([key, value]) => {
               // Convert numeric fields to numbers
@@ -1159,8 +1282,14 @@ const InventoryManagement: React.FC = () => {
         );
 
         console.log("Final clean submit data:", cleanSubmitData);
-        console.log("Manager InventoryManagement - unitPrice:", cleanSubmitData.unitPrice);
-        console.log("Manager InventoryManagement - units:", cleanSubmitData.units);
+        console.log(
+          "Manager InventoryManagement - unitPrice:",
+          cleanSubmitData.unitPrice
+        );
+        console.log(
+          "Manager InventoryManagement - units:",
+          cleanSubmitData.units
+        );
 
         // Log data types for debugging
         console.log("Data types being sent:");
@@ -1180,11 +1309,13 @@ const InventoryManagement: React.FC = () => {
       // Refresh products after add/edit (fetch all products)
       const data = await apiEndpoints.getInventory();
       setProducts(data.map(addStatus));
-      
+
       // Refresh branches and set correct branch filter
       await fetchBranches();
       if (user?.branchId && branches.length > 0) {
-        const managerBranch = branches.find(branch => branch._id === user.branchId);
+        const managerBranch = branches.find(
+          (branch) => branch._id === user.branchId
+        );
         if (managerBranch) {
           setBranchFilter(managerBranch.name);
         }
@@ -1201,74 +1332,168 @@ const InventoryManagement: React.FC = () => {
     }
   };
 
-  const handleEdit = (product: Product) => {
-    setEditingProduct(product);
-    let expiryDate = product.expiryDate;
-    if (expiryDate && expiryDate.length > 10) {
-      expiryDate = new Date(expiryDate).toISOString().slice(0, 10);
-    }
-
-    // Populate form with all available fields
-    setFormData({
-      id: product.id,
-      name: product.name,
-      category: "", // Set empty category since we removed it from UI
-      stock: product.stock,
-      minStock: product.minStock,
-      price: product.price,
-      unitPrice: product.unitPrice || 0,
-      units: product.units || "pieces",
-      shelfStock: product.shelfStock || 0,
-      unitsPerPack: product.unitsPerPack || 1,
-      supplier: product.supplier,
-      supplierId: product.supplierId || "", // Ensure supplierId is populated
-      expiryDate: expiryDate,
-      // New fields
-      store: product.store || "",
-      manufacturer: product.manufacturer || "",
-      composition: product.composition || "",
-      series: product.series || "",
-      reservedQuantity: product.reservedQuantity || 0,
-      purchasePriceExclVAT: product.purchasePriceExclVAT || 0,
-      vat: product.vat || 0,
-      retailPriceVATIncluded:
-        product.retailPriceVATIncluded || product.price || 0,
-    });
-
-    setSupplierSearch(product.supplier);
-    setProductSearch(product.name);
-    setShowSupplierDropdown(false);
-    setShowProductDropdown(false);
-    setShowModal(true);
+  // Stock-taking functions
+  const handleStockTakingChange = (
+    productId: string,
+    field: string,
+    value: any
+  ) => {
+    setStockTakingData((prev) => ({
+      ...prev,
+      [productId]: {
+        ...prev[productId],
+        [field]: value,
+      },
+    }));
   };
 
-  const handleDelete = async (id: string) => {
-    const result = await Swal.fire({
-      title: "Are you sure?",
-      text: "You won't be able to revert this!",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#3085d6",
-      cancelButtonColor: "#d33",
-      confirmButtonText: "Yes, delete it!",
-    });
-    if (result.isConfirmed) {
-      try {
-        setIsLoading(true);
-        await apiEndpoints.deleteInventory(id);
-        setProducts((prev) =>
-          prev.filter((product) => product.id !== id).map(addStatus)
-        );
-        Swal.fire("Deleted!", "Product has been deleted.", "success");
-      } catch (err) {
-        Swal.fire(
-          "Error",
-          "Error deleting product: " + (err as Error).message,
-          "error"
-        );
-      } finally {
-        setIsLoading(false);
+  const handleStockTakingSubmit = async () => {
+    setIsSubmittingStockTaking(true);
+    try {
+      // Only get products that have been updated (different from current stock or have notes/status changes)
+      const updatedProducts = filteredProducts.filter((product) => {
+        const stockData = stockTakingData[product.id];
+        if (!stockData) return false;
+
+        // Check if actual stock is different from current stock
+        const stockChanged =
+          stockData.actualStock !== undefined &&
+          stockData.actualStock !== product.stock;
+
+        // Check if status is not default (IN_STOCK)
+        const statusChanged =
+          stockData.status && stockData.status !== "IN_STOCK";
+
+        // Check if notes are provided
+        const hasNotes = stockData.notes && stockData.notes.trim() !== "";
+
+        return stockChanged || statusChanged || hasNotes;
+      });
+
+      if (updatedProducts.length === 0) {
+        Swal.fire({
+          title: "No Changes",
+          text: "No products have been updated. Please make changes before saving.",
+          icon: "info",
+          confirmButtonText: "OK",
+        });
+        setIsSubmittingStockTaking(false);
+        return;
       }
+
+      // Create records only for updated products
+      const stockTakingRecords = updatedProducts.map((product) => {
+        const data = stockTakingData[product.id];
+        return {
+          productId: product.id,
+          actualStock: data.actualStock,
+          status: data.status,
+          notes: data.notes || "",
+          recordedBy: user?.id,
+          recordedAt: new Date().toISOString(),
+          branchId: user?.branchId,
+        };
+      });
+
+      // Batch requests if more than 50 products
+      const batchSize = 50;
+      const batches = [];
+      for (let i = 0; i < stockTakingRecords.length; i += batchSize) {
+        batches.push(stockTakingRecords.slice(i, i + batchSize));
+      }
+
+      // Show progress dialog
+      let completedBatches = 0;
+      const totalBatches = batches.length;
+
+      Swal.fire({
+        title: "Saving Stock Taking...",
+        html: `Processing batch ${completedBatches + 1} of ${totalBatches}<br/>
+               <div class="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+                 <div class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+               </div>`,
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        },
+      });
+
+      // Process each batch
+      for (let i = 0; i < batches.length; i++) {
+        const batch = batches[i];
+
+        // Update progress
+        const progress = ((i + 1) / totalBatches) * 100;
+        Swal.update({
+          html: `Processing batch ${i + 1} of ${totalBatches}<br/>
+                 <div class="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+                   <div class="bg-blue-600 h-2.5 rounded-full" style="width: ${progress}%"></div>
+                 </div>`,
+        });
+
+        const response = await fetch(`${VITE_BASE_URL}/stock-taking`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+          body: JSON.stringify({ records: batch }),
+        });
+
+        if (!response.ok) {
+          throw new Error(
+            `Failed to save batch ${i + 1}: ${response.statusText}`
+          );
+        }
+
+        completedBatches++;
+      }
+
+      // Update product stock based on actual stock recorded
+      for (const record of stockTakingRecords) {
+        if (record.status === "IN_STOCK" && record.actualStock !== undefined) {
+          // Update the product stock to match actual stock
+          await fetch(`${VITE_BASE_URL}/inventory/${record.productId}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${localStorage.getItem("token")}`,
+            },
+            body: JSON.stringify({ stock: record.actualStock }),
+          });
+        }
+      }
+
+      // Show success message
+      Swal.fire({
+        title: "Success!",
+        html: `Stock-taking records saved successfully!<br/>
+               <div class="text-left mt-3">
+                 <p><strong>Products updated:</strong> ${updatedProducts.length}</p>
+                 <p><strong>Batches processed:</strong> ${totalBatches}</p>
+                 <p><strong>Total records:</strong> ${stockTakingRecords.length}</p>
+               </div>`,
+        icon: "success",
+        confirmButtonText: "Great!",
+      });
+
+      // Refresh products and stock-taking records
+      const data = await apiEndpoints.getInventory();
+      setProducts(data.map(addStatus));
+      await fetchStockTakingRecords();
+
+      // Reset stock-taking data
+      setStockTakingData({});
+      setShowStockTakingModal(false);
+    } catch (error) {
+      Swal.fire({
+        title: "Error",
+        text: "Error saving stock-taking records: " + (error as Error).message,
+        icon: "error",
+        confirmButtonText: "OK",
+      });
+    } finally {
+      setIsSubmittingStockTaking(false);
     }
   };
 
@@ -1326,7 +1551,7 @@ const InventoryManagement: React.FC = () => {
   // };
 
   // Get unique branches for dropdown from fetched branches
-  const availableBranches = branches.map(branch => branch.name);
+  const availableBranches = branches.map((branch) => branch.name);
 
   // Filter products
   const filteredProducts = products.filter((product) => {
@@ -1418,6 +1643,34 @@ const InventoryManagement: React.FC = () => {
         case "status":
           valA = a.status;
           valB = b.status;
+          break;
+        case "stockTaking":
+          // Sort by stock-taking status and date
+          const stockTakingA = stockTakingRecords[a.id];
+          const stockTakingB = stockTakingRecords[b.id];
+
+          if (!stockTakingA && !stockTakingB) return 0;
+          if (!stockTakingA) return 1; // Products without stock-taking go to end
+          if (!stockTakingB) return -1;
+
+          // Sort by status first, then by date
+          const statusOrder: { [key: string]: number } = {
+            IN_STOCK: 0,
+            PART: 1,
+            SHRINKAGE: 2,
+            MISSING: 3,
+          };
+          const statusA = statusOrder[stockTakingA.status] || 4;
+          const statusB = statusOrder[stockTakingB.status] || 4;
+
+          if (statusA !== statusB) {
+            valA = statusA;
+            valB = statusB;
+          } else {
+            // If same status, sort by date (most recent first)
+            valA = new Date(stockTakingB.recordedAt).getTime();
+            valB = new Date(stockTakingA.recordedAt).getTime();
+          }
           break;
         default:
           valA = a.name.toLowerCase();
@@ -1664,6 +1917,13 @@ const InventoryManagement: React.FC = () => {
                   >
                     Add Product
                   </button>
+                  <button
+                    className="px-4 py-2 bg-orange-600 text-white rounded shadow hover:bg-orange-700 flex items-center gap-2"
+                    onClick={() => setShowStockTakingModal(true)}
+                  >
+                    <Package className="h-4 w-4" />
+                    Stock Taking
+                  </button>
                 </>
               )}
               {getActualRole(user) === "sale assistant" && (
@@ -1772,13 +2032,21 @@ const InventoryManagement: React.FC = () => {
                     {sortColumn === "status" &&
                       (sortDirection === "asc" ? "▲" : "▼")}
                   </th>
+                  <th
+                    className="px-4 py-2 text-center cursor-pointer select-none hover:bg-blue-100 transition-colors"
+                    onClick={() => handleSort("stockTaking")}
+                  >
+                    Stock Taking{" "}
+                    {sortColumn === "stockTaking" &&
+                      (sortDirection === "asc" ? "▲" : "▼")}
+                  </th>
                   {/* <th className="px-4 py-2 text-center w-[110px]">Actions</th> */}
                 </tr>
               </thead>
               <tbody>
                 {sortedProducts.length === 0 ? (
                   <tr>
-                    <td colSpan={13} className="text-center py-4">
+                    <td colSpan={14} className="text-center py-4">
                       No products found.
                     </td>
                   </tr>
@@ -1835,6 +2103,50 @@ const InventoryManagement: React.FC = () => {
                           {product.status}
                         </span>
                       </td>
+                      <td className="px-4 py-2 text-center">
+                        {stockTakingRecords[product.id] ? (
+                          <div className="text-xs space-y-1">
+                            <div className="font-semibold text-blue-700">
+                              {stockTakingRecords[product.id].actualStock}
+                            </div>
+                            <div
+                              className={`px-2 py-1 rounded-full text-[10px] font-medium ${
+                                stockTakingRecords[product.id].status ===
+                                "IN_STOCK"
+                                  ? "bg-green-100 text-green-700"
+                                  : stockTakingRecords[product.id].status ===
+                                    "MISSING"
+                                  ? "bg-red-100 text-red-700"
+                                  : stockTakingRecords[product.id].status ===
+                                    "PART"
+                                  ? "bg-yellow-100 text-yellow-700"
+                                  : "bg-orange-100 text-orange-700"
+                              }`}
+                            >
+                              {stockTakingRecords[product.id].status}
+                            </div>
+                            {stockTakingRecords[product.id].notes && (
+                              <div
+                                className="text-gray-500 truncate max-w-[120px]"
+                                title={stockTakingRecords[product.id].notes}
+                              >
+                                {stockTakingRecords[product.id].notes}
+                              </div>
+                            )}
+                            <div className="text-gray-400 text-[9px]">
+                              {new Date(
+                                stockTakingRecords[product.id].recordedAt
+                              ).toLocaleDateString()}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-gray-400 text-xs">
+                            <div className="px-2 py-1 rounded-full bg-gray-100 text-gray-500">
+                              Not recorded
+                            </div>
+                          </div>
+                        )}
+                      </td>
                       {/* <td className="px-4 py-2 text-center flex gap-1 justify-center w-[110px] shrink-0">
                     {getActualRole(user) !== "sale assistant" ? (
                       <>
@@ -1880,7 +2192,7 @@ const InventoryManagement: React.FC = () => {
               }}
             >
               <div
-                className="bg-white rounded-lg p-6 w-full max-w-md mx-4 max-h-screen overflow-y-auto shadow-2xl"
+                className="bg-white rounded-lg p-6 w-full max-w-4xl mx-4 max-h-screen overflow-y-auto shadow-2xl"
                 onClick={(e) => {
                   // Prevent clicks inside the modal from closing it
                   e.stopPropagation();
@@ -1890,215 +2202,222 @@ const InventoryManagement: React.FC = () => {
                   {editingProduct ? "Edit Product" : "Add New Product"}
                 </h3>
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  {/* All Fields */}
-                  {modalFields.map((field) => (
-                    <div key={field.key}>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        {field.label}
-                      </label>
-                      {field.key === "name" ? (
-                        <div className="relative" ref={productDropdownRef}>
-                          <input
-                            type="text"
-                            required={field.isRequired}
-                            value={
-                              formData[field.key as keyof FormProduct] ?? ""
-                            }
-                            onChange={(e) =>
-                              handleProductInputChange(e.target.value)
-                            }
-                            onFocus={handleProductFocus}
-                            onKeyDown={handleProductKeyDown}
-                            placeholder="Search or enter product name..."
-                            className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setShowProductDropdown(!showProductDropdown);
-                              if (!showProductDropdown) {
-                                if (formData.name.trim() === "") {
+                  {/* Two Column Grid Layout */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {modalFields.map((field) => (
+                      <div key={field.key} className="space-y-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {field.label}
+                        </label>
+                        {field.key === "name" ? (
+                          <div className="relative" ref={productDropdownRef}>
+                            <input
+                              type="text"
+                              required={field.isRequired}
+                              value={
+                                formData[field.key as keyof FormProduct] ?? ""
+                              }
+                              onChange={(e) =>
+                                handleProductInputChange(e.target.value)
+                              }
+                              onFocus={handleProductFocus}
+                              onKeyDown={handleProductKeyDown}
+                              placeholder="Search or enter product name..."
+                              className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowProductDropdown(!showProductDropdown);
+                                if (!showProductDropdown) {
+                                  if (formData.name.trim() === "") {
+                                    setProductSearch("");
+                                  } else {
+                                    setProductSearch(formData.name);
+                                  }
+                                } else {
                                   setProductSearch("");
-                                } else {
-                                  setProductSearch(formData.name);
                                 }
-                              } else {
-                                setProductSearch("");
-                              }
-                            }}
-                            className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                            title="Toggle product dropdown"
-                          >
-                            <ChevronDown
-                              className={`w-4 h-4 transition-transform ${
-                                showProductDropdown ? "rotate-180" : ""
-                              }`}
-                            />
-                          </button>
+                              }}
+                              className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                              title="Toggle product dropdown"
+                            >
+                              <ChevronDown
+                                className={`w-4 h-4 transition-transform ${
+                                  showProductDropdown ? "rotate-180" : ""
+                                }`}
+                              />
+                            </button>
 
-                          {/* Product Dropdown */}
-                          {showProductDropdown && (
-                            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-                              {filteredProductsForDropdown.length > 0 ? (
-                                filteredProductsForDropdown.map((product) => (
-                                  <div
-                                    key={product.id}
-                                    className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
-                                    onClick={() => handleProductSelect(product)}
-                                  >
-                                    <div className="font-medium">
-                                      {product.name}
+                            {/* Product Dropdown */}
+                            {showProductDropdown && (
+                              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                                {filteredProductsForDropdown.length > 0 ? (
+                                  filteredProductsForDropdown.map((product) => (
+                                    <div
+                                      key={product.id}
+                                      className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                      onClick={() =>
+                                        handleProductSelect(product)
+                                      }
+                                    >
+                                      <div className="font-medium">
+                                        {product.name}
+                                      </div>
+                                      {product.manufacturer && (
+                                        <div className="text-sm text-gray-500">
+                                          {product.manufacturer}
+                                        </div>
+                                      )}
+                                      {product.composition && (
+                                        <div className="text-sm text-gray-500">
+                                          {product.composition}
+                                        </div>
+                                      )}
                                     </div>
-                                    {product.manufacturer && (
-                                      <div className="text-sm text-gray-500">
-                                        {product.manufacturer}
-                                      </div>
-                                    )}
-                                    {product.composition && (
-                                      <div className="text-sm text-gray-500">
-                                        {product.composition}
-                                      </div>
-                                    )}
-                                  </div>
-                                ))
-                              ) : (
-                                <div className="px-3 py-2 text-gray-500">
-                                  {productSearch
-                                    ? "No products found"
-                                    : "Type to search products"}
-                                </div>
-                              )}
-                              {productSearch &&
-                                productSearch.trim() !== formData.name && (
-                                  <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
-                                    Press Enter to add "{productSearch}" as new
-                                    product
+                                  ))
+                                ) : (
+                                  <div className="px-3 py-2 text-gray-500">
+                                    {productSearch
+                                      ? "No products found"
+                                      : "Type to search products"}
                                   </div>
                                 )}
-                              {!productSearch && products.length > 0 && (
-                                <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
-                                  {products.length} products available
-                                </div>
-                              )}
-                              {products.length === 0 && (
-                                <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
-                                  No products in system. Type to add new
-                                  product.
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ) : field.key === "supplier" ? (
-                        <div className="relative" ref={supplierDropdownRef}>
+                                {productSearch &&
+                                  productSearch.trim() !== formData.name && (
+                                    <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                                      Press Enter to add "{productSearch}" as
+                                      new product
+                                    </div>
+                                  )}
+                                {!productSearch && products.length > 0 && (
+                                  <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                                    {products.length} products available
+                                  </div>
+                                )}
+                                {products.length === 0 && (
+                                  <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                                    No products in system. Type to add new
+                                    product.
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ) : field.key === "supplier" ? (
+                          <div className="relative" ref={supplierDropdownRef}>
+                            <input
+                              type="text"
+                              required={field.isRequired}
+                              value={
+                                formData[field.key as keyof FormProduct] ?? ""
+                              }
+                              onChange={(e) =>
+                                handleSupplierInputChange(e.target.value)
+                              }
+                              onFocus={handleSupplierFocus}
+                              onKeyDown={handleSupplierKeyDown}
+                              placeholder="Search or enter supplier name..."
+                              className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowSupplierDropdown(!showSupplierDropdown);
+                                if (!showSupplierDropdown) {
+                                  if (formData.supplier.trim() === "") {
+                                    setSupplierSearch("");
+                                  } else {
+                                    setSupplierSearch(formData.supplier);
+                                  }
+                                } else {
+                                  setSupplierSearch("");
+                                }
+                              }}
+                              className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                              title="Toggle supplier dropdown"
+                            >
+                              <ChevronDown
+                                className={`w-4 h-4 transition-transform ${
+                                  showSupplierDropdown ? "rotate-180" : ""
+                                }`}
+                              />
+                            </button>
+
+                            {/* Supplier Dropdown */}
+                            {showSupplierDropdown && (
+                              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                                {filteredSuppliers.length > 0 ? (
+                                  filteredSuppliers.map((supplier) => (
+                                    <div
+                                      key={supplier.id}
+                                      className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                      onClick={() =>
+                                        handleSupplierSelect(supplier)
+                                      }
+                                    >
+                                      <div className="font-medium">
+                                        {supplier.name}
+                                      </div>
+                                      {supplier.company && (
+                                        <div className="text-sm text-gray-500">
+                                          {supplier.company}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div className="px-3 py-2 text-gray-500">
+                                    {supplierSearch
+                                      ? "No suppliers found"
+                                      : "Type to search suppliers"}
+                                  </div>
+                                )}
+                                {supplierSearch &&
+                                  supplierSearch.trim() !==
+                                    formData.supplier && (
+                                    <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                                      Press Enter to add "{supplierSearch}" as
+                                      new supplier
+                                    </div>
+                                  )}
+                                {!supplierSearch && suppliers.length > 0 && (
+                                  <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                                    {suppliers.length} suppliers available
+                                  </div>
+                                )}
+                                {suppliers.length === 0 && (
+                                  <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
+                                    No suppliers in system. Type to add new
+                                    supplier.
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
                           <input
-                            type="text"
+                            type={field.inputType}
                             required={field.isRequired}
                             value={
                               formData[field.key as keyof FormProduct] ?? ""
                             }
-                            onChange={(e) =>
-                              handleSupplierInputChange(e.target.value)
-                            }
-                            onFocus={handleSupplierFocus}
-                            onKeyDown={handleSupplierKeyDown}
-                            placeholder="Search or enter supplier name..."
-                            className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setShowSupplierDropdown(!showSupplierDropdown);
-                              if (!showSupplierDropdown) {
-                                if (formData.supplier.trim() === "") {
-                                  setSupplierSearch("");
-                                } else {
-                                  setSupplierSearch(formData.supplier);
-                                }
-                              } else {
-                                setSupplierSearch("");
-                              }
+                            onChange={(e) => {
+                              const value =
+                                field.inputType === "number"
+                                  ? Number(e.target.value)
+                                  : e.target.value;
+                              setFormData({
+                                ...formData,
+                                [field.key]: value,
+                              });
                             }}
-                            className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                            title="Toggle supplier dropdown"
-                          >
-                            <ChevronDown
-                              className={`w-4 h-4 transition-transform ${
-                                showSupplierDropdown ? "rotate-180" : ""
-                              }`}
-                            />
-                          </button>
-
-                          {/* Supplier Dropdown */}
-                          {showSupplierDropdown && (
-                            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-                              {filteredSuppliers.length > 0 ? (
-                                filteredSuppliers.map((supplier) => (
-                                  <div
-                                    key={supplier.id}
-                                    className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
-                                    onClick={() =>
-                                      handleSupplierSelect(supplier)
-                                    }
-                                  >
-                                    <div className="font-medium">
-                                      {supplier.name}
-                                    </div>
-                                    {supplier.company && (
-                                      <div className="text-sm text-gray-500">
-                                        {supplier.company}
-                                      </div>
-                                    )}
-                                  </div>
-                                ))
-                              ) : (
-                                <div className="px-3 py-2 text-gray-500">
-                                  {supplierSearch
-                                    ? "No suppliers found"
-                                    : "Type to search suppliers"}
-                                </div>
-                              )}
-                              {supplierSearch &&
-                                supplierSearch.trim() !== formData.supplier && (
-                                  <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
-                                    Press Enter to add "{supplierSearch}" as new
-                                    supplier
-                                  </div>
-                                )}
-                              {!supplierSearch && suppliers.length > 0 && (
-                                <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
-                                  {suppliers.length} suppliers available
-                                </div>
-                              )}
-                              {suppliers.length === 0 && (
-                                <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
-                                  No suppliers in system. Type to add new
-                                  supplier.
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <input
-                          type={field.inputType}
-                          required={field.isRequired}
-                          value={formData[field.key as keyof FormProduct] ?? ""}
-                          onChange={(e) => {
-                            const value =
-                              field.inputType === "number"
-                                ? Number(e.target.value)
-                                : e.target.value;
-                            setFormData({
-                              ...formData,
-                              [field.key]: value,
-                            });
-                          }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      )}
-                    </div>
-                  ))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
                   <div className="flex justify-end space-x-2 pt-2">
                     <button
                       type="button"
@@ -2142,6 +2461,166 @@ const InventoryManagement: React.FC = () => {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {/* Stock-taking Modal */}
+          {showStockTakingModal && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 w-full max-w-6xl mx-4 max-h-screen overflow-y-auto shadow-2xl">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold text-blue-700">
+                    Stock Taking
+                  </h3>
+                  <button
+                    onClick={() => setShowStockTakingModal(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <XCircle className="h-6 w-6" />
+                  </button>
+                </div>
+
+                <div className="mb-4">
+                  <p className="text-gray-600">
+                    Record actual stock quantities and discrepancies for each
+                    product.
+                  </p>
+                </div>
+
+                {/* Action Buttons - Moved to Top */}
+                <div className="flex justify-end space-x-2 mb-4 pb-4 border-b border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => setShowStockTakingModal(false)}
+                    className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleStockTakingSubmit}
+                    disabled={isSubmittingStockTaking}
+                    className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {isSubmittingStockTaking ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4" />
+                        Save Stock Taking
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="min-w-full bg-white border border-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Product
+                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Current Stock
+                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actual Stock
+                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Notes
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {filteredProducts.map((product) => (
+                        <tr key={product.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-2">
+                            <div>
+                              <div className="font-medium text-gray-900">
+                                {product.name}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {product.manufacturer}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-2 text-sm text-gray-900">
+                            {product.stock}
+                          </td>
+                          <td className="px-4 py-2">
+                            <input
+                              type="number"
+                              min="0"
+                              value={
+                                stockTakingData[product.id]?.actualStock !==
+                                undefined
+                                  ? stockTakingData[product.id].actualStock
+                                  : stockTakingRecords[product.id]
+                                      ?.actualStock || product.stock
+                              }
+                              onChange={(e) =>
+                                handleStockTakingChange(
+                                  product.id,
+                                  "actualStock",
+                                  parseInt(e.target.value) || 0
+                                )
+                              }
+                              className="w-20 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </td>
+                          <td className="px-4 py-2">
+                            <select
+                              value={
+                                stockTakingData[product.id]?.status ||
+                                stockTakingRecords[product.id]?.status ||
+                                "IN_STOCK"
+                              }
+                              onChange={(e) =>
+                                handleStockTakingChange(
+                                  product.id,
+                                  "status",
+                                  e.target.value
+                                )
+                              }
+                              className="px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="IN_STOCK">IN_STOCK</option>
+                              <option value="MISSING">MISSING</option>
+                              <option value="PART">PART</option>
+                              <option value="SHRINKAGE">SHRINKAGE</option>
+                            </select>
+                          </td>
+                          <td className="px-4 py-2">
+                            <input
+                              type="text"
+                              placeholder="Notes (optional)"
+                              value={
+                                stockTakingData[product.id]?.notes !== undefined
+                                  ? stockTakingData[product.id].notes || ""
+                                  : stockTakingRecords[product.id]?.notes || ""
+                              }
+                              onChange={(e) =>
+                                handleStockTakingChange(
+                                  product.id,
+                                  "notes",
+                                  e.target.value
+                                )
+                              }
+                              className="w-32 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
