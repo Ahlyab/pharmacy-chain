@@ -29,6 +29,105 @@ export const generateReportFilename = (prefix: string, extension: string = 'xlsx
   return `${prefix}-${date}.${extension}`;
 };
 
+// Transaction report with appended summary section (same sheet)
+export interface TransactionSummary {
+  totalTransactions: number;
+  totalProductsSold: number; // sum of item quantities
+  totalRevenue: number; // sum of transaction totals
+  averageTransactionValue: number;
+  earliestDate?: string;
+  latestDate?: string;
+  statusCounts?: Record<string, number>;
+}
+
+export const generateTransactionReportWithSummary = (
+  data: ExportData[],
+  summary: TransactionSummary,
+  filename: string,
+  headerOrder?: string[]
+) => {
+  // Produce an HTML-based Excel file (.xls) so headers/labels can be bold without extra deps
+  const safeFileName = filename.toLowerCase().endsWith('.xls') ? filename : filename.replace(/\.xlsx$/i, '') + '.xls';
+
+  const inferredHeaders = (data && data.length > 0) ? Object.keys(data[0]) : ['Date', 'Product Name', 'Quantity', 'Price', 'Revenue'];
+  const headers = (headerOrder && headerOrder.length) ? headerOrder : inferredHeaders;
+
+  const escapeHtml = (value: any) => {
+    const str = value == null ? '' : String(value);
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  const tableRows = data.map(row => {
+    const cells = headers.map(h => `<td>${escapeHtml(row[h])}</td>`).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Transactions Export</title>
+  <style>
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
+    thead th { font-weight: bold; }
+    .title { font-size: 16px; font-weight: bold; margin: 8px 0; }
+    .summary-title { font-weight: bold; }
+    .label { font-weight: bold; }
+  </style>
+  <!--[if gte mso 9]><xml>
+  <x:ExcelWorkbook>
+    <x:ExcelWorksheets>
+      <x:ExcelWorksheet>
+        <x:Name>Transactions</x:Name>
+        <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+      </x:ExcelWorksheet>
+    </x:ExcelWorksheets>
+  </x:ExcelWorkbook>
+  </xml><![endif]-->
+  </head>
+<body>
+  <div class="title">Detailed Transaction History</div>
+  <table>
+    <thead>
+      <tr>${headers.map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr>
+    </thead>
+    <tbody>
+      ${tableRows}
+    </tbody>
+  </table>
+
+  <br/>
+  <div class="summary-title">Summary</div>
+  <table>
+    <tbody>
+      <tr><td class="label">Total Transactions</td><td>${escapeHtml(summary.totalTransactions)}</td></tr>
+      <tr><td class="label">Total Products Sold</td><td>${escapeHtml(summary.totalProductsSold)}</td></tr>
+      <tr><td class="label">Total Revenue</td><td>${escapeHtml(summary.totalRevenue)}</td></tr>
+      <tr><td class="label">Average Transaction</td><td>${escapeHtml(summary.averageTransactionValue)}</td></tr>
+    </tbody>
+  </table>
+</body>
+</html>`;
+
+  const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = safeFileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
 const formatCurrency = (num: number): string => {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',

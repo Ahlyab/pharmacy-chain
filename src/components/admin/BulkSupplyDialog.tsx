@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { apiEndpoints } from '../../utils/api';
+import React, { useState, useEffect, useRef } from 'react';
+import { api, apiEndpoints } from '../../utils/api';
 import Swal from 'sweetalert2';
 
 interface Supplier {
@@ -46,6 +46,21 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
   suppliers,
   onSuccess,
 }) => {
+  interface ExistingInventoryProduct {
+    _id: string;
+    name: string;
+    category?: string;
+    manufacturer?: string;
+    composition?: string;
+    units?: string;
+    unitsPerPack?: number;
+    minStock?: number;
+    vat?: number;
+    purchasePriceExclVAT?: number;
+    retailPriceVATIncluded?: number;
+    unitPrice?: number;
+  }
+
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [supplyDate, setSupplyDate] = useState(new Date().toISOString().split('T')[0]);
   const [products, setProducts] = useState<SupplyProduct[]>([]);
@@ -53,6 +68,10 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
+  const [allProducts, setAllProducts] = useState<ExistingInventoryProduct[]>([]);
+  const [showProductSuggestions, setShowProductSuggestions] = useState(false);
+  const productNameInputRef = useRef<HTMLInputElement>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
   const [newProduct, setNewProduct] = useState<Partial<SupplyProduct>>({
     name: '',
     quantity: 1,
@@ -92,8 +111,48 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
         purchasePriceExclVAT: 0,
         retailPriceVATIncluded: 0,
       });
+      // Fetch existing inventory to power autocomplete
+      (async () => {
+        try {
+          const data = await apiEndpoints.getInventory();
+          // Normalize to minimal fields used in prefill
+          const mapped: ExistingInventoryProduct[] = (data || []).map((p: any) => ({
+            _id: p._id || p.id,
+            name: p.name || '',
+            category: p.category || '',
+            manufacturer: p.manufacturer || '',
+            composition: p.composition || '',
+            units: p.units || 'pieces',
+            unitsPerPack: p.unitsPerPack || 1,
+            minStock: p.minStock ?? 10,
+            vat: p.vat ?? 0,
+            purchasePriceExclVAT: p.purchasePriceExclVAT ?? p.unitPrice ?? 0,
+            retailPriceVATIncluded: p.retailPriceVATIncluded ?? p.unitPrice ?? 0,
+            unitPrice: p.unitPrice ?? 0,
+          }));
+          setAllProducts(mapped);
+        } catch (err) {
+          console.error('Error fetching inventory for autocomplete:', err);
+        }
+      })();
     }
   }, [isOpen]);
+
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (
+        suggestionsRef.current &&
+        !suggestionsRef.current.contains(e.target as Node) &&
+        productNameInputRef.current &&
+        !productNameInputRef.current.contains(e.target as Node)
+      ) {
+        setShowProductSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const calculateTotalPrice = (product: Partial<SupplyProduct>) => {
     const quantity = product.quantity || 0;
@@ -233,7 +292,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
         totalAmount: calculateGrandTotal(),
       };
 
-      await apiEndpoints.post('/api/supplier/bulk-supply', bulkSupplyData);
+      await api.post('/api/supplier/bulk-supply', bulkSupplyData);
 
       // Upload invoice file if provided
       if (invoiceFile) {
@@ -243,7 +302,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
         formData.append('deliveryDate', supplyDate);
         formData.append('invoiceNumber', invoiceNumber);
         
-        await apiEndpoints.upload('/api/supplier/invoice-upload', formData);
+        await api.upload('/api/supplier/invoice-upload', formData);
       }
 
       Swal.fire({
@@ -365,17 +424,63 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
           <div className="bg-gray-50 p-4 rounded-lg mb-6">
             <h4 className="text-lg font-semibold mb-4">Add Product</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div>
+              <div className="relative">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Product Name *
                 </label>
                 <input
+                  ref={productNameInputRef}
                   type="text"
                   value={newProduct.name || ''}
-                  onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
-                  placeholder="Enter product name"
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setNewProduct({ ...newProduct, name: value });
+                    setShowProductSuggestions(!!value && value.length >= 1);
+                  }}
+                  onFocus={() => setShowProductSuggestions(!!(newProduct.name && newProduct.name.length >= 1))}
+                  placeholder="Start typing to search existing products"
                   className="border p-2 w-full rounded text-sm"
                 />
+                {showProductSuggestions && (newProduct.name || '').length >= 1 && (
+                  <div ref={suggestionsRef} className="absolute z-20 mt-1 w-full bg-white border rounded shadow max-h-60 overflow-auto">
+                    {allProducts
+                      .filter(p => p.name.toLowerCase().includes((newProduct.name || '').toLowerCase()))
+                      .slice(0, 10)
+                      .map(p => (
+                        <button
+                          key={p._id}
+                          type="button"
+                          className="w-full text-left px-3 py-2 hover:bg-gray-100 text-sm"
+                          onClick={() => {
+                            // Prefill fields from selected product
+                            setNewProduct({
+                              ...newProduct,
+                              name: p.name,
+                              category: p.category || '',
+                              manufacturer: p.manufacturer || '',
+                              composition: p.composition || '',
+                              units: p.units || 'pieces',
+                              unitsPerPack: p.unitsPerPack || 1,
+                              minStock: typeof p.minStock === 'number' ? p.minStock : 10,
+                              vat: typeof p.vat === 'number' ? p.vat : 0,
+                              purchasePriceExclVAT: typeof p.purchasePriceExclVAT === 'number' ? p.purchasePriceExclVAT : (p.unitPrice || 0),
+                              retailPriceVATIncluded: typeof p.retailPriceVATIncluded === 'number' ? p.retailPriceVATIncluded : (p.unitPrice || 0),
+                              unitPrice: typeof p.unitPrice === 'number' ? p.unitPrice : 0,
+                            });
+                            setShowProductSuggestions(false);
+                          }}
+                        >
+                          <div className="font-medium">{p.name}</div>
+                          <div className="text-xs text-gray-500">
+                            {(p.manufacturer || p.category) ? `${p.manufacturer || ''}${p.manufacturer && p.category ? ' • ' : ''}${p.category || ''}` : 'Existing product'}
+                          </div>
+                        </button>
+                      ))}
+                    {allProducts.filter(p => p.name.toLowerCase().includes((newProduct.name || '').toLowerCase())).length === 0 && (
+                      <div className="px-3 py-2 text-sm text-gray-500">No matches found</div>
+                    )}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">

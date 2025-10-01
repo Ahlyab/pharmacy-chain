@@ -4,12 +4,12 @@ import GreenProgressBar from "../GreenProgressBar";
 import { apiEndpoints } from "../../utils/api";
 import { useAuth } from "../../contexts/AuthContext";
 import {
-  generateExcelReport,
-  downloadExcel,
-  generateReportFilename,
+  generateTransactionReportWithSummary,
   ExportData,
-  ExportFilters,
+  TransactionSummary,
 } from "../../utils/exportUtils";
+
+import Swal from "sweetalert2";
 
 interface Transaction {
   id: string;
@@ -312,32 +312,98 @@ const TransactionHistory: React.FC = () => {
     try {
       // Check if we have transactions to export
       if (!sortedTransactions || sortedTransactions.length === 0) {
-        alert('No transactions to export');
+        await Swal.fire({
+          icon: 'info',
+          title: 'No transactions to export',
+          text: 'Try adjusting your filters and try again.',
+          confirmButtonText: 'OK',
+        });
         return;
       }
 
-      const exportData: ExportData[] = sortedTransactions.map(transaction => ({
-        'Transaction ID': transaction.id,
-        'Date & Time': new Date(transaction.date).toLocaleString(),
-        'Customer': transaction.customer || 'N/A',
-        'Branch': transaction.branchName || 'N/A',
-        'Items Count': transaction.items.length,
-        'Items': transaction.items.map(item => `${item.name} (Qty: ${item.quantity})`).join(', '),
-        'Total Amount': `#${transaction.total.toFixed(2)}`,
-        'Payment Method': transaction.paymentMethod,
-        'Status': transaction.status,
-      }));
+      // Build detailed rows: one row per transaction item (preserving order)
+      // Include requested columns first (Date, Product Name, Quantity, Price, Revenue) and then other available fields
+      const exportData: ExportData[] = [];
+      sortedTransactions.forEach((transaction) => {
+        const hasItems = Array.isArray(transaction.items) && transaction.items.length > 0;
+        if (hasItems) {
+          transaction.items.forEach((item) => {
+            exportData.push({
+              'Date': formatDateTime(transaction.date),
+              'Product Name': item.name,
+              'Quantity': item.quantity,
+              'Price': item.price,
+              'Revenue': Number((item.quantity * item.price).toFixed(2)),
+              'Transaction ID': transaction.id,
+              'Customer': transaction.customer || 'N/A',
+              'Branch': transaction.branchName || 'N/A',
+              'Payment Method': transaction.paymentMethod,
+              'Status': transaction.status,
+            });
+          });
+        } else {
+          // Include transactions even if no items
+          exportData.push({
+            'Date': formatDateTime(transaction.date),
+            'Product Name': 'N/A',
+            'Quantity': 0,
+            'Price': 0,
+            'Revenue': 0,
+            'Transaction ID': transaction.id,
+            'Customer': transaction.customer || 'N/A',
+            'Branch': transaction.branchName || 'N/A',
+            'Payment Method': transaction.paymentMethod,
+            'Status': transaction.status,
+          });
+        }
+      });
 
-      const filename = `transaction_history_report_${new Date().toISOString().split('T')[0]}.xlsx`;
-      
-      // Use the correct function signature
-      generateExcelReport(exportData, filename);
+      // Compute summary metrics
+      const totalTransactions = sortedTransactions.length;
+      const totalProductsSold = sortedTransactions.reduce((sum, t) => {
+        return sum + (t.items?.reduce((s, i) => s + (i.quantity || 0), 0) || 0);
+      }, 0);
+      const totalRevenueAll = sortedTransactions.reduce((sum, t) => sum + (t.total || 0), 0);
+      const averageTransactionValue = totalRevenueAll / Math.max(totalTransactions, 1);
+      const dates = sortedTransactions.map(t => new Date(t.date).getTime());
+      const earliestDate = dates.length ? new Date(Math.min(...dates)).toLocaleString() : undefined;
+      const latestDate = dates.length ? new Date(Math.max(...dates)).toLocaleString() : undefined;
+      const statusCounts = sortedTransactions.reduce<Record<string, number>>((acc, t) => {
+        acc[t.status] = (acc[t.status] || 0) + 1;
+        return acc;
+      }, {});
+
+      const summary: TransactionSummary = {
+        totalTransactions,
+        totalProductsSold,
+        totalRevenue: Number(totalRevenueAll.toFixed(2)),
+        averageTransactionValue: Number(averageTransactionValue.toFixed(2)),
+        earliestDate,
+        latestDate,
+        statusCounts,
+      };
+
+      const filename = `transaction_history_report_${new Date().toISOString().split('T')[0]}.xls`;
+
+      // Generate report with detailed history and appended summary. Provide header order to prioritize the requested fields.
+      const headerOrder = ['Date', 'Product Name', 'Quantity', 'Price', 'Revenue', 'Transaction ID', 'Customer', 'Branch', 'Payment Method', 'Status'];
+      await generateTransactionReportWithSummary(exportData, summary, filename, headerOrder);
 
       // Show success message
-      alert('Excel report has been downloaded successfully!');
+      await Swal.fire({
+        icon: 'success',
+        title: 'Export complete',
+        text: 'Excel report has been downloaded successfully!',
+        confirmButtonText: 'Great',
+      });
     } catch (error: any) {
       console.error('Export error:', error);
-      alert(`Error generating Excel: ${error.message}`);
+      await Swal.fire({
+        icon: 'error',
+        title: 'Export failed',
+        text: error?.message || 'Error generating Excel',
+        confirmButtonText: 'OK',
+      });
     } finally {
       setExportLoading(false);
     }
@@ -386,7 +452,7 @@ const TransactionHistory: React.FC = () => {
             className="w-full sm:w-auto bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center sm:justify-start space-x-2"
           >
             <FileSpreadsheet className="h-4 w-4" />
-            <span>{exportLoading ? "Exporting..." : "Export Excel"}</span>
+            <span>{exportLoading ? "Exporting..." : "Export Excel / Download"}</span>
           </button>
         </div>
       </div>
