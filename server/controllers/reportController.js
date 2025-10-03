@@ -20,12 +20,17 @@ const getRevenueProfitReport = async (req, res) => {
       ? includeAllBranches === 'true' 
       : !!includeAllBranches;
 
-    // Build date filter
+    // Build date filter - inclusive of entire start and end days
     const dateFilter = {};
+    let startOfDay, endOfDay;
     if (startDate && endDate) {
+      startOfDay = new Date(startDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      endOfDay = new Date(endDate);
+      endOfDay.setHours(23, 59, 59, 999);
       dateFilter.date = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
+        $gte: startOfDay,
+        $lte: endOfDay
       };
     }
 
@@ -229,9 +234,13 @@ const getStockExpirationReport = async (req, res) => {
     // Build date filter for expiry dates
     const dateFilter = {};
     if (startDate && endDate) {
+      const startOfDay = new Date(startDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(endDate);
+      endOfDay.setHours(23, 59, 59, 999);
       dateFilter.expiryDate = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
+        $gte: startOfDay,
+        $lte: endOfDay
       };
     }
 
@@ -379,10 +388,15 @@ const getStockTurnoverReport = async (req, res) => {
 
     // Build date filter for transaction dates
     const dateFilter = {};
+    let startOfDay, endOfDay;
     if (startDate && endDate) {
+      startOfDay = new Date(startDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      endOfDay = new Date(endDate);
+      endOfDay.setHours(23, 59, 59, 999);
       dateFilter.date = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
+        $gte: startOfDay,
+        $lte: endOfDay
       };
     }
 
@@ -491,11 +505,9 @@ const getStockTurnoverReport = async (req, res) => {
 
     // Calculate previous period for trend analysis
     let previousStartDate, previousEndDate;
-    if (startDate && endDate) {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      const diff = end.getTime() - start.getTime();
-      previousEndDate = new Date(start.getTime() - 1);
+    if (startOfDay && endOfDay) {
+      const diff = endOfDay.getTime() - startOfDay.getTime();
+      previousEndDate = new Date(startOfDay.getTime() - 1);
       previousStartDate = new Date(previousEndDate.getTime() - diff);
     }
 

@@ -533,18 +533,19 @@ router.post("/supplier/bulk-supply", authenticate, async (req, res) => {
       }
     }
 
-    // Create delivery record
-    const deliveryData = {
+    // Create delivery records (one entry per product)
+    const deliveryTime = new Date().toLocaleTimeString();
+    const perProductDeliveries = products.map((p) => ({
       date: supplyDate,
-      deliveryTime: new Date().toLocaleTimeString(),
-      products: products.map(p => `${p.name} (${p.quantity} ${p.units})`).join(', '),
-      quantity: products.reduce((total, p) => total + p.quantity, 0),
-      notes: `Bulk supply - Invoice: ${invoiceNumber || 'N/A'}. ${notes || ''}`,
-      totalAmount: totalAmount || products.reduce((total, p) => total + (p.quantity * p.unitPrice), 0),
+      deliveryTime,
+      products: p.name,
+      quantity: p.quantity,
+      notes: `Bulk supply item - Invoice: ${invoiceNumber || 'N/A'}. ${notes || ''}`,
+      totalAmount: (p.quantity * (p.unitPrice || 0)),
       invoiceNumber: invoiceNumber || null,
-    };
+    }));
 
-    supplier.deliveries.push(deliveryData);
+    supplier.deliveries.push(...perProductDeliveries);
     await supplier.save();
 
     // Log bulk supply action

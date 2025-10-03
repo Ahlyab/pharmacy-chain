@@ -186,12 +186,63 @@ const Report: React.FC = () => {
     branchId: '',
     startDate: '',
     endDate: '',
-    period: 'week',
+    groupBy: 'week',
     includeAllBranches: false,
     segment: '',
-    manufacturer: ''
+    manufacturer: '',
+    rangePreset: 'all' as 'all' | 'today' | 'lastWeek' | 'lastMonth'
   });
   const [dateWarning, setDateWarning] = useState('');
+
+  // Quick range preset handler
+  const applyRangePreset = (preset: 'all' | 'today' | 'lastWeek' | 'lastMonth') => {
+    const now = new Date();
+
+    if (preset === 'all') {
+      setFilters(prev => ({ ...prev, rangePreset: preset, startDate: '', endDate: '' }));
+      return;
+    }
+
+    let start: Date;
+    let end: Date;
+
+    if (preset === 'today') {
+      start = new Date(now);
+      end = new Date(now);
+    } else if (preset === 'lastWeek') {
+      // Previous calendar week (Mon-Sun)
+      const day = now.getDay(); // 0=Sun..6=Sat
+      const mondayThisWeekOffset = (day + 6) % 7; // days since Monday
+      const mondayThisWeek = new Date(now);
+      mondayThisWeek.setDate(now.getDate() - mondayThisWeekOffset);
+      mondayThisWeek.setHours(0, 0, 0, 0);
+      start = new Date(mondayThisWeek);
+      start.setDate(mondayThisWeek.getDate() - 7);
+      end = new Date(start);
+      end.setDate(start.getDate() + 6);
+    } else {
+      // Last month: first to last day of previous calendar month
+      const firstOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      start = new Date(firstOfThisMonth);
+      start.setMonth(firstOfThisMonth.getMonth() - 1);
+      end = new Date(firstOfThisMonth);
+      end.setDate(0); // last day of previous month
+    }
+
+    const yyyyMmDd = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+
+    setFilters(prev => ({
+      ...prev,
+      rangePreset: preset,
+      startDate: yyyyMmDd(start),
+      endDate: yyyyMmDd(end)
+    }));
+  };
 
   // Fetch branches for filter dropdown
   useEffect(() => {
@@ -212,16 +263,19 @@ const Report: React.FC = () => {
     fetchBranches();
   }, []);
 
+  // No default date initialization. Fetch will run without dates as overall period grouping.
+
   // Fetch revenue report data
-  const fetchRevenueReportData = async () => {
+  const fetchRevenueReportData = async (overrides?: Partial<typeof filters>) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (filters.branchId) params.append('branchId', filters.branchId);
-      if (filters.startDate) params.append('startDate', filters.startDate);
-      if (filters.endDate) params.append('endDate', filters.endDate);
-      params.append('period', filters.period);
-      params.append('includeAllBranches', filters.includeAllBranches.toString());
+      const effective = { ...filters, ...(overrides || {}) };
+      if (effective.branchId) params.append('branchId', effective.branchId);
+      if (effective.startDate) params.append('startDate', effective.startDate);
+      if (effective.endDate) params.append('endDate', effective.endDate);
+      params.append('period', effective.groupBy);
+      params.append('includeAllBranches', effective.includeAllBranches.toString());
 
       const response = await api.get(`/api/report/revenue-profit?${params.toString()}`);
       console.log('Revenue Report API Response:', response);
@@ -238,15 +292,16 @@ const Report: React.FC = () => {
   };
 
   // Fetch stock expiration report data
-  const fetchStockExpirationData = async () => {
+  const fetchStockExpirationData = async (overrides?: Partial<typeof filters>) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (filters.branchId) params.append('branchId', filters.branchId);
-      if (filters.startDate) params.append('startDate', filters.startDate);
-      if (filters.endDate) params.append('endDate', filters.endDate);
-      params.append('includeAllBranches', filters.includeAllBranches.toString());
-      params.append('period', filters.period);
+      const effective = { ...filters, ...(overrides || {}) };
+      if (effective.branchId) params.append('branchId', effective.branchId);
+      if (effective.startDate) params.append('startDate', effective.startDate);
+      if (effective.endDate) params.append('endDate', effective.endDate);
+      params.append('includeAllBranches', effective.includeAllBranches.toString());
+      params.append('period', effective.groupBy);
 
       const response = await api.get(`/api/report/stock-expiration?${params.toString()}`);
       console.log('Stock Expiration API Response:', response);
@@ -263,17 +318,18 @@ const Report: React.FC = () => {
   };
 
   // Fetch stock turnover report data
-  const fetchStockTurnoverData = async () => {
+  const fetchStockTurnoverData = async (overrides?: Partial<typeof filters>) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (filters.branchId) params.append('branchId', filters.branchId);
-      if (filters.startDate) params.append('startDate', filters.startDate);
-      if (filters.endDate) params.append('endDate', filters.endDate);
-      if (filters.segment) params.append('segment', filters.segment);
-      if (filters.manufacturer) params.append('manufacturer', filters.manufacturer);
-      params.append('includeAllBranches', filters.includeAllBranches.toString());
-      params.append('period', filters.period);
+      const effective = { ...filters, ...(overrides || {}) };
+      if (effective.branchId) params.append('branchId', effective.branchId);
+      if (effective.startDate) params.append('startDate', effective.startDate);
+      if (effective.endDate) params.append('endDate', effective.endDate);
+      if (effective.segment) params.append('segment', effective.segment);
+      if (effective.manufacturer) params.append('manufacturer', effective.manufacturer);
+      params.append('includeAllBranches', effective.includeAllBranches.toString());
+      params.append('period', effective.groupBy);
 
       const response = await api.get(`/api/report/stock-turnover?${params.toString()}`);
       console.log('Stock Turnover API Response:', response);
@@ -291,7 +347,6 @@ const Report: React.FC = () => {
 
   // Fetch data based on active tab
   useEffect(() => {
-    // Only fetch if both dates are set or both are empty
     const bothDatesSet = !!filters.startDate && !!filters.endDate;
     const bothDatesEmpty = !filters.startDate && !filters.endDate;
     if (bothDatesSet || bothDatesEmpty) {
@@ -306,13 +361,29 @@ const Report: React.FC = () => {
     } else {
       setDateWarning('Please select both start and end date to filter by date.');
     }
-  }, [filters, activeTab]);
+  }, [filters.startDate, filters.endDate, filters.groupBy, filters.branchId, filters.includeAllBranches, filters.segment, filters.manufacturer, activeTab]);
 
   const handleFilterChange = (key: string, value: any) => {
     setFilters(prev => ({
       ...prev,
       [key]: value
     }));
+
+    // Immediate fetch when grouping changes
+    if (key === 'groupBy') {
+      const overrides = { groupBy: value } as Partial<typeof filters>;
+      const bothDatesSet = !!filters.startDate && !!filters.endDate;
+      const bothDatesEmpty = !filters.startDate && !filters.endDate;
+      if (bothDatesSet || bothDatesEmpty) {
+        if (activeTab === 'revenue') {
+          fetchRevenueReportData(overrides);
+        } else if (activeTab === 'stock') {
+          fetchStockExpirationData(overrides);
+        } else if (activeTab === 'turnover') {
+          fetchStockTurnoverData(overrides);
+        }
+      }
+    }
   };
 
   const handleDateRangeChange = (startDate: string, endDate: string) => {
@@ -326,6 +397,8 @@ const Report: React.FC = () => {
   const handleTabChange = (tab: 'revenue' | 'stock' | 'turnover') => {
     setActiveTab(tab);
   };
+
+  // Period change does not alter selected dates; it only changes grouping on backend
 
 
   const handleExport = async () => {
@@ -460,17 +533,20 @@ const Report: React.FC = () => {
             </select>
           </div>
 
-          {/* Period Filter - Show for all tabs */}
+          
+
+          {/* Quick Date Ranges */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Period</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Date range</label>
             <select
-              value={filters.period}
-              onChange={(e) => handleFilterChange('period', e.target.value)}
+              value={filters.rangePreset}
+              onChange={(e) => applyRangePreset(e.target.value as any)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="day">Day</option>
-              <option value="week">Week</option>
-              <option value="month">Month</option>
+              <option value="all">All time</option>
+              <option value="today">Today</option>
+              <option value="lastWeek">Last week</option>
+              <option value="lastMonth">Last month</option>
             </select>
           </div>
 
@@ -558,7 +634,7 @@ const Report: React.FC = () => {
 
       {/* Tab Content */}
       {activeTab === 'revenue' ? (
-        <RevenueProfitContent reportData={reportData} period={filters.period} filters={filters} stockExpirationData={stockExpirationData} stockTurnoverData={stockTurnoverData} />
+        <RevenueProfitContent reportData={reportData} period={filters.groupBy} filters={filters} stockExpirationData={stockExpirationData} stockTurnoverData={stockTurnoverData} />
       ) : activeTab === 'stock' ? (
         <StockExpirationContent stockExpirationData={stockExpirationData} filters={filters} reportData={reportData} stockTurnoverData={stockTurnoverData} />
       ) : (
