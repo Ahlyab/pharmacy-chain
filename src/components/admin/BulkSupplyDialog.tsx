@@ -165,10 +165,10 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
   };
 
   const addProduct = () => {
-    if (!newProduct.name || !newProduct.quantity || !newProduct.unitPrice || !newProduct.expiryDate) {
+    if (!newProduct.name || !newProduct.quantity || !newProduct.unitPrice || !newProduct.expiryDate || !newProduct.retailPriceVATIncluded) {
       Swal.fire({
         title: 'Error',
-        text: 'Please fill in all required fields (Name, Quantity, Unit Price, Expiry Date)',
+        text: 'Please fill in all required fields (Name, Quantity, Unit Price, Selling Price, Expiry Date)',
         icon: 'error',
         confirmButtonText: 'OK'
       });
@@ -509,6 +509,19 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Selling Price *
+                </label>
+                <input
+                  type="number"
+                  value={newProduct.retailPriceVATIncluded || ''}
+                  onChange={(e) => setNewProduct({...newProduct, retailPriceVATIncluded: parseFloat(e.target.value) || 0})}
+                  min="0"
+                  step="0.01"
+                  className="border p-2 w-full rounded text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Expiry Date *
                 </label>
                 <input
@@ -593,6 +606,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
                       <th className="border border-gray-300 p-2 text-left">Product</th>
                       <th className="border border-gray-300 p-2 text-left">Quantity</th>
                       <th className="border border-gray-300 p-2 text-left">Unit Price</th>
+                      <th className="border border-gray-300 p-2 text-left">Selling Price</th>
                       <th className="border border-gray-300 p-2 text-left">Total</th>
                       <th className="border border-gray-300 p-2 text-left">Expiry</th>
                       <th className="border border-gray-300 p-2 text-left">Actions</th>
@@ -621,6 +635,16 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
                             type="number"
                             value={product.unitPrice}
                             onChange={(e) => updateProduct(product.id, 'unitPrice', parseFloat(e.target.value) || 0)}
+                            min="0"
+                            step="0.01"
+                            className="border p-1 w-24 rounded text-sm"
+                          />
+                        </td>
+                        <td className="border border-gray-300 p-2">
+                          <input
+                            type="number"
+                            value={product.retailPriceVATIncluded || 0}
+                            onChange={(e) => updateProduct(product.id, 'retailPriceVATIncluded', parseFloat(e.target.value) || 0)}
                             min="0"
                             step="0.01"
                             className="border p-1 w-24 rounded text-sm"
