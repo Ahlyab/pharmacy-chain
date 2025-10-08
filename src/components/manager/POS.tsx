@@ -101,18 +101,27 @@ const POS: React.FC = () => {
     return { ...product, status, id: product._id || product.id };
   };
 
-  // Helper function to calculate total units sold for a product (persisted only; excludes current cart)
+  // Helper function to calculate total units sold for a product (from all transactions)
   const getTotalUnitsSold = (productId: string) => {
     const product = products.find((p) => p._id === productId);
     if (!product) return 0;
 
-    // Only include previously sold units from persistent state
+    // Get previously sold units from persistent state
     const previouslySoldUnits = cumulativeUnitsSold[productId] || 0;
-    return previouslySoldUnits;
+
+    // Calculate total units from current cart items for this product (unit purchases only)
+    let currentCartUnits = 0;
+    cart.forEach((item) => {
+      if (item._id === productId && item.isUnitPurchase) {
+        currentCartUnits += item.quantity;
+      }
+    });
+
+    return previouslySoldUnits + currentCartUnits;
   };
 
-  // Display-only stock: do not subtract current cart or cumulative units
-  const calculateDisplayStock = (productId: string) => {
+  // Helper function to calculate remaining stock after unit sales
+  const calculateRemainingStock = (productId: string) => {
     const product = products.find((p) => p._id === productId);
     if (!product)
       return {
@@ -123,55 +132,27 @@ const POS: React.FC = () => {
       };
 
     const unitsPerPack = product.unitsPerPack || 1;
-    const totalUnits = product.stock * unitsPerPack;
-    const completePacks = product.stock;
-    const shelfUnits =
-      product.shelfStock !== undefined ? product.shelfStock : totalUnits;
-    const remainingUnits = totalUnits % unitsPerPack;
+    const totalUnitsSold = getTotalUnitsSold(productId);
 
-    return {
-      totalUnits,
-      shelfUnits,
-      completePacks,
-      remainingUnits,
-    };
-  };
+    // Calculate remaining units after all unit sales
+    const remainingTotalUnits = product.stock * unitsPerPack - totalUnitsSold;
+    const completePacks = Math.floor(remainingTotalUnits / unitsPerPack);
+    const remainingUnits = remainingTotalUnits % unitsPerPack;
 
-  // Backward-compatible alias used across the UI
-  const calculateRemainingStock = (productId: string) => {
-    return calculateDisplayStock(productId);
-  };
-
-  // Helpers to compute availability considering items already in the cart (for validation only)
-  const getCartCounts = (productId: string) => {
-    let unitsInCart = 0;
-    let packsInCart = 0;
-    cart.forEach((item) => {
-      if (item._id === productId) {
-        if (item.isUnitPurchase) unitsInCart += item.quantity;
-        else packsInCart += item.quantity;
-      }
-    });
-    return { unitsInCart, packsInCart };
-  };
-
-  const availableUnitsForUnitPurchase = (productId: string) => {
-    const product = products.find((p) => p._id === productId);
-    if (!product) return 0;
-    const unitsPerPack = product.unitsPerPack || 1;
+    // Calculate remaining shelf units
+    // After fetchProducts(), product.shelfStock should already be updated
+    // So we don't need to subtract totalUnitsSold again
     const shelfUnits =
       product.shelfStock !== undefined
         ? product.shelfStock
-        : product.stock * unitsPerPack;
-    const { unitsInCart } = getCartCounts(productId);
-    return Math.max(0, shelfUnits - unitsInCart);
-  };
+        : remainingTotalUnits;
 
-  const availablePacksForPackPurchase = (productId: string) => {
-    const product = products.find((p) => p._id === productId);
-    if (!product) return 0;
-    const { packsInCart } = getCartCounts(productId);
-    return Math.max(0, product.stock - packsInCart);
+    return {
+      totalUnits: remainingTotalUnits,
+      shelfUnits: shelfUnits,
+      completePacks: completePacks,
+      remainingUnits: remainingUnits,
+    };
   };
 
   // Helper function to calculate units and packs for a cart item
@@ -282,8 +263,15 @@ const POS: React.FC = () => {
     );
 
     if (isUnitPurchase) {
-      // For unit purchases, limit by shelf availability minus units already in cart
-      const remainingUnits = availableUnitsForUnitPurchase(product._id);
+      // For unit purchases, check against available shelf units
+      const availableUnits =
+        product.shelfStock !== undefined
+          ? product.shelfStock
+          : product.stock * (product.unitsPerPack || 1);
+
+      const totalUnitsSold = getTotalUnitsSold(product._id);
+      const remainingUnits = availableUnits - totalUnitsSold;
+
       if (quantity > remainingUnits) {
         Swal.fire({
           title: "Insufficient Stock",
@@ -294,12 +282,12 @@ const POS: React.FC = () => {
         return;
       }
     } else {
-      // For pack purchases, check available packs minus packs already in cart
-      const remainingPacks = availablePacksForPackPurchase(product._id);
-      if (quantity > remainingPacks) {
+      // For pack purchases, check available complete packs
+      const remainingStock = calculateRemainingStock(product._id);
+      if (quantity > remainingStock.completePacks) {
         Swal.fire({
           title: "Insufficient Stock",
-          text: `Cannot add ${quantity} packs. Only ${remainingPacks} complete packs available.`,
+          text: `Cannot add ${quantity} packs. Only ${remainingStock.completePacks} complete packs available.`,
           icon: "error",
           confirmButtonText: "OK",
         });
@@ -353,12 +341,15 @@ const POS: React.FC = () => {
       const product = products.find((p) => p._id === _id);
       if (product) {
         if (isUnitPurchase) {
-          // For unit purchases, limit by shelf availability minus units in cart excluding this item's current qty
-          const productUnitsAvailable = availableUnitsForUnitPurchase(_id);
-          const currentItemInCart = cart.find(
-            (ci) => ci._id === _id && ci.isUnitPurchase === true
-          );
-          const remainingUnits = productUnitsAvailable + (currentItemInCart?.quantity || 0);
+          // For unit purchases, check against available shelf units
+          const availableUnits =
+            product.shelfStock !== undefined
+              ? product.shelfStock
+              : product.stock * (product.unitsPerPack || 1);
+
+          const totalUnitsSold = getTotalUnitsSold(_id);
+          const remainingUnits = availableUnits - totalUnitsSold;
+
           if (quantity > remainingUnits) {
             Swal.fire({
               title: "Stock Limit Exceeded",
@@ -369,16 +360,12 @@ const POS: React.FC = () => {
             return;
           }
         } else {
-          // For pack purchases, limit by available packs minus packs in cart excluding this item's current qty
-          const productPacksAvailable = availablePacksForPackPurchase(_id);
-          const currentItemInCart = cart.find(
-            (ci) => ci._id === _id && (ci.isUnitPurchase === false || !ci.isUnitPurchase)
-          );
-          const remainingPacks = productPacksAvailable + (currentItemInCart?.quantity || 0);
-          if (quantity > remainingPacks) {
+          // For pack purchases, check available complete packs
+          const remainingStock = calculateRemainingStock(_id);
+          if (quantity > remainingStock.completePacks) {
             Swal.fire({
               title: "Stock Limit Exceeded",
-              text: `Cannot set quantity to ${quantity}. Only ${remainingPacks} complete packs available.`,
+              text: `Cannot set quantity to ${quantity}. Only ${remainingStock.completePacks} complete packs available.`,
               icon: "warning",
               confirmButtonText: "OK",
             });
@@ -603,12 +590,14 @@ const POS: React.FC = () => {
         let newShelfStock = product.shelfStock;
 
         if (product.shelfStock !== undefined) {
-          // Deduct both unit and pack sales (packs converted to units)
-          const unitsDeductedFromPacks = currentTransactionPacks * unitsPerPack;
+          // For shelf stock: deduct unit sales directly
           newShelfStock = Math.max(
             0,
-            product.shelfStock - currentTransactionUnits - unitsDeductedFromPacks
+            product.shelfStock - currentTransactionUnits
           );
+
+          // For pack sales: we don't deduct from shelf stock because packs are taken from warehouse
+          // The shelf stock remains as is (minus any unit sales)
         }
 
         // Debug logging
