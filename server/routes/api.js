@@ -468,7 +468,7 @@ router.get("/supplier/invoice/:invoiceId/download", authenticate, async (req, re
 // Bulk supply processing endpoint
 router.post("/supplier/bulk-supply", authenticate, async (req, res) => {
   try {
-    const { supplierId, supplyDate, products, invoiceNumber, notes, totalAmount } = req.body;
+    const { supplierId, branchId, supplyDate, products, invoiceNumber, notes, totalAmount } = req.body;
     
     if (!supplierId || !supplyDate || !products || !Array.isArray(products) || products.length === 0) {
       return res.status(400).json({ error: "Missing required fields: supplierId, supplyDate, products" });
@@ -478,6 +478,20 @@ router.post("/supplier/bulk-supply", authenticate, async (req, res) => {
     const supplier = await Supplier.findById(supplierId);
     if (!supplier) {
       return res.status(404).json({ error: "Supplier not found" });
+    }
+
+    // Optional: verify branch exists when provided
+    let branchObjectId = undefined;
+    if (branchId) {
+      try {
+        branchObjectId = new mongoose.Types.ObjectId(branchId);
+        const branch = await Branch.findById(branchObjectId);
+        if (!branch) {
+          return res.status(404).json({ error: "Branch not found" });
+        }
+      } catch (e) {
+        return res.status(400).json({ error: "Invalid branchId format" });
+      }
     }
 
     const createdInventory = [];
@@ -499,6 +513,7 @@ router.post("/supplier/bulk-supply", authenticate, async (req, res) => {
           supplier: supplier.name,
           supplierId: supplierId,
           expiryDate: new Date(product.expiryDate),
+          branchId: branchObjectId,
           store: supplier.company || "",
           manufacturer: product.manufacturer || "",
           composition: product.composition || "",
@@ -521,7 +536,8 @@ router.post("/supplier/bulk-supply", authenticate, async (req, res) => {
           unitPrice: product.unitPrice,
           totalPrice: product.quantity * product.unitPrice,
           expiryDate: product.expiryDate,
-          supplyDate: supplyDate
+          supplyDate: supplyDate,
+          branchId: branchObjectId
         });
 
       } catch (error) {
@@ -555,7 +571,8 @@ router.post("/supplier/bulk-supply", authenticate, async (req, res) => {
       totalAmount: totalAmount,
       invoiceNumber: invoiceNumber,
       createdInventoryCount: createdInventory.length,
-      errorsCount: errors.length
+      errorsCount: errors.length,
+      branchId: branchObjectId
     });
 
     res.status(200).json({

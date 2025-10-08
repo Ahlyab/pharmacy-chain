@@ -15,6 +15,11 @@ interface Supplier {
   notes?: string;
 }
 
+interface Branch {
+  _id: string;
+  name: string;
+}
+
 interface SupplyProduct {
   id: string;
   name: string;
@@ -62,6 +67,8 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
   }
 
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('');
   const [supplyDate, setSupplyDate] = useState(new Date().toISOString().split('T')[0]);
   const [products, setProducts] = useState<SupplyProduct[]>([]);
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
@@ -92,6 +99,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
     if (isOpen) {
       // Reset form when dialog opens
       setSelectedSupplier(null);
+      setSelectedBranchId('');
       setProducts([]);
       setInvoiceFile(null);
       setInvoiceNumber('');
@@ -133,6 +141,15 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
           setAllProducts(mapped);
         } catch (err) {
           console.error('Error fetching inventory for autocomplete:', err);
+        }
+      })();
+      // Fetch branches for branch selection
+      (async () => {
+        try {
+          const data = await apiEndpoints.getBranches();
+          setBranches(data || []);
+        } catch (err) {
+          console.error('Error fetching branches:', err);
         }
       })();
     }
@@ -269,6 +286,16 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
       return;
     }
 
+    if (!selectedBranchId) {
+      Swal.fire({
+        title: 'Error',
+        text: 'Please select a branch',
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
+      return;
+    }
+
     if (products.length === 0) {
       Swal.fire({
         title: 'Error',
@@ -285,6 +312,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
       // Process bulk supply using the new API endpoint
       const bulkSupplyData = {
         supplierId: selectedSupplier.id,
+        branchId: selectedBranchId,
         supplyDate: supplyDate,
         products: products,
         invoiceNumber: invoiceNumber || null,
@@ -379,6 +407,26 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Branch Selection */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select Branch *
+            </label>
+            <select
+              value={selectedBranchId}
+              onChange={(e) => setSelectedBranchId(e.target.value)}
+              className="border p-2 w-full rounded"
+              required
+            >
+              <option value="">Choose a branch...</option>
+              {branches.map(branch => (
+                <option key={branch._id} value={branch._id}>
+                  {branch.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Supply Details */}
