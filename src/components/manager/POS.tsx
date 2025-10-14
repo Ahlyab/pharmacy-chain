@@ -135,7 +135,10 @@ const POS: React.FC = () => {
     const totalUnitsSold = getTotalUnitsSold(productId);
 
     // Calculate remaining units after all unit sales
-    const remainingTotalUnits = product.stock * unitsPerPack - totalUnitsSold;
+    const remainingTotalUnits = Math.max(
+      0,
+      product.stock * unitsPerPack - totalUnitsSold
+    );
     const completePacks = Math.floor(remainingTotalUnits / unitsPerPack);
     const remainingUnits = remainingTotalUnits % unitsPerPack;
 
@@ -144,7 +147,7 @@ const POS: React.FC = () => {
     // So we don't need to subtract totalUnitsSold again
     const shelfUnits =
       product.shelfStock !== undefined
-        ? product.shelfStock
+        ? Math.max(0, product.shelfStock)
         : remainingTotalUnits;
 
     return {
@@ -270,7 +273,11 @@ const POS: React.FC = () => {
           : product.stock * (product.unitsPerPack || 1);
 
       const totalUnitsSold = getTotalUnitsSold(product._id);
-      const remainingUnits = availableUnits - totalUnitsSold;
+      const remainingUnits = availableUnits;
+
+      console.log("remainingUnits", remainingUnits);
+      console.log("totalUnitsSold", totalUnitsSold);
+      console.log("availableUnits", availableUnits);
 
       if (quantity > remainingUnits) {
         Swal.fire({
@@ -349,6 +356,11 @@ const POS: React.FC = () => {
 
           const totalUnitsSold = getTotalUnitsSold(_id);
           const remainingUnits = availableUnits - totalUnitsSold;
+
+          console.log("remainingUnits", remainingUnits);
+          console.log("totalUnitsSold", totalUnitsSold);
+          console.log("availableUnits", availableUnits);
+          console.log("quantity", quantity);
 
           if (quantity > remainingUnits) {
             Swal.fire({
@@ -586,7 +598,7 @@ const POS: React.FC = () => {
           currentTransactionPacks + additionalCompletePacksFromUnits;
 
         // Calculate new stock values
-        const newStock = product.stock - totalPacksToDeduct;
+        const newStock = Math.max(0, product.stock - totalPacksToDeduct);
         let newShelfStock = product.shelfStock;
 
         if (product.shelfStock !== undefined) {
