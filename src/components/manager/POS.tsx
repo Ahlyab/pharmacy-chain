@@ -145,10 +145,15 @@ const POS: React.FC = () => {
     // Calculate remaining shelf units
     // After fetchProducts(), product.shelfStock should already be updated
     // So we don't need to subtract totalUnitsSold again
-    const shelfUnits =
+    let shelfUnits =
       product.shelfStock !== undefined
         ? Math.max(0, product.shelfStock)
         : remainingTotalUnits;
+
+    // if shelf units is greater than remaining total units, set shelf units to remaining total units
+    if (shelfUnits > remainingTotalUnits) {
+      shelfUnits = remainingTotalUnits;
+    }
 
     return {
       totalUnits: remainingTotalUnits,
