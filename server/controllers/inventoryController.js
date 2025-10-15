@@ -166,6 +166,13 @@ export const bulkImportInventory = async (req, res) => {
       minStock: Number(product.minStock || 0),
       price: Number(product.price || product["Retail price VAT included"] || 0),
       unitPrice: Number(product.unitPrice || product["Unit Price"] || 0),
+      pricePerPiece: Number(
+        product.pricePerPiece ||
+          product["Price Per Piece"] ||
+          product.unitPrice ||
+          product["Unit Price"] ||
+          0
+      ),
       units: product.units || product.Units || "pieces",
       supplier: product.supplier || product["Supplier name"] || "",
       expiryDate: product.expiryDate
@@ -405,6 +412,8 @@ export const transferInventoryBetweenBranches = async (req, res) => {
         stock: quantity,
         minStock: sourceInventory.minStock,
         price: sourceInventory.price,
+        unitPrice: sourceInventory.unitPrice,
+        pricePerPiece: sourceInventory.pricePerPiece,
         supplier: sourceInventory.supplier,
         supplierId: sourceInventory.supplierId,
         expiryDate: sourceInventory.expiryDate,

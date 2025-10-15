@@ -523,11 +523,9 @@ router.post("/supplier/bulk-supply", authenticate, async (req, res) => {
       !Array.isArray(products) ||
       products.length === 0
     ) {
-      return res
-        .status(400)
-        .json({
-          error: "Missing required fields: supplierId, supplyDate, products",
-        });
+      return res.status(400).json({
+        error: "Missing required fields: supplierId, supplyDate, products",
+      });
     }
 
     // Verify supplier exists
@@ -563,6 +561,7 @@ router.post("/supplier/bulk-supply", authenticate, async (req, res) => {
           minStock: product.minStock || 10,
           price: product.retailPriceVATIncluded || product.unitPrice,
           unitPrice: product.unitPrice,
+          pricePerPiece: product.pricePerPiece || product.unitPrice,
           units: product.units || "pieces",
           unitsPerPack: product.unitsPerPack || 1,
           shelfStock: product.quantity,
@@ -597,7 +596,9 @@ router.post("/supplier/bulk-supply", authenticate, async (req, res) => {
             supplierId: supplierId,
             quantity: product.quantity,
             unitPrice: product.unitPrice,
-            totalPrice: product.quantity * product.unitPrice,
+            pricePerPiece: product.pricePerPiece,
+            totalPrice:
+              product.quantity * (product.pricePerPiece || product.unitPrice),
             expiryDate: product.expiryDate,
             supplyDate: supplyDate,
             branchId: branchObjectId,
@@ -625,7 +626,7 @@ router.post("/supplier/bulk-supply", authenticate, async (req, res) => {
       notes: `Bulk supply item - Invoice: ${invoiceNumber || "N/A"}. ${
         notes || ""
       }`,
-      totalAmount: p.quantity * (p.unitPrice || 0),
+      totalAmount: p.quantity * (p.pricePerPiece || p.unitPrice || 0),
       invoiceNumber: invoiceNumber || null,
     }));
 
@@ -1014,6 +1015,8 @@ router.post("/inventory", authenticate, async (req, res) => {
       minStock: Number(req.body.minStock),
       price: Number(req.body.price),
       unitPrice: Number(req.body.unitPrice) || 0,
+      pricePerPiece:
+        Number(req.body.pricePerPiece) || Number(req.body.unitPrice) || 0,
       units: req.body.units || "pieces",
       unitsPerPack: Number(req.body.unitsPerPack) || 1,
       shelfStock: Number(req.body.shelfStock) || 0,
@@ -1040,13 +1043,13 @@ router.post("/inventory", authenticate, async (req, res) => {
       isNaN(inventoryData.stock) ||
       isNaN(inventoryData.minStock) ||
       isNaN(inventoryData.price) ||
-      isNaN(inventoryData.unitPrice)
+      isNaN(inventoryData.unitPrice) ||
+      isNaN(inventoryData.pricePerPiece)
     ) {
-      return res
-        .status(400)
-        .json({
-          error: "Stock, minStock, price, and unitPrice must be numbers",
-        });
+      return res.status(400).json({
+        error:
+          "Stock, minStock, price, unitPrice, and pricePerPiece must be numbers",
+      });
     }
     // Validate date
     if (isNaN(inventoryData.expiryDate.getTime())) {
@@ -1877,6 +1880,8 @@ router.post(
             minStock: importedProduct.minStock,
             price: importedProduct.retailPriceVATIncluded, // Use VAT included price
             unitPrice: importedProduct.unitPrice || 0,
+            pricePerPiece:
+              importedProduct.pricePerPiece || importedProduct.unitPrice || 0,
             units: importedProduct.units || "pieces",
             shelfStock: importedProduct.shelfStock || 0,
             supplier: importedProduct.supplier, // Keep supplier name for display

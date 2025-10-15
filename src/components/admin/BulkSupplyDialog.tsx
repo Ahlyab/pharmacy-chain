@@ -25,6 +25,7 @@ interface SupplyProduct {
   name: string;
   quantity: number;
   unitPrice: number;
+  pricePerPiece: number;
   totalPrice: number;
   expiryDate: string;
   category?: string;
@@ -89,6 +90,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
     name: "",
     quantity: 1,
     unitPrice: 0,
+    pricePerPiece: 0,
     expiryDate: "",
     category: "",
     manufacturer: "",
@@ -114,6 +116,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
         name: "",
         quantity: 1,
         unitPrice: 0,
+        pricePerPiece: 0,
         expiryDate: "",
         category: "",
         manufacturer: "",
@@ -182,8 +185,8 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
 
   const calculateTotalPrice = (product: Partial<SupplyProduct>) => {
     const quantity = product.quantity || 0;
-    const unitPrice = product.unitPrice || 0;
-    return quantity * unitPrice;
+    const pricePerPiece = product.pricePerPiece || 0;
+    return quantity * pricePerPiece;
   };
 
   const calculateGrandTotal = () => {
@@ -195,12 +198,13 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
       !newProduct.name ||
       !newProduct.quantity ||
       !newProduct.unitPrice ||
+      !newProduct.pricePerPiece ||
       !newProduct.expiryDate ||
       !newProduct.retailPriceVATIncluded
     ) {
       Swal.fire({
         title: "Error",
-        text: "Please fill in all required fields (Name, Quantity, Unit Price, Selling Price, Expiry Date)",
+        text: "Please fill in all required fields (Name, Quantity, Unit Price, Price Per Piece, Selling Price, Expiry Date)",
         icon: "error",
         confirmButtonText: "OK",
       });
@@ -212,6 +216,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
       name: newProduct.name,
       quantity: newProduct.quantity,
       unitPrice: newProduct.unitPrice,
+      pricePerPiece: newProduct.pricePerPiece,
       totalPrice: calculateTotalPrice(newProduct),
       expiryDate: newProduct.expiryDate,
       category: newProduct.category,
@@ -232,6 +237,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
       name: "",
       quantity: 1,
       unitPrice: 0,
+      pricePerPiece: 0,
       expiryDate: "",
       category: "",
       manufacturer: "",
@@ -258,7 +264,11 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
       products.map((p) => {
         if (p.id === productId) {
           const updated = { ...p, [field]: value };
-          if (field === "quantity" || field === "unitPrice") {
+          if (
+            field === "quantity" ||
+            field === "unitPrice" ||
+            field === "pricePerPiece"
+          ) {
             updated.totalPrice = calculateTotalPrice(updated);
           }
           return updated;
@@ -569,6 +579,10 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
                                   typeof p.unitPrice === "number"
                                     ? p.unitPrice
                                     : 0,
+                                pricePerPiece:
+                                  typeof p.unitPrice === "number"
+                                    ? p.unitPrice
+                                    : 0,
                               });
                               setShowProductSuggestions(false);
                             }}
@@ -623,6 +637,24 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
                     setNewProduct({
                       ...newProduct,
                       unitPrice: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                  min="0"
+                  step="0.01"
+                  className="border p-2 w-full rounded text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Price Per Piece *
+                </label>
+                <input
+                  type="number"
+                  value={newProduct.pricePerPiece || ""}
+                  onChange={(e) =>
+                    setNewProduct({
+                      ...newProduct,
+                      pricePerPiece: parseFloat(e.target.value) || 0,
                     })
                   }
                   min="0"
@@ -759,6 +791,9 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
                         Unit Price
                       </th>
                       <th className="border border-gray-300 p-2 text-left">
+                        Price Per Piece
+                      </th>
+                      <th className="border border-gray-300 p-2 text-left">
                         Selling Price
                       </th>
                       <th className="border border-gray-300 p-2 text-left">
@@ -806,6 +841,22 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
                               updateProduct(
                                 product.id,
                                 "unitPrice",
+                                parseFloat(e.target.value) || 0
+                              )
+                            }
+                            min="0"
+                            step="0.01"
+                            className="border p-1 w-24 rounded text-sm"
+                          />
+                        </td>
+                        <td className="border border-gray-300 p-2">
+                          <input
+                            type="number"
+                            value={product.pricePerPiece}
+                            onChange={(e) =>
+                              updateProduct(
+                                product.id,
+                                "pricePerPiece",
                                 parseFloat(e.target.value) || 0
                               )
                             }
