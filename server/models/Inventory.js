@@ -9,6 +9,7 @@ const InventorySchema = new mongoose.Schema(
     minStock: { type: Number, required: true },
     price: { type: Number, required: true }, // Retail price VAT included
     unitPrice: { type: Number, default: 0 }, // Unit price
+    pricePerPiece: { type: Number, default: 0 }, // Price per individual piece
     units: { type: String, default: "pieces" }, // Unit of measurement (tablets, bottles, boxes, etc.)
     unitsPerPack: { type: Number, default: 1 }, // Number of units per pack
     shelfStock: { type: Number, default: 0 }, // Stock on shelf/display

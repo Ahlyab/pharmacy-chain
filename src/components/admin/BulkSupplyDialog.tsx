@@ -25,6 +25,7 @@ interface SupplyProduct {
   name: string;
   quantity: number;
   unitPrice: number;
+  pricePerPiece: number;
   totalPrice: number;
   expiryDate: string;
   category?: string;
@@ -70,19 +71,23 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(
     null
   );
+
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>("");
   const [supplyDate, setSupplyDate] = useState(
     new Date().toISOString().split("T")[0]
   );
+
   const [products, setProducts] = useState<SupplyProduct[]>([]);
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [notes, setNotes] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [allProducts, setAllProducts] = useState<ExistingInventoryProduct[]>(
     []
   );
+
   const [showProductSuggestions, setShowProductSuggestions] = useState(false);
   const productNameInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
@@ -150,8 +155,10 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
               unitPrice: p.unitPrice ?? 0,
             })
           );
+
           setAllProducts(mapped);
         } catch (err) {
+          console.error("Error fetching inventory for autocomplete:", err);
           console.error("Error fetching inventory for autocomplete:", err);
         }
       })();
@@ -161,6 +168,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
           const data = await apiEndpoints.getBranches();
           setBranches(data || []);
         } catch (err) {
+          console.error("Error fetching branches:", err);
           console.error("Error fetching branches:", err);
         }
       })();
@@ -181,12 +189,14 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, []);
 
   const calculateTotalPrice = (product: Partial<SupplyProduct>) => {
     const quantity = product.quantity || 0;
-    const unitPrice = product.unitPrice || 0;
-    return quantity * unitPrice;
+    const pricePerPiece = product.pricePerPiece || 0;
+    return quantity * pricePerPiece;
   };
 
   const calculateGrandTotal = () => {
@@ -216,6 +226,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
       name: newProduct.name,
       quantity: newProduct.quantity,
       unitPrice: newProduct.unitPrice,
+      pricePerPiece: newProduct.pricePerPiece as any,
       totalPrice: calculateTotalPrice(newProduct),
       expiryDate: newProduct.expiryDate,
       category: newProduct.category,
@@ -225,8 +236,10 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
       unitsPerPack: newProduct.unitsPerPack || 1,
       minStock: newProduct.minStock || 10,
       vat: newProduct.vat || 0,
-      purchasePriceExclVAT: newProduct.purchasePriceExclVAT || 0,
-      retailPriceVATIncluded: newProduct.retailPriceVATIncluded || 0,
+      purchasePriceExclVAT:
+        newProduct.purchasePriceExclVAT || newProduct.unitPrice || 0,
+      retailPriceVATIncluded:
+        newProduct.retailPriceVATIncluded || newProduct.unitPrice || 0,
       packPrice: newProduct.packPrice || 0,
     };
 
@@ -250,6 +263,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
   };
 
   const removeProduct = (productId: string) => {
+    setProducts(products.filter((p) => p.id !== productId));
     setProducts(products.filter((p) => p.id !== productId));
   };
 
@@ -282,6 +296,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
         "image/gif",
         "application/pdf",
       ];
+
       if (!allowedTypes.includes(file.type)) {
         Swal.fire({
           title: "Invalid File Type",
@@ -357,6 +372,12 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
       // Upload invoice file if provided
       if (invoiceFile) {
         const formData = new FormData();
+        formData.append("invoice", invoiceFile);
+        formData.append("supplierId", selectedSupplier.id);
+        formData.append("deliveryDate", supplyDate);
+        formData.append("invoiceNumber", invoiceNumber);
+
+        await api.upload("/api/supplier/invoice-upload", formData);
         formData.append("invoice", invoiceFile);
         formData.append("supplierId", selectedSupplier.id);
         formData.append("deliveryDate", supplyDate);

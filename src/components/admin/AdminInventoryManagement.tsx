@@ -39,6 +39,7 @@ interface Product {
   minStock: number;
   price: number;
   unitPrice?: number;
+  pricePerPiece?: number;
   units?: string;
   unitsPerPack?: number;
   shelfStock?: number;
@@ -89,6 +90,7 @@ const AdminInventoryManagement: React.FC = () => {
     minStock: 0,
     price: 0,
     unitPrice: 0,
+    pricePerPiece: 0,
     units: "pieces",
     unitsPerPack: 1,
     shelfStock: 0,
@@ -378,6 +380,7 @@ const AdminInventoryManagement: React.FC = () => {
       supplier: product.supplier,
       price: product.price,
       unitPrice: product.unitPrice || 0,
+      pricePerPiece: product.pricePerPiece || product.unitPrice || 0,
       units: product.units || "pieces",
       unitsPerPack: product.unitsPerPack || 1,
       shelfStock: product.shelfStock || 0,
@@ -437,7 +440,10 @@ const AdminInventoryManagement: React.FC = () => {
       // Debug logging to verify unitPrice and units are included
       console.log("AdminInventoryManagement - Form data:", formData);
       console.log("AdminInventoryManagement - Submit data:", submitData);
-      console.log("AdminInventoryManagement - unitPrice:", submitData.unitPrice);
+      console.log(
+        "AdminInventoryManagement - unitPrice:",
+        submitData.unitPrice
+      );
       console.log("AdminInventoryManagement - units:", submitData.units);
 
       if (editingProduct) {
@@ -468,6 +474,7 @@ const AdminInventoryManagement: React.FC = () => {
         minStock: 0,
         price: 0,
         unitPrice: 0,
+        pricePerPiece: 0,
         units: "pieces",
         unitsPerPack: 1,
         shelfStock: 0,
@@ -511,6 +518,7 @@ const AdminInventoryManagement: React.FC = () => {
       minStock: product.minStock,
       price: product.price,
       unitPrice: product.unitPrice || 0,
+      pricePerPiece: product.pricePerPiece || product.unitPrice || 0,
       units: String((product.stock || 0) * (product.unitsPerPack || 1)),
       unitsPerPack: product.unitsPerPack || 1,
       shelfStock: product.shelfStock || 0,
@@ -538,7 +546,12 @@ const AdminInventoryManagement: React.FC = () => {
       }
       return prev;
     });
-  }, [formData.stock, formData.unitsPerPack, editingProduct, isUnitsManuallyEdited]);
+  }, [
+    formData.stock,
+    formData.unitsPerPack,
+    editingProduct,
+    isUnitsManuallyEdited,
+  ]);
 
   // Handle file import for products
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -760,6 +773,7 @@ const AdminInventoryManagement: React.FC = () => {
                   minStock: 0,
                   price: 0,
                   unitPrice: 0,
+                  pricePerPiece: 0,
                   units: "pieces",
                   unitsPerPack: 1,
                   shelfStock: 0,
@@ -1067,10 +1081,10 @@ const AdminInventoryManagement: React.FC = () => {
                     Product Name *
                   </label>
                   <div className="relative" ref={productDropdownRef}>
-                  <input
-                    type="text"
-                    required
-                    value={formData.name}
+                    <input
+                      type="text"
+                      required
+                      value={formData.name}
                       onChange={(e) => handleProductInputChange(e.target.value)}
                       onFocus={handleProductFocus}
                       onKeyDown={handleProductKeyDown}
@@ -1134,7 +1148,8 @@ const AdminInventoryManagement: React.FC = () => {
                         {productSearch &&
                           productSearch.trim() !== formData.name && (
                             <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
-                              Press Enter to add "{productSearch}" as new product
+                              Press Enter to add "{productSearch}" as new
+                              product
                             </div>
                           )}
                         {!productSearch && products.length > 0 && (
@@ -1171,11 +1186,13 @@ const AdminInventoryManagement: React.FC = () => {
                     Supplier *
                   </label>
                   <div className="relative" ref={supplierDropdownRef}>
-                  <input
-                    type="text"
-                    required
-                    value={formData.supplier}
-                      onChange={(e) => handleSupplierInputChange(e.target.value)}
+                    <input
+                      type="text"
+                      required
+                      value={formData.supplier}
+                      onChange={(e) =>
+                        handleSupplierInputChange(e.target.value)
+                      }
                       onFocus={handleSupplierFocus}
                       onKeyDown={handleSupplierKeyDown}
                       placeholder="Search or enter supplier name..."
@@ -1233,7 +1250,8 @@ const AdminInventoryManagement: React.FC = () => {
                         {supplierSearch &&
                           supplierSearch.trim() !== formData.supplier && (
                             <div className="px-3 py-2 text-sm text-gray-500 border-t border-gray-200">
-                              Press Enter to add "{supplierSearch}" as new supplier
+                              Press Enter to add "{supplierSearch}" as new
+                              supplier
                             </div>
                           )}
                         {!supplierSearch && suppliers.length > 0 && (
@@ -1332,11 +1350,35 @@ const AdminInventoryManagement: React.FC = () => {
                     min="0"
                     step="0.01"
                     value={formData.unitPrice}
-                    onChange={(e) => setFormData({ ...formData, unitPrice: Number(e.target.value) })}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        unitPrice: Number(e.target.value),
+                      })
+                    }
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-                
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Price Per Piece
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.pricePerPiece}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        pricePerPiece: Number(e.target.value),
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Units Per Pack
@@ -1345,12 +1387,17 @@ const AdminInventoryManagement: React.FC = () => {
                     type="number"
                     min="1"
                     value={formData.unitsPerPack}
-                    onChange={(e) => setFormData({ ...formData, unitsPerPack: Number(e.target.value) })}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        unitsPerPack: Number(e.target.value),
+                      })
+                    }
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="1"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Units
@@ -1366,7 +1413,7 @@ const AdminInventoryManagement: React.FC = () => {
                     placeholder="Auto = stock × per pack, or override manually"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Shelf Stock
@@ -1375,12 +1422,17 @@ const AdminInventoryManagement: React.FC = () => {
                     type="number"
                     min="0"
                     value={formData.shelfStock}
-                    onChange={(e) => setFormData({ ...formData, shelfStock: Number(e.target.value) })}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        shelfStock: Number(e.target.value),
+                      })
+                    }
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="0"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Purchase Price
@@ -1499,6 +1551,7 @@ const AdminInventoryManagement: React.FC = () => {
                       minStock: 0,
                       price: 0,
                       unitPrice: 0,
+                      pricePerPiece: 0,
                       units: "pieces",
                       unitsPerPack: 1,
                       shelfStock: 0,
@@ -1513,7 +1566,7 @@ const AdminInventoryManagement: React.FC = () => {
                     setSupplierSearch("");
                     setShowProductDropdown(false);
                     setProductSearch("");
-                  setIsUnitsManuallyEdited(false);
+                    setIsUnitsManuallyEdited(false);
                   }}
                   className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
                 >
