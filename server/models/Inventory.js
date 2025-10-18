@@ -26,6 +26,7 @@ const InventorySchema = new mongoose.Schema(
     purchasePriceExclVAT: { type: Number, default: 0 }, // Purchase price excluding VAT
     vat: { type: Number, default: 0 }, // VAT percentage
     retailPriceVATIncluded: { type: Number, default: 0 }, // Retail price including VAT
+    packPrice: { type: Number, default: 0 }, // Price per pack
     divider: { type: String }, // Divider information
     dividerCustom: { type: String }, // Custom divider information
   },
