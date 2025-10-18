@@ -31,6 +31,7 @@ const initialState = {
   reservedQuantity: "",
   purchasePriceExclVAT: "",
   vat: "",
+  packPrice: "",
   divider: "",
   dividerCustom: "",
 };

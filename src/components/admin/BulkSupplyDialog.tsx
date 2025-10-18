@@ -37,6 +37,7 @@ interface SupplyProduct {
   vat?: number;
   purchasePriceExclVAT?: number;
   retailPriceVATIncluded?: number;
+  packPrice?: number;
 }
 
 interface BulkSupplyDialogProps {
@@ -70,19 +71,23 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(
     null
   );
+
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>("");
   const [supplyDate, setSupplyDate] = useState(
     new Date().toISOString().split("T")[0]
   );
+
   const [products, setProducts] = useState<SupplyProduct[]>([]);
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [notes, setNotes] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [allProducts, setAllProducts] = useState<ExistingInventoryProduct[]>(
     []
   );
+
   const [showProductSuggestions, setShowProductSuggestions] = useState(false);
   const productNameInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
@@ -90,7 +95,6 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
     name: "",
     quantity: 1,
     unitPrice: 0,
-    pricePerPiece: 0,
     expiryDate: "",
     category: "",
     manufacturer: "",
@@ -101,6 +105,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
     vat: 0,
     purchasePriceExclVAT: 0,
     retailPriceVATIncluded: 0,
+    packPrice: 0,
   });
 
   useEffect(() => {
@@ -116,7 +121,6 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
         name: "",
         quantity: 1,
         unitPrice: 0,
-        pricePerPiece: 0,
         expiryDate: "",
         category: "",
         manufacturer: "",
@@ -127,6 +131,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
         vat: 0,
         purchasePriceExclVAT: 0,
         retailPriceVATIncluded: 0,
+        packPrice: 0,
       });
       // Fetch existing inventory to power autocomplete
       (async () => {
@@ -150,8 +155,10 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
               unitPrice: p.unitPrice ?? 0,
             })
           );
+
           setAllProducts(mapped);
         } catch (err) {
+          console.error("Error fetching inventory for autocomplete:", err);
           console.error("Error fetching inventory for autocomplete:", err);
         }
       })();
@@ -161,6 +168,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
           const data = await apiEndpoints.getBranches();
           setBranches(data || []);
         } catch (err) {
+          console.error("Error fetching branches:", err);
           console.error("Error fetching branches:", err);
         }
       })();
@@ -181,6 +189,8 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, []);
 
   const calculateTotalPrice = (product: Partial<SupplyProduct>) => {
@@ -198,13 +208,13 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
       !newProduct.name ||
       !newProduct.quantity ||
       !newProduct.unitPrice ||
-      !newProduct.pricePerPiece ||
       !newProduct.expiryDate ||
-      !newProduct.retailPriceVATIncluded
+      !newProduct.retailPriceVATIncluded ||
+      !newProduct.purchasePriceExclVAT
     ) {
       Swal.fire({
         title: "Error",
-        text: "Please fill in all required fields (Name, Quantity, Unit Price, Price Per Piece, Selling Price, Expiry Date)",
+        text: "Please fill in all required fields (Name, Quantity, Unit Price, Purchase Price, Selling Price, Expiry Date)",
         icon: "error",
         confirmButtonText: "OK",
       });
@@ -216,7 +226,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
       name: newProduct.name,
       quantity: newProduct.quantity,
       unitPrice: newProduct.unitPrice,
-      pricePerPiece: newProduct.pricePerPiece,
+      pricePerPiece: newProduct.pricePerPiece as any,
       totalPrice: calculateTotalPrice(newProduct),
       expiryDate: newProduct.expiryDate,
       category: newProduct.category,
@@ -230,6 +240,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
         newProduct.purchasePriceExclVAT || newProduct.unitPrice || 0,
       retailPriceVATIncluded:
         newProduct.retailPriceVATIncluded || newProduct.unitPrice || 0,
+      packPrice: newProduct.packPrice || 0,
     };
 
     setProducts([...products, product]);
@@ -237,7 +248,6 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
       name: "",
       quantity: 1,
       unitPrice: 0,
-      pricePerPiece: 0,
       expiryDate: "",
       category: "",
       manufacturer: "",
@@ -248,10 +258,12 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
       vat: 0,
       purchasePriceExclVAT: 0,
       retailPriceVATIncluded: 0,
+      packPrice: 0,
     });
   };
 
   const removeProduct = (productId: string) => {
+    setProducts(products.filter((p) => p.id !== productId));
     setProducts(products.filter((p) => p.id !== productId));
   };
 
@@ -264,11 +276,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
       products.map((p) => {
         if (p.id === productId) {
           const updated = { ...p, [field]: value };
-          if (
-            field === "quantity" ||
-            field === "unitPrice" ||
-            field === "pricePerPiece"
-          ) {
+          if (field === "quantity" || field === "unitPrice") {
             updated.totalPrice = calculateTotalPrice(updated);
           }
           return updated;
@@ -288,6 +296,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
         "image/gif",
         "application/pdf",
       ];
+
       if (!allowedTypes.includes(file.type)) {
         Swal.fire({
           title: "Invalid File Type",
@@ -369,6 +378,12 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
         formData.append("invoiceNumber", invoiceNumber);
 
         await api.upload("/api/supplier/invoice-upload", formData);
+        formData.append("invoice", invoiceFile);
+        formData.append("supplierId", selectedSupplier.id);
+        formData.append("deliveryDate", supplyDate);
+        formData.append("invoiceNumber", invoiceNumber);
+
+        await api.upload("/api/supplier/invoice-upload", formData);
       }
 
       Swal.fire({
@@ -410,7 +425,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
           </div>
         </div>
 
-        <div className="p-6 overflow-y-auto flex-1">
+        <div className="p-6 overflow-y-auto flex-1 min-h-0">
           {/* Supplier Selection */}
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -579,10 +594,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
                                   typeof p.unitPrice === "number"
                                     ? p.unitPrice
                                     : 0,
-                                pricePerPiece:
-                                  typeof p.unitPrice === "number"
-                                    ? p.unitPrice
-                                    : 0,
+                                packPrice: 0, // Default pack price, user can adjust
                               });
                               setShowProductSuggestions(false);
                             }}
@@ -646,15 +658,15 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Price Per Piece *
+                  Purchase Price (Excl. VAT) *
                 </label>
                 <input
                   type="number"
-                  value={newProduct.pricePerPiece || ""}
+                  value={newProduct.purchasePriceExclVAT || ""}
                   onChange={(e) =>
                     setNewProduct({
                       ...newProduct,
-                      pricePerPiece: parseFloat(e.target.value) || 0,
+                      purchasePriceExclVAT: parseFloat(e.target.value) || 0,
                     })
                   }
                   min="0"
@@ -664,7 +676,25 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Selling Price *
+                  Pack Price
+                </label>
+                <input
+                  type="number"
+                  value={newProduct.packPrice || ""}
+                  onChange={(e) =>
+                    setNewProduct({
+                      ...newProduct,
+                      packPrice: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                  min="0"
+                  step="0.01"
+                  className="border p-2 w-full rounded text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Selling Price (VAT Incl.) *
                 </label>
                 <input
                   type="number"
@@ -791,7 +821,10 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
                         Unit Price
                       </th>
                       <th className="border border-gray-300 p-2 text-left">
-                        Price Per Piece
+                        Purchase Price
+                      </th>
+                      <th className="border border-gray-300 p-2 text-left">
+                        Pack Price
                       </th>
                       <th className="border border-gray-300 p-2 text-left">
                         Selling Price
@@ -852,11 +885,27 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
                         <td className="border border-gray-300 p-2">
                           <input
                             type="number"
-                            value={product.pricePerPiece}
+                            value={product.purchasePriceExclVAT || 0}
                             onChange={(e) =>
                               updateProduct(
                                 product.id,
-                                "pricePerPiece",
+                                "purchasePriceExclVAT",
+                                parseFloat(e.target.value) || 0
+                              )
+                            }
+                            min="0"
+                            step="0.01"
+                            className="border p-1 w-24 rounded text-sm"
+                          />
+                        </td>
+                        <td className="border border-gray-300 p-2">
+                          <input
+                            type="number"
+                            value={product.packPrice || 0}
+                            onChange={(e) =>
+                              updateProduct(
+                                product.id,
+                                "packPrice",
                                 parseFloat(e.target.value) || 0
                               )
                             }
@@ -945,7 +994,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
         <div className="p-6 border-t bg-gray-50 flex justify-end gap-4 flex-shrink-0">
           <button
             onClick={onClose}
-            className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100"
+            className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 transition-colors"
             disabled={loading}
           >
             Cancel
@@ -953,7 +1002,7 @@ const BulkSupplyDialog: React.FC<BulkSupplyDialogProps> = ({
           <button
             onClick={processBulkSupply}
             disabled={loading || !selectedSupplier || products.length === 0}
-            className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {loading ? "Processing..." : "Process Supply"}
           </button>

@@ -11,6 +11,7 @@ const TransactionSchema = new mongoose.Schema({
       },
       quantity: { type: Number, required: true },
       price: { type: Number, required: true },
+      costPrice: { type: Number, default: 0 }, // Cost price at time of sale
       isUnitPurchase: { type: Boolean, default: false }, // Whether sold as units or packs
       unitsSold: { type: Number, default: 0 }, // Total units sold (calculated)
       packsSold: { type: Number, default: 0 }, // Total packs sold (calculated)
@@ -30,10 +31,10 @@ const TransactionSchema = new mongoose.Schema({
     required: true,
   },
   date: { type: Date, default: Date.now },
-  status: { 
-    type: String, 
-    enum: ["Completed", "Pending", "Cancelled", "Returned"], 
-    default: "Completed" 
+  status: {
+    type: String,
+    enum: ["Completed", "Pending", "Cancelled", "Returned"],
+    default: "Completed",
   },
 });
 

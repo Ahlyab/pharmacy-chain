@@ -29,6 +29,7 @@ interface Product {
   minStock?: number;
   status?: "In Stock" | "Low Stock" | "Out of Stock";
   expiryDate?: string;
+  purchasePriceExclVAT?: number; // Purchase price excluding VAT
 }
 
 interface CartItem extends Product {
@@ -494,6 +495,7 @@ const POS: React.FC = () => {
           quantity: item.quantity,
           price:
             item.isUnitPurchase && item.unitPrice ? item.unitPrice : item.price,
+          costPrice: item.purchasePriceExclVAT || 0, // Store cost price at time of sale
           isUnitPurchase: item.isUnitPurchase || false,
           unitsSold: unitsSold,
           packsSold: packsSold,
